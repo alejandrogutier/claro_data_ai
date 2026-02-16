@@ -1,0 +1,675 @@
+openapi: 3.1.0
+info:
+  title: claro_data API
+  version: 1.0.0
+  description: API base v1 para ingestion, clasificacion, analisis y gestion de contenido.
+servers:
+  - url: https://{api_id}.execute-api.us-west-2.amazonaws.com/prod
+    variables:
+      api_id:
+        default: replace-me
+security:
+  - bearerAuth: []
+tags:
+  - name: Terms
+  - name: Ingestion
+  - name: Content
+  - name: Analysis
+  - name: Exports
+  - name: Meta
+paths:
+  /v1/health:
+    get:
+      summary: Healthcheck
+      security: []
+      responses:
+        '200':
+          description: API disponible
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    const: ok
+                  service:
+                    type: string
+                  timestamp:
+                    type: string
+                    format: date-time
+  /v1/terms:
+    get:
+      tags: [Terms]
+      summary: Listar terminos monitoreados
+      parameters:
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Lista de terminos
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TermListResponse'
+    post:
+      tags: [Terms]
+      summary: Crear termino monitoreado
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateTermRequest'
+      responses:
+        '201':
+          description: Termino creado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Term'
+  /v1/terms/{id}:
+    patch:
+      tags: [Terms]
+      summary: Editar termino monitoreado
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateTermRequest'
+      responses:
+        '200':
+          description: Termino actualizado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Term'
+  /v1/ingestion/runs:
+    post:
+      tags: [Ingestion]
+      summary: Disparar corrida manual de ingestion
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateIngestionRunRequest'
+      responses:
+        '202':
+          description: Corrida aceptada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IngestionRunAccepted'
+  /v1/content:
+    get:
+      tags: [Content]
+      summary: Listado de contenido con filtros avanzados y cursor
+      parameters:
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+        - name: state
+          in: query
+          schema:
+            $ref: '#/components/schemas/ContentState'
+        - name: source_type
+          in: query
+          schema:
+            $ref: '#/components/schemas/SourceType'
+        - name: term_id
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: provider
+          in: query
+          schema:
+            type: string
+        - name: category
+          in: query
+          schema:
+            type: string
+        - name: sentimiento
+          in: query
+          schema:
+            type: string
+        - name: from
+          in: query
+          schema:
+            type: string
+            format: date-time
+        - name: to
+          in: query
+          schema:
+            type: string
+            format: date-time
+        - name: q
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Lista paginada de contenido
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ContentListResponse'
+  /v1/content/{id}/state:
+    patch:
+      tags: [Content]
+      summary: Cambiar estado de un item
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateContentStateRequest'
+      responses:
+        '200':
+          description: Estado actualizado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ContentStateEvent'
+  /v1/content/bulk/state:
+    post:
+      tags: [Content]
+      summary: Cambiar estado de varios items
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BulkUpdateContentStateRequest'
+      responses:
+        '200':
+          description: Resultado de accion masiva
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BulkActionResponse'
+  /v1/content/{id}/classification:
+    patch:
+      tags: [Content]
+      summary: Override manual de clasificacion
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateClassificationRequest'
+      responses:
+        '200':
+          description: Clasificacion actualizada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Classification'
+  /v1/analysis/runs:
+    post:
+      tags: [Analysis]
+      summary: Ejecutar analisis agregado
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateAnalysisRunRequest'
+      responses:
+        '202':
+          description: Analisis en proceso
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AnalysisRunAccepted'
+  /v1/analysis/history:
+    get:
+      tags: [Analysis]
+      summary: Historial de analisis
+      parameters:
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Historial paginado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AnalysisRunListResponse'
+  /v1/exports/csv:
+    post:
+      tags: [Exports]
+      summary: Exportar resultados a CSV
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateCsvExportRequest'
+      responses:
+        '202':
+          description: Export en proceso
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExportAccepted'
+  /v1/meta:
+    get:
+      tags: [Meta]
+      summary: Catalogos de filtros
+      responses:
+        '200':
+          description: Catalogos
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MetaResponse'
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  parameters:
+    Id:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    Cursor:
+      name: cursor
+      in: query
+      schema:
+        type: string
+      description: Cursor opaco para paginacion
+    Limit:
+      name: limit
+      in: query
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 200
+        default: 50
+  schemas:
+    UserRole:
+      type: string
+      enum: [Admin, Analyst, Viewer]
+    SourceType:
+      type: string
+      enum: [news, social]
+    ContentState:
+      type: string
+      enum: [active, archived, hidden]
+    Term:
+      type: object
+      required: [id, name, is_active, created_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        language:
+          type: string
+          default: es
+        is_active:
+          type: boolean
+        schedule:
+          type: string
+          description: cron/rule de ingestion
+        max_articles_per_run:
+          type: integer
+          default: 100
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    TermListResponse:
+      type: object
+      required: [items, page_info]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Term'
+        page_info:
+          $ref: '#/components/schemas/PageInfo'
+    CreateTermRequest:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+          minLength: 2
+        language:
+          type: string
+          default: es
+        max_articles_per_run:
+          type: integer
+          minimum: 1
+          maximum: 100
+          default: 100
+    UpdateTermRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        language:
+          type: string
+        is_active:
+          type: boolean
+        max_articles_per_run:
+          type: integer
+          minimum: 1
+          maximum: 100
+    ContentItem:
+      type: object
+      required: [id, source_type, state, title, canonical_url, created_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        source_type:
+          $ref: '#/components/schemas/SourceType'
+        term_id:
+          type: string
+          format: uuid
+        provider:
+          type: string
+        source_name:
+          type: string
+        state:
+          $ref: '#/components/schemas/ContentState'
+        title:
+          type: string
+        summary:
+          type: string
+        content:
+          type: string
+        canonical_url:
+          type: string
+          format: uri
+        published_at:
+          type: string
+          format: date-time
+        source_score:
+          type: number
+          minimum: 0
+          maximum: 1
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    Classification:
+      type: object
+      required: [id, content_item_id, categoria, sentimiento, prompt_version, model_id, created_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        content_item_id:
+          type: string
+          format: uuid
+        categoria:
+          type: string
+        sentimiento:
+          type: string
+        etiquetas:
+          type: array
+          items:
+            type: string
+        confianza:
+          type: number
+          minimum: 0
+          maximum: 1
+        override_by:
+          type: string
+          format: uuid
+        prompt_version:
+          type: string
+        model_id:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    ContentStateEvent:
+      type: object
+      required: [id, content_item_id, previous_state, next_state, actor_user_id, created_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        content_item_id:
+          type: string
+          format: uuid
+        previous_state:
+          $ref: '#/components/schemas/ContentState'
+        next_state:
+          $ref: '#/components/schemas/ContentState'
+        actor_user_id:
+          type: string
+          format: uuid
+        reason:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+    CreateIngestionRunRequest:
+      type: object
+      properties:
+        term_ids:
+          type: array
+          items:
+            type: string
+            format: uuid
+        language:
+          type: string
+          default: es
+        max_articles_per_term:
+          type: integer
+          minimum: 1
+          maximum: 100
+          default: 100
+    IngestionRunAccepted:
+      type: object
+      required: [run_id, status]
+      properties:
+        run_id:
+          type: string
+          format: uuid
+        status:
+          type: string
+          const: accepted
+    UpdateContentStateRequest:
+      type: object
+      required: [target_state]
+      properties:
+        target_state:
+          $ref: '#/components/schemas/ContentState'
+        reason:
+          type: string
+    BulkUpdateContentStateRequest:
+      type: object
+      required: [ids, target_state]
+      properties:
+        ids:
+          type: array
+          minItems: 1
+          items:
+            type: string
+            format: uuid
+        target_state:
+          $ref: '#/components/schemas/ContentState'
+        reason:
+          type: string
+    BulkActionResponse:
+      type: object
+      required: [processed, failed]
+      properties:
+        processed:
+          type: integer
+        failed:
+          type: integer
+        failures:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: string
+                format: uuid
+              error:
+                type: string
+    UpdateClassificationRequest:
+      type: object
+      required: [categoria, sentimiento]
+      properties:
+        categoria:
+          type: string
+        sentimiento:
+          type: string
+        etiquetas:
+          type: array
+          items:
+            type: string
+        confidence_override:
+          type: number
+          minimum: 0
+          maximum: 1
+        reason:
+          type: string
+    CreateAnalysisRunRequest:
+      type: object
+      properties:
+        term_id:
+          type: string
+          format: uuid
+        content_ids:
+          type: array
+          items:
+            type: string
+            format: uuid
+        limit:
+          type: integer
+          minimum: 1
+          maximum: 200
+          default: 100
+    AnalysisRunAccepted:
+      type: object
+      required: [analysis_run_id, status]
+      properties:
+        analysis_run_id:
+          type: string
+          format: uuid
+        status:
+          type: string
+          const: accepted
+    AnalysisRun:
+      type: object
+      required: [id, status, created_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        term_id:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum: [queued, running, completed, failed]
+        output:
+          type: object
+          additionalProperties: true
+        created_at:
+          type: string
+          format: date-time
+    AnalysisRunListResponse:
+      type: object
+      required: [items, page_info]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/AnalysisRun'
+        page_info:
+          $ref: '#/components/schemas/PageInfo'
+    CreateCsvExportRequest:
+      type: object
+      properties:
+        filters:
+          type: object
+          additionalProperties: true
+    ExportAccepted:
+      type: object
+      required: [export_id, status]
+      properties:
+        export_id:
+          type: string
+          format: uuid
+        status:
+          type: string
+          const: accepted
+    MetaResponse:
+      type: object
+      properties:
+        providers:
+          type: array
+          items:
+            type: object
+            properties:
+              value:
+                type: string
+              count:
+                type: integer
+        categories:
+          type: array
+          items:
+            type: object
+            properties:
+              value:
+                type: string
+              count:
+                type: integer
+        sentimientos:
+          type: array
+          items:
+            type: string
+        states:
+          type: array
+          items:
+            $ref: '#/components/schemas/ContentState'
+    ContentListResponse:
+      type: object
+      required: [items, page_info]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ContentItem'
+        page_info:
+          $ref: '#/components/schemas/PageInfo'
+    PageInfo:
+      type: object
+      required: [has_next]
+      properties:
+        next_cursor:
+          type: string
+          nullable: true
+        has_next:
+          type: boolean

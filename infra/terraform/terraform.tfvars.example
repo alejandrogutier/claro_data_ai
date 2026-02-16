@@ -1,0 +1,9 @@
+owner                = "data-platform"
+cost_center          = "marketing-intelligence"
+vpc_id               = "vpc-xxxxxxxx"
+private_subnet_ids   = ["subnet-aaaaaaaa", "subnet-bbbbbbbb"]
+api_lambda_s3_bucket = "claro-data-artifacts"
+api_lambda_s3_key    = "api/latest.zip"
+db_master_password   = "replace-me"
+budget_email         = "ops@example.com"
+ses_sender_email     = "digest@example.com"

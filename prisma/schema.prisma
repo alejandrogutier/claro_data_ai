@@ -1,0 +1,267 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  Admin
+  Analyst
+  Viewer
+}
+
+enum SourceType {
+  news
+  social
+}
+
+enum ContentState {
+  active
+  archived
+  hidden
+}
+
+enum RunStatus {
+  queued
+  running
+  completed
+  failed
+}
+
+enum TriggerType {
+  scheduled
+  manual
+}
+
+model User {
+  id              String               @id @default(uuid()) @db.Uuid
+  email           String               @unique
+  name            String?
+  role            UserRole             @default(Viewer)
+  isActive        Boolean              @default(true)
+  createdAt       DateTime             @default(now())
+  updatedAt       DateTime             @updatedAt
+  stateEvents     ContentStateEvent[]
+  audits          AuditLog[]
+  overrides       Classification[]     @relation("ClassificationOverride")
+  exportJobs      ExportJob[]
+
+  @@index([role])
+}
+
+model TrackedTerm {
+  id               String         @id @default(uuid()) @db.Uuid
+  name             String
+  language         String         @default("es")
+  isActive         Boolean        @default(true)
+  maxArticlesPerRun Int           @default(100)
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+  ingestionRuns    IngestionRun[]
+  contentItems     ContentItem[]
+  analysisRuns     AnalysisRun[]
+
+  @@unique([name, language])
+  @@index([isActive])
+}
+
+model IngestionRun {
+  id               String              @id @default(uuid()) @db.Uuid
+  triggerType      TriggerType
+  status           RunStatus           @default(queued)
+  termId           String?             @db.Uuid
+  language         String              @default("es")
+  maxArticlesPerTerm Int               @default(100)
+  requestId        String?
+  startedAt        DateTime?
+  finishedAt       DateTime?
+  metrics          Json?
+  errorMessage     String?
+  createdAt        DateTime            @default(now())
+  term             TrackedTerm?        @relation(fields: [termId], references: [id], onDelete: SetNull)
+  items            IngestionRunItem[]
+
+  @@index([status, createdAt])
+  @@index([triggerType, createdAt])
+}
+
+model IngestionRunItem {
+  id               String       @id @default(uuid()) @db.Uuid
+  ingestionRunId   String       @db.Uuid
+  provider         String
+  status           RunStatus
+  fetchedCount     Int          @default(0)
+  persistedCount   Int          @default(0)
+  latencyMs        Int?
+  errorMessage     String?
+  createdAt        DateTime     @default(now())
+  ingestionRun     IngestionRun @relation(fields: [ingestionRunId], references: [id], onDelete: Cascade)
+
+  @@index([ingestionRunId])
+  @@index([provider, createdAt])
+}
+
+model ContentItem {
+  id               String              @id @default(uuid()) @db.Uuid
+  sourceType       SourceType
+  termId           String?             @db.Uuid
+  provider         String
+  sourceName       String?
+  sourceId         String?
+  state            ContentState        @default(active)
+  title            String
+  summary          String?
+  content          String?
+  canonicalUrl     String
+  imageUrl         String?
+  language         String?
+  category         String?
+  publishedAt      DateTime?
+  sourceScore      Decimal             @default(0.50) @db.Decimal(3, 2)
+  rawPayloadS3Key  String?
+  metadata         Json?
+  createdAt        DateTime            @default(now())
+  updatedAt        DateTime            @updatedAt
+  term             TrackedTerm?        @relation(fields: [termId], references: [id], onDelete: SetNull)
+  classifications  Classification[]
+  stateEvents      ContentStateEvent[]
+  analysisLinks    AnalysisRunItem[]
+
+  @@unique([canonicalUrl])
+  @@index([termId, publishedAt])
+  @@index([state, createdAt])
+  @@index([sourceType, provider])
+  @@index([category])
+  // Nota: agregar indice FTS real con migracion SQL manual sobre title/summary/content.
+}
+
+model Classification {
+  id                String      @id @default(uuid()) @db.Uuid
+  contentItemId     String      @db.Uuid
+  categoria         String
+  sentimiento       String
+  etiquetas         Json?
+  confianza         Decimal?    @db.Decimal(4, 3)
+  promptVersion     String
+  modelId           String
+  isOverride        Boolean     @default(false)
+  overriddenByUserId String?    @db.Uuid
+  overrideReason    String?
+  metadata          Json?
+  createdAt         DateTime    @default(now())
+  updatedAt         DateTime    @updatedAt
+  contentItem       ContentItem @relation(fields: [contentItemId], references: [id], onDelete: Cascade)
+  overriddenByUser  User?       @relation("ClassificationOverride", fields: [overriddenByUserId], references: [id], onDelete: SetNull)
+
+  @@unique([contentItemId, promptVersion, modelId])
+  @@index([categoria, sentimiento])
+  @@index([createdAt])
+}
+
+model AnalysisRun {
+  id                String           @id @default(uuid()) @db.Uuid
+  termId            String?          @db.Uuid
+  status            RunStatus        @default(queued)
+  inputCount        Int              @default(0)
+  modelId           String
+  promptVersion     String
+  output            Json?
+  errorMessage      String?
+  startedAt         DateTime?
+  completedAt       DateTime?
+  createdAt         DateTime         @default(now())
+  term              TrackedTerm?     @relation(fields: [termId], references: [id], onDelete: SetNull)
+  items             AnalysisRunItem[]
+
+  @@index([status, createdAt])
+  @@index([termId, createdAt])
+}
+
+model AnalysisRunItem {
+  id               String      @id @default(uuid()) @db.Uuid
+  analysisRunId    String      @db.Uuid
+  contentItemId    String      @db.Uuid
+  createdAt        DateTime    @default(now())
+  analysisRun      AnalysisRun @relation(fields: [analysisRunId], references: [id], onDelete: Cascade)
+  contentItem      ContentItem @relation(fields: [contentItemId], references: [id], onDelete: Cascade)
+
+  @@unique([analysisRunId, contentItemId])
+  @@index([contentItemId])
+}
+
+model ContentStateEvent {
+  id               String       @id @default(uuid()) @db.Uuid
+  contentItemId    String       @db.Uuid
+  previousState    ContentState
+  nextState        ContentState
+  actorUserId      String       @db.Uuid
+  reason           String?
+  requestId        String?
+  createdAt        DateTime     @default(now())
+  contentItem      ContentItem  @relation(fields: [contentItemId], references: [id], onDelete: Cascade)
+  actorUser        User         @relation(fields: [actorUserId], references: [id], onDelete: Restrict)
+
+  @@index([contentItemId, createdAt])
+  @@index([actorUserId, createdAt])
+}
+
+model SourceWeight {
+  id               String    @id @default(uuid()) @db.Uuid
+  provider         String
+  sourceName       String?
+  weight           Decimal   @db.Decimal(3, 2)
+  isActive         Boolean   @default(true)
+  updatedByUserId  String?   @db.Uuid
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  @@unique([provider, sourceName])
+  @@index([provider])
+}
+
+model AuditLog {
+  id               String    @id @default(uuid()) @db.Uuid
+  actorUserId      String?   @db.Uuid
+  action           String
+  resourceType     String
+  resourceId       String?
+  requestId        String?
+  before           Json?
+  after            Json?
+  createdAt        DateTime  @default(now())
+  actorUser        User?     @relation(fields: [actorUserId], references: [id], onDelete: SetNull)
+
+  @@index([action, createdAt])
+  @@index([resourceType, resourceId])
+}
+
+model ExportJob {
+  id               String    @id @default(uuid()) @db.Uuid
+  requestedByUserId String?  @db.Uuid
+  status           RunStatus @default(queued)
+  filters          Json?
+  rowCount         Int       @default(0)
+  s3Key            String?
+  createdAt        DateTime  @default(now())
+  completedAt      DateTime?
+  requestedByUser  User?     @relation(fields: [requestedByUserId], references: [id], onDelete: SetNull)
+
+  @@index([status, createdAt])
+}
+
+model DigestRun {
+  id               String    @id @default(uuid()) @db.Uuid
+  digestDate       DateTime
+  recipientScope   String
+  status           RunStatus @default(queued)
+  recipientsCount  Int       @default(0)
+  s3Key            String?
+  createdAt        DateTime  @default(now())
+  completedAt      DateTime?
+
+  @@unique([digestDate, recipientScope])
+  @@index([status, createdAt])
+}
