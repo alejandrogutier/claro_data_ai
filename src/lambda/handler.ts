@@ -10,7 +10,7 @@ import {
   updateClassification,
   updateContentState
 } from "../routes/v1/content";
-import { createAnalysisRun, listAnalysisHistory } from "../routes/v1/analysis";
+import { createAnalysisRun, getAnalysisRun, listAnalysisHistory } from "../routes/v1/analysis";
 import { getAnalyzeChannel, getAnalyzeCompetitors, getAnalyzeOverview } from "../routes/v1/analyze";
 import { createCsvExport, getCsvExport } from "../routes/v1/exports";
 import {
@@ -43,13 +43,16 @@ import {
   listConfigAccounts,
   listConfigAudit,
   listConfigCompetitors,
+  listSourceScoringWeights,
   listConnectors,
   listConnectorRuns,
   listTaxonomies,
   patchConfigAccount,
   patchConfigCompetitor,
+  patchSourceScoringWeight,
   patchConnector,
   patchTaxonomy,
+  createSourceScoringWeight,
   triggerConnectorSync
 } from "../routes/v1/config";
 
@@ -72,6 +75,7 @@ const roleRules: RoleRule[] = [
   { pattern: /^GET \/v1\/analyze\/competitors$/, requiredRole: "Viewer" },
   { pattern: /^POST \/v1\/analysis\/runs$/, requiredRole: "Analyst" },
   { pattern: /^GET \/v1\/analysis\/history$/, requiredRole: "Viewer" },
+  { pattern: /^GET \/v1\/analysis\/runs\/[^/]+$/, requiredRole: "Viewer" },
   { pattern: /^POST \/v1\/exports\/csv$/, requiredRole: "Analyst" },
   { pattern: /^GET \/v1\/exports\/[^/]+$/, requiredRole: "Analyst" },
   { pattern: /^GET \/v1\/reports\/center$/, requiredRole: "Viewer" },
@@ -106,7 +110,10 @@ const roleRules: RoleRule[] = [
   { pattern: /^POST \/v1\/config\/taxonomies\/[^/]+$/, requiredRole: "Admin" },
   { pattern: /^PATCH \/v1\/config\/taxonomies\/[^/]+\/[^/]+$/, requiredRole: "Admin" },
   { pattern: /^GET \/v1\/config\/audit$/, requiredRole: "Viewer" },
-  { pattern: /^POST \/v1\/config\/audit\/export$/, requiredRole: "Analyst" }
+  { pattern: /^POST \/v1\/config\/audit\/export$/, requiredRole: "Analyst" },
+  { pattern: /^GET \/v1\/config\/source-scoring\/weights$/, requiredRole: "Viewer" },
+  { pattern: /^POST \/v1\/config\/source-scoring\/weights$/, requiredRole: "Admin" },
+  { pattern: /^PATCH \/v1\/config\/source-scoring\/weights\/[^/]+$/, requiredRole: "Admin" }
 ];
 
 const publicRoutes = new Set<string>(["GET /v1/health"]);
@@ -168,7 +175,8 @@ export const main = async (event: APIGatewayProxyEventV2) => {
   if (key === "GET /v1/analyze/competitors") return getAnalyzeCompetitors(event);
 
   if (key === "POST /v1/analysis/runs") return createAnalysisRun(event);
-  if (key === "GET /v1/analysis/history") return listAnalysisHistory();
+  if (key === "GET /v1/analysis/history") return listAnalysisHistory(event);
+  if (key.match(/^GET \/v1\/analysis\/runs\/[^/]+$/)) return getAnalysisRun(event);
 
   if (key === "POST /v1/exports/csv") return createCsvExport(event);
   if (key.match(/^GET \/v1\/exports\/[^/]+$/)) return getCsvExport(event);
@@ -205,6 +213,9 @@ export const main = async (event: APIGatewayProxyEventV2) => {
   if (key.match(/^PATCH \/v1\/config\/taxonomies\/[^/]+\/[^/]+$/)) return patchTaxonomy(event);
   if (key === "GET /v1/config/audit") return listConfigAudit(event);
   if (key === "POST /v1/config/audit/export") return exportConfigAudit(event);
+  if (key === "GET /v1/config/source-scoring/weights") return listSourceScoringWeights(event);
+  if (key === "POST /v1/config/source-scoring/weights") return createSourceScoringWeight(event);
+  if (key.match(/^PATCH \/v1\/config\/source-scoring\/weights\/[^/]+$/)) return patchSourceScoringWeight(event);
 
   return json(404, {
     error: "not_found",

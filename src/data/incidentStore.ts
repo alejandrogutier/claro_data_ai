@@ -1156,7 +1156,12 @@ class IncidentStore {
         SELECT
           COALESCE(t."scope"::text, '') AS scope,
           cls."sentimiento",
-          ci."sourceScore"::text
+          COALESCE(
+            sw_source."weight",
+            sw_provider."weight",
+            ci."sourceScore",
+            CAST(0.50 AS DECIMAL(3,2))
+          )::text
         FROM "public"."ContentItem" ci
         LEFT JOIN "public"."TrackedTerm" t ON t."id" = ci."termId"
         LEFT JOIN LATERAL (
@@ -1166,6 +1171,27 @@ class IncidentStore {
           ORDER BY c."createdAt" DESC
           LIMIT 1
         ) cls ON TRUE
+        LEFT JOIN LATERAL (
+          SELECT sw."weight"
+          FROM "public"."SourceWeight" sw
+          WHERE
+            sw."isActive" = TRUE
+            AND sw."sourceName" IS NOT NULL
+            AND LOWER(sw."provider") = LOWER(ci."provider")
+            AND LOWER(sw."sourceName") = LOWER(COALESCE(ci."sourceName", ''))
+          ORDER BY sw."updatedAt" DESC, sw."id" DESC
+          LIMIT 1
+        ) sw_source ON TRUE
+        LEFT JOIN LATERAL (
+          SELECT sw."weight"
+          FROM "public"."SourceWeight" sw
+          WHERE
+            sw."isActive" = TRUE
+            AND sw."sourceName" IS NULL
+            AND LOWER(sw."provider") = LOWER(ci."provider")
+          ORDER BY sw."updatedAt" DESC, sw."id" DESC
+          LIMIT 1
+        ) sw_provider ON TRUE
         WHERE
           ci."sourceType" = CAST('news' AS "public"."SourceType")
           AND ci."state" = CAST('active' AS "public"."ContentState")

@@ -14,6 +14,8 @@ import {
   type ConnectorRecord,
   type ConnectorSyncRunRecord,
   type OwnedAccountRecord,
+  type SourceWeightRecord,
+  type SourceWeightUpdateInput,
   type TaxonomyEntryRecord,
   type TaxonomyKind
 } from "../../data/configStore";
@@ -26,6 +28,19 @@ const s3 = new AWS.S3({ region: env.awsRegion, signatureVersion: "v4" });
 type ConnectorPatchBody = {
   enabled?: unknown;
   frequency_minutes?: unknown;
+};
+
+type SourceWeightCreateBody = {
+  provider?: unknown;
+  source_name?: unknown;
+  weight?: unknown;
+  is_active?: unknown;
+};
+
+type SourceWeightPatchBody = {
+  source_name?: unknown;
+  weight?: unknown;
+  is_active?: unknown;
 };
 
 type OwnedAccountBody = {
@@ -152,6 +167,19 @@ const toApiConnectorRun = (item: ConnectorSyncRunRecord) => ({
   error: item.errorMessage,
   triggered_by_user_id: item.triggeredByUserId,
   created_at: item.createdAt.toISOString()
+});
+
+const toApiSourceWeight = (item: SourceWeightRecord) => ({
+  id: item.id,
+  provider: item.provider,
+  source_name: item.sourceName,
+  weight: item.weight,
+  is_active: item.isActive,
+  updated_by_user_id: item.updatedByUserId,
+  updated_by_name: item.updatedByName,
+  updated_by_email: item.updatedByEmail,
+  created_at: item.createdAt.toISOString(),
+  updated_at: item.updatedAt.toISOString()
 });
 
 const toApiAccount = (item: OwnedAccountRecord) => ({
@@ -449,6 +477,143 @@ export const listConnectorRuns = async (event: APIGatewayProxyEventV2) => {
       connector_id: connectorId,
       items: items.map(toApiConnectorRun)
     });
+  } catch (error) {
+    return mapStoreError(error);
+  }
+};
+
+export const listSourceScoringWeights = async (event: APIGatewayProxyEventV2) => {
+  const stores = assertStores();
+  if (stores.error) return stores.error;
+
+  const query = event.queryStringParameters ?? {};
+  const provider = query.provider ? normalizeString(query.provider, 1, 80) : null;
+  if (query.provider && !provider) {
+    return json(422, { error: "validation_error", message: "provider invalido" });
+  }
+
+  const includeInactive = query.include_inactive === "true";
+
+  try {
+    const items = await stores.store.listSourceWeights(
+      {
+        provider: provider?.toLowerCase(),
+        includeInactive
+      },
+      500
+    );
+
+    return json(200, {
+      items: items.map(toApiSourceWeight)
+    });
+  } catch (error) {
+    return mapStoreError(error);
+  }
+};
+
+export const createSourceScoringWeight = async (event: APIGatewayProxyEventV2) => {
+  const role = getRole(event);
+  if (!hasRole(role, "Admin")) {
+    return json(403, { error: "forbidden", message: "Solo Admin puede crear pesos de fuente" });
+  }
+
+  const body = parseBody<SourceWeightCreateBody>(event);
+  if (!body) {
+    return json(400, { error: "invalid_json", message: "Body JSON invalido" });
+  }
+
+  const provider = normalizeString(body.provider, 1, 80);
+  const sourceName = normalizeOptionalString(body.source_name, 200);
+  const weight = typeof body.weight === "number" ? body.weight : Number.NaN;
+  const isActive = body.is_active === undefined ? true : body.is_active;
+
+  if (!provider || (body.source_name !== undefined && sourceName === undefined)) {
+    return json(422, { error: "validation_error", message: "provider/source_name invalidos" });
+  }
+
+  if (!Number.isFinite(weight) || weight < 0 || weight > 1) {
+    return json(422, { error: "validation_error", message: "weight debe estar entre 0 y 1" });
+  }
+
+  if (typeof isActive !== "boolean") {
+    return json(422, { error: "validation_error", message: "is_active debe ser boolean" });
+  }
+
+  const stores = assertStores();
+  if (stores.error) return stores.error;
+
+  try {
+    const principal = getAuthPrincipal(event);
+    const actorUserId = await stores.appStore.upsertUserFromPrincipal(principal);
+    const created = await stores.store.createSourceWeight(
+      {
+        provider: provider.toLowerCase(),
+        sourceName,
+        weight,
+        isActive
+      },
+      actorUserId,
+      getRequestId(event)
+    );
+
+    return json(201, toApiSourceWeight(created));
+  } catch (error) {
+    return mapStoreError(error);
+  }
+};
+
+export const patchSourceScoringWeight = async (event: APIGatewayProxyEventV2) => {
+  const role = getRole(event);
+  if (!hasRole(role, "Admin")) {
+    return json(403, { error: "forbidden", message: "Solo Admin puede actualizar pesos de fuente" });
+  }
+
+  const weightId = getIdFromPath(event, /^\/v1\/config\/source-scoring\/weights\/([^/]+)$/);
+  if (!weightId || !UUID_REGEX.test(weightId)) {
+    return json(422, { error: "validation_error", message: "id invalido" });
+  }
+
+  const body = parseBody<SourceWeightPatchBody>(event);
+  if (!body) {
+    return json(400, { error: "invalid_json", message: "Body JSON invalido" });
+  }
+
+  const patch: SourceWeightUpdateInput = {};
+
+  if (body.source_name !== undefined) {
+    const sourceName = normalizeOptionalString(body.source_name, 200);
+    if (sourceName === undefined) {
+      return json(422, { error: "validation_error", message: "source_name invalido" });
+    }
+    patch.sourceName = sourceName;
+  }
+
+  if (body.weight !== undefined) {
+    if (typeof body.weight !== "number" || Number.isNaN(body.weight) || body.weight < 0 || body.weight > 1) {
+      return json(422, { error: "validation_error", message: "weight debe estar entre 0 y 1" });
+    }
+    patch.weight = body.weight;
+  }
+
+  if (body.is_active !== undefined) {
+    if (typeof body.is_active !== "boolean") {
+      return json(422, { error: "validation_error", message: "is_active debe ser boolean" });
+    }
+    patch.isActive = body.is_active;
+  }
+
+  if (Object.keys(patch).length === 0) {
+    return json(422, { error: "validation_error", message: "No hay campos para actualizar" });
+  }
+
+  const stores = assertStores();
+  if (stores.error) return stores.error;
+
+  try {
+    const principal = getAuthPrincipal(event);
+    const actorUserId = await stores.appStore.upsertUserFromPrincipal(principal);
+    const updated = await stores.store.updateSourceWeight(weightId, patch, actorUserId, getRequestId(event));
+    return json(200, toApiSourceWeight(updated));
   } catch (error) {
     return mapStoreError(error);
   }

@@ -849,7 +849,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Ejecutar analisis agregado */
+        /** Crear corrida async de analisis agregado */
         post: {
             parameters: {
                 query?: never;
@@ -863,7 +863,7 @@ export interface paths {
                 };
             };
             responses: {
-                /** @description Analisis en proceso */
+                /** @description Corrida aceptada (nueva o reutilizada por idempotencia) */
                 202: {
                     headers: {
                         [name: string]: unknown;
@@ -872,6 +872,9 @@ export interface paths {
                         "application/json": components["schemas"]["AnalysisRunAccepted"];
                     };
                 };
+                401: components["responses"]["Unauthorized"];
+                403: components["responses"]["Forbidden"];
+                422: components["responses"]["ValidationError"];
             };
         };
         delete?: never;
@@ -894,6 +897,10 @@ export interface paths {
                     /** @description Cursor opaco para paginacion */
                     cursor?: components["parameters"]["Cursor"];
                     limit?: components["parameters"]["Limit"];
+                    status?: components["schemas"]["AnalysisRunStatus"];
+                    scope?: components["schemas"]["AnalysisRunScope"];
+                    from?: string;
+                    to?: string;
                 };
                 header?: never;
                 path?: never;
@@ -910,6 +917,51 @@ export interface paths {
                         "application/json": components["schemas"]["AnalysisRunListResponse"];
                     };
                 };
+                401: components["responses"]["Unauthorized"];
+                403: components["responses"]["Forbidden"];
+                422: components["responses"]["ValidationError"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/analysis/runs/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Detalle de corrida async de analisis */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: components["parameters"]["Id"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Detalle de corrida */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["AnalysisRunDetailResponse"];
+                    };
+                };
+                401: components["responses"]["Unauthorized"];
+                403: components["responses"]["Forbidden"];
+                404: components["responses"]["NotFound"];
+                422: components["responses"]["ValidationError"];
             };
         };
         put?: never;
@@ -1977,6 +2029,123 @@ export interface paths {
         };
         trace?: never;
     };
+    "/v1/config/source-scoring/weights": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Listar pesos configurables de source scoring */
+        get: {
+            parameters: {
+                query?: {
+                    provider?: string;
+                    include_inactive?: boolean;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Pesos configurados */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["SourceWeightListResponse"];
+                    };
+                };
+                401: components["responses"]["Unauthorized"];
+                403: components["responses"]["Forbidden"];
+                422: components["responses"]["ValidationError"];
+            };
+        };
+        put?: never;
+        /** Crear peso de source scoring */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["CreateSourceWeightRequest"];
+                };
+            };
+            responses: {
+                /** @description Peso creado */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["SourceWeight"];
+                    };
+                };
+                401: components["responses"]["Unauthorized"];
+                403: components["responses"]["Forbidden"];
+                409: components["responses"]["Conflict"];
+                422: components["responses"]["ValidationError"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/config/source-scoring/weights/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Actualizar peso de source scoring */
+        patch: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: components["parameters"]["Id"];
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["UpdateSourceWeightRequest"];
+                };
+            };
+            responses: {
+                /** @description Peso actualizado */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["SourceWeight"];
+                    };
+                };
+                401: components["responses"]["Unauthorized"];
+                403: components["responses"]["Forbidden"];
+                404: components["responses"]["NotFound"];
+                409: components["responses"]["Conflict"];
+                422: components["responses"]["ValidationError"];
+            };
+        };
+        trace?: never;
+    };
     "/v1/config/audit": {
         parameters: {
             query?: never;
@@ -2084,6 +2253,10 @@ export interface components {
         ContentState: "active" | "archived" | "hidden";
         /** @enum {string} */
         TermScope: "claro" | "competencia";
+        /** @enum {string} */
+        AnalysisRunScope: "overview" | "channel" | "competitors" | "custom";
+        /** @enum {string} */
+        AnalysisRunStatus: "queued" | "running" | "completed" | "failed";
         Term: {
             /** Format: uuid */
             id: string;
@@ -2247,10 +2420,32 @@ export interface components {
             reason?: string;
         };
         CreateAnalysisRunRequest: {
-            /** Format: uuid */
-            term_id?: string;
+            scope: components["schemas"]["AnalysisRunScope"];
+            /** @default news */
+            source_type: components["schemas"]["SourceType"];
+            /**
+             * @default manual
+             * @enum {string}
+             */
+            trigger_type: "manual" | "scheduled";
+            model_id?: string;
+            /** @default analysis-v1 */
+            prompt_version: string;
+            idempotency_key?: string | null;
+            filters?: {
+                /** Format: uuid */
+                term_id?: string;
+                provider?: string;
+                category?: string;
+                sentimiento?: string;
+                q?: string;
+                /** Format: date-time */
+                from?: string;
+                /** Format: date-time */
+                to?: string;
+            };
             content_ids?: string[];
-            /** @default 100 */
+            /** @default 120 */
             limit: number;
         };
         AnalysisRunAccepted: {
@@ -2258,23 +2453,62 @@ export interface components {
             analysis_run_id: string;
             /** @constant */
             status: "accepted";
+            reused: boolean;
+            input_count: number;
+            idempotency_key: string;
         };
         AnalysisRun: {
             /** Format: uuid */
             id: string;
-            /** Format: uuid */
-            term_id?: string;
+            scope: components["schemas"]["AnalysisRunScope"];
+            status: components["schemas"]["AnalysisRunStatus"];
             /** @enum {string} */
-            status: "queued" | "running" | "completed" | "failed";
-            output?: {
+            trigger_type: "manual" | "scheduled";
+            source_type: components["schemas"]["SourceType"];
+            input_count: number;
+            model_id: string;
+            prompt_version: string;
+            filters: {
                 [key: string]: unknown;
             };
+            output?: {
+                [key: string]: unknown;
+            } | null;
+            request_id?: string | null;
+            /** Format: uuid */
+            requested_by_user_id?: string | null;
+            requested_by_name?: string | null;
+            requested_by_email?: string | null;
+            idempotency_key?: string | null;
+            /** Format: date-time */
+            window_start: string;
+            /** Format: date-time */
+            window_end: string;
+            error_message?: string | null;
+            /** Format: date-time */
+            started_at?: string | null;
+            /** Format: date-time */
+            completed_at?: string | null;
             /** Format: date-time */
             created_at: string;
+            /** Format: date-time */
+            updated_at: string;
         };
         AnalysisRunListResponse: {
             items: components["schemas"]["AnalysisRun"][];
             page_info: components["schemas"]["PageInfo"];
+        };
+        AnalysisRunDetailResponse: {
+            run: components["schemas"]["AnalysisRun"];
+            input_summary: {
+                input_count: number;
+                sample_content_ids: string[];
+                sample_size: number;
+            };
+            output?: {
+                [key: string]: unknown;
+            } | null;
+            error?: string | null;
         };
         CreateCsvExportRequest: {
             filters?: {
@@ -2899,6 +3133,37 @@ export interface components {
             metadata?: {
                 [key: string]: unknown;
             };
+        };
+        SourceWeight: {
+            /** Format: uuid */
+            id: string;
+            provider: string;
+            source_name?: string | null;
+            weight: number;
+            is_active: boolean;
+            /** Format: uuid */
+            updated_by_user_id?: string | null;
+            updated_by_name?: string | null;
+            updated_by_email?: string | null;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+        };
+        SourceWeightListResponse: {
+            items: components["schemas"]["SourceWeight"][];
+        };
+        CreateSourceWeightRequest: {
+            provider: string;
+            source_name?: string | null;
+            weight: number;
+            /** @default true */
+            is_active: boolean;
+        };
+        UpdateSourceWeightRequest: {
+            source_name?: string | null;
+            weight?: number;
+            is_active?: boolean;
         };
         AuditItem: {
             /** Format: uuid */

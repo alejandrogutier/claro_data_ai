@@ -535,7 +535,7 @@ paths:
   /v1/analysis/runs:
     post:
       tags: [Analysis]
-      summary: Ejecutar analisis agregado
+      summary: Crear corrida async de analisis agregado
       requestBody:
         required: true
         content:
@@ -544,11 +544,17 @@ paths:
               $ref: '#/components/schemas/CreateAnalysisRunRequest'
       responses:
         '202':
-          description: Analisis en proceso
+          description: Corrida aceptada (nueva o reutilizada por idempotencia)
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/AnalysisRunAccepted'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/ValidationError'
   /v1/analysis/history:
     get:
       tags: [Analysis]
@@ -556,6 +562,24 @@ paths:
       parameters:
         - $ref: '#/components/parameters/Cursor'
         - $ref: '#/components/parameters/Limit'
+        - name: status
+          in: query
+          schema:
+            $ref: '#/components/schemas/AnalysisRunStatus'
+        - name: scope
+          in: query
+          schema:
+            $ref: '#/components/schemas/AnalysisRunScope'
+        - name: from
+          in: query
+          schema:
+            type: string
+            format: date-time
+        - name: to
+          in: query
+          schema:
+            type: string
+            format: date-time
       responses:
         '200':
           description: Historial paginado
@@ -563,6 +587,33 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/AnalysisRunListResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+  /v1/analysis/runs/{id}:
+    get:
+      tags: [Analysis]
+      summary: Detalle de corrida async de analisis
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      responses:
+        '200':
+          description: Detalle de corrida
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AnalysisRunDetailResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationError'
   /v1/exports/csv:
     post:
       tags: [Exports]
@@ -1211,6 +1262,86 @@ paths:
           $ref: '#/components/responses/Conflict'
         '422':
           $ref: '#/components/responses/ValidationError'
+  /v1/config/source-scoring/weights:
+    get:
+      tags: [Config]
+      summary: Listar pesos configurables de source scoring
+      parameters:
+        - name: provider
+          in: query
+          schema:
+            type: string
+        - name: include_inactive
+          in: query
+          schema:
+            type: boolean
+            default: false
+      responses:
+        '200':
+          description: Pesos configurados
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SourceWeightListResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+    post:
+      tags: [Config]
+      summary: Crear peso de source scoring
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateSourceWeightRequest'
+      responses:
+        '201':
+          description: Peso creado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SourceWeight'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+  /v1/config/source-scoring/weights/{id}:
+    patch:
+      tags: [Config]
+      summary: Actualizar peso de source scoring
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateSourceWeightRequest'
+      responses:
+        '200':
+          description: Peso actualizado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SourceWeight'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationError'
   /v1/config/audit:
     get:
       tags: [Audit]
@@ -1370,6 +1501,12 @@ components:
     TermScope:
       type: string
       enum: [claro, competencia]
+    AnalysisRunScope:
+      type: string
+      enum: [overview, channel, competitors, custom]
+    AnalysisRunStatus:
+      type: string
+      enum: [queued, running, completed, failed]
     Term:
       type: object
       required: [id, name, scope, is_active, created_at]
@@ -1689,10 +1826,48 @@ components:
           type: string
     CreateAnalysisRunRequest:
       type: object
+      required: [scope]
       properties:
-        term_id:
+        scope:
+          $ref: '#/components/schemas/AnalysisRunScope'
+        source_type:
+          $ref: '#/components/schemas/SourceType'
+          default: news
+        trigger_type:
           type: string
-          format: uuid
+          enum: [manual, scheduled]
+          default: manual
+        model_id:
+          type: string
+          minLength: 8
+        prompt_version:
+          type: string
+          default: analysis-v1
+        idempotency_key:
+          type: string
+          maxLength: 200
+          nullable: true
+        filters:
+          type: object
+          properties:
+            term_id:
+              type: string
+              format: uuid
+            provider:
+              type: string
+            category:
+              type: string
+            sentimiento:
+              type: string
+            q:
+              type: string
+            from:
+              type: string
+              format: date-time
+            to:
+              type: string
+              format: date-time
+          additionalProperties: false
         content_ids:
           type: array
           items:
@@ -1701,11 +1876,11 @@ components:
         limit:
           type: integer
           minimum: 1
-          maximum: 200
-          default: 100
+          maximum: 500
+          default: 120
     AnalysisRunAccepted:
       type: object
-      required: [analysis_run_id, status]
+      required: [analysis_run_id, status, reused, input_count, idempotency_key]
       properties:
         analysis_run_id:
           type: string
@@ -1713,23 +1888,92 @@ components:
         status:
           type: string
           const: accepted
+        reused:
+          type: boolean
+        input_count:
+          type: integer
+          minimum: 0
+        idempotency_key:
+          type: string
     AnalysisRun:
       type: object
-      required: [id, status, created_at]
+      required:
+        - id
+        - scope
+        - status
+        - trigger_type
+        - source_type
+        - input_count
+        - model_id
+        - prompt_version
+        - filters
+        - window_start
+        - window_end
+        - created_at
+        - updated_at
       properties:
         id:
           type: string
           format: uuid
-        term_id:
-          type: string
-          format: uuid
+        scope:
+          $ref: '#/components/schemas/AnalysisRunScope'
         status:
+          $ref: '#/components/schemas/AnalysisRunStatus'
+        trigger_type:
           type: string
-          enum: [queued, running, completed, failed]
+          enum: [manual, scheduled]
+        source_type:
+          $ref: '#/components/schemas/SourceType'
+        input_count:
+          type: integer
+        model_id:
+          type: string
+        prompt_version:
+          type: string
+        filters:
+          type: object
+          additionalProperties: true
         output:
           type: object
           additionalProperties: true
+          nullable: true
+        request_id:
+          type: string
+          nullable: true
+        requested_by_user_id:
+          type: string
+          format: uuid
+          nullable: true
+        requested_by_name:
+          type: string
+          nullable: true
+        requested_by_email:
+          type: string
+          nullable: true
+        idempotency_key:
+          type: string
+          nullable: true
+        window_start:
+          type: string
+          format: date-time
+        window_end:
+          type: string
+          format: date-time
+        error_message:
+          type: string
+          nullable: true
+        started_at:
+          type: string
+          format: date-time
+          nullable: true
+        completed_at:
+          type: string
+          format: date-time
+          nullable: true
         created_at:
+          type: string
+          format: date-time
+        updated_at:
           type: string
           format: date-time
     AnalysisRunListResponse:
@@ -1742,6 +1986,32 @@ components:
             $ref: '#/components/schemas/AnalysisRun'
         page_info:
           $ref: '#/components/schemas/PageInfo'
+    AnalysisRunDetailResponse:
+      type: object
+      required: [run, input_summary]
+      properties:
+        run:
+          $ref: '#/components/schemas/AnalysisRun'
+        input_summary:
+          type: object
+          required: [input_count, sample_content_ids, sample_size]
+          properties:
+            input_count:
+              type: integer
+            sample_content_ids:
+              type: array
+              items:
+                type: string
+                format: uuid
+            sample_size:
+              type: integer
+        output:
+          type: object
+          additionalProperties: true
+          nullable: true
+        error:
+          type: string
+          nullable: true
     CreateCsvExportRequest:
       type: object
       properties:
@@ -2983,6 +3253,76 @@ components:
         metadata:
           type: object
           additionalProperties: true
+    SourceWeight:
+      type: object
+      required: [id, provider, weight, is_active, created_at, updated_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        provider:
+          type: string
+        source_name:
+          type: string
+          nullable: true
+        weight:
+          type: number
+          minimum: 0
+          maximum: 1
+        is_active:
+          type: boolean
+        updated_by_user_id:
+          type: string
+          format: uuid
+          nullable: true
+        updated_by_name:
+          type: string
+          nullable: true
+        updated_by_email:
+          type: string
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    SourceWeightListResponse:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/SourceWeight'
+    CreateSourceWeightRequest:
+      type: object
+      required: [provider, weight]
+      properties:
+        provider:
+          type: string
+        source_name:
+          type: string
+          nullable: true
+        weight:
+          type: number
+          minimum: 0
+          maximum: 1
+        is_active:
+          type: boolean
+          default: true
+    UpdateSourceWeightRequest:
+      type: object
+      properties:
+        source_name:
+          type: string
+          nullable: true
+        weight:
+          type: number
+          minimum: 0
+          maximum: 1
+        is_active:
+          type: boolean
     AuditItem:
       type: object
       required: [id, action, resource_type, created_at]

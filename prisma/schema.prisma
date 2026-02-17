@@ -69,6 +69,13 @@ enum ReportScheduleFrequency {
   weekly
 }
 
+enum AnalysisRunScope {
+  overview
+  channel
+  competitors
+  custom
+}
+
 model User {
   id              String               @id @default(uuid()) @db.Uuid
   email           String               @unique
@@ -77,16 +84,18 @@ model User {
   isActive        Boolean              @default(true)
   createdAt       DateTime             @default(now())
   updatedAt       DateTime             @updatedAt
-  stateEvents     ContentStateEvent[]
-  audits          AuditLog[]
-  overrides       Classification[]     @relation("ClassificationOverride")
-  exportJobs      ExportJob[]
-  connectorSyncRuns ConnectorSyncRun[]
-  ownedIncidents  Incident[]           @relation("IncidentOwner")
-  incidentNotes   IncidentNote[]       @relation("IncidentNoteAuthor")
-  reportTemplates ReportTemplate[]     @relation("ReportTemplateCreator")
-  reportSchedules ReportSchedule[]     @relation("ReportScheduleCreator")
-  reportRuns      ReportRun[]          @relation("ReportRunRequester")
+  stateEvents          ContentStateEvent[]
+  audits               AuditLog[]
+  overrides            Classification[] @relation("ClassificationOverride")
+  exportJobs           ExportJob[]
+  analysisRuns         AnalysisRun[]    @relation("AnalysisRunRequester")
+  sourceWeightsUpdated SourceWeight[]   @relation("SourceWeightUpdater")
+  connectorSyncRuns    ConnectorSyncRun[]
+  ownedIncidents       Incident[]       @relation("IncidentOwner")
+  incidentNotes        IncidentNote[]   @relation("IncidentNoteAuthor")
+  reportTemplates      ReportTemplate[] @relation("ReportTemplateCreator")
+  reportSchedules      ReportSchedule[] @relation("ReportScheduleCreator")
+  reportRuns           ReportRun[]      @relation("ReportRunRequester")
 
   @@index([role])
 }
@@ -223,20 +232,33 @@ model Classification {
 model AnalysisRun {
   id                String           @id @default(uuid()) @db.Uuid
   termId            String?          @db.Uuid
+  scope             AnalysisRunScope @default(custom)
   status            RunStatus        @default(queued)
+  triggerType       TriggerType      @default(manual)
   inputCount        Int              @default(0)
+  sourceType        SourceType       @default(news)
+  filters           Json?
   modelId           String
   promptVersion     String
   output            Json?
+  requestId         String?
+  requestedByUserId String?          @db.Uuid
+  idempotencyKey    String?          @unique
+  windowStart       DateTime
+  windowEnd         DateTime
   errorMessage      String?
   startedAt         DateTime?
   completedAt       DateTime?
   createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
   term              TrackedTerm?     @relation(fields: [termId], references: [id], onDelete: SetNull)
+  requestedByUser   User?            @relation("AnalysisRunRequester", fields: [requestedByUserId], references: [id], onDelete: SetNull)
   items             AnalysisRunItem[]
 
   @@index([status, createdAt])
   @@index([termId, createdAt])
+  @@index([scope, createdAt])
+  @@index([requestedByUserId, createdAt])
 }
 
 model AnalysisRunItem {
@@ -276,6 +298,7 @@ model SourceWeight {
   updatedByUserId  String?   @db.Uuid
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
+  updatedByUser    User?     @relation("SourceWeightUpdater", fields: [updatedByUserId], references: [id], onDelete: SetNull)
 
   @@unique([provider, sourceName])
   @@index([provider])

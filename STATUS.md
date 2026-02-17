@@ -3,7 +3,7 @@
 ## Estado General
 - Proyecto: `Inception`
 - Avance global: `99%`
-- Historias en curso: `CLARO-012`
+- Historias en curso: `CLARO-014`
 - Ambiente objetivo inicial: `prod` unico en `us-east-1`
 - Ultima actualizacion: `2026-02-17`
 
@@ -21,9 +21,9 @@
 | CLARO-009 | done | 100% | Ninguno | Override manual operativo en `PATCH /v1/content/{id}/classification` con `manual-override-v1`, `model_id=manual`, actor auto-upsert y auditoria `before/after` |
 | CLARO-010 | done | 100% | Ninguno | Maquina de estados operativa en single/bulk (`PATCH /state`, `POST /bulk/state`) con transicion libre auditada y errores deterministas (`404/409/422`) |
 | CLARO-011 | todo | 0% | Ninguno | FTS + cursor pagination pendiente |
-| CLARO-012 | doing | 20% | Ninguno | Slice aplicado para alertas en CLARO-036 (`riesgo_ponderado` por `sourceScore` y severidad por scope); pendiente extender a ranking global/KPI completo |
-| CLARO-013 | todo | 0% | Ninguno | Analisis agregado pendiente |
-| CLARO-014 | todo | 15% | SES requiere verificacion de identidad real de correo | SES identity creada (`digest@example.com`) |
+| CLARO-012 | done | 100% | Ninguno | Desplegado y validado en AWS: source scoring configurable (`GET/POST/PATCH`), auditoria `before/after`, score efectivo dinamico en monitor/analyze/incidents/content feed, UI `/app/config/source-scoring`, contract+smoke en verde |
+| CLARO-013 | done | 100% | Ninguno | Desplegado y validado en AWS: `/v1/analysis/runs|history|runs/{id}`, idempotencia/fingerprint, worker SQS+Bedrock estricto (inference profile), historial/detalle + UI `/app/analyze/runs`, contract+smoke en verde |
+| CLARO-014 | doing | 20% | SES requiere verificacion de identidad real de correo | SES identity creada (`digest@example.com`); siguiente bloque operativo tras cierre de CLARO-012/013 |
 | CLARO-015 | done | 100% | Ninguno | Export async operativo (`POST /v1/exports/csv` + `GET /v1/exports/{id}`), worker SQS y URL firmada al completar |
 | CLARO-016 | todo | 0% | Ninguno | Dashboards CloudWatch/X-Ray pendientes |
 | CLARO-017 | done | 100% | Ninguno | OpenAPI actualizado + `npm run contract:test` + smoke business extendido (`state/bulk/classification/export`) |
@@ -65,7 +65,7 @@
 - AWS serverless en `us-east-1`.
 - Frontend SPA React/Vite en S3 + CloudFront.
 - Auth Cognito JWT + RBAC (`Admin`, `Analyst`, `Viewer`).
-- IA Bedrock fijo `anthropic.claude-haiku-4-5-20251001-v1:0`.
+- IA Bedrock fijo `us.anthropic.claude-haiku-4-5-20251001-v1:0` (inference profile).
 - Fuentes V1: Hootsuite + Awario + News.
 - Cadencia de sincronizacion: 15 min por fuente.
 - Objetivo dual: salud de marca (60%) + SOV (40%).
@@ -74,6 +74,6 @@
 - Zona horaria operativa: `America/Bogota`.
 
 ## Proximos Hitos
-1. Completar CLARO-012 fuera de slice (scoring global configurable con impacto en ranking).
-2. Retomar CLARO-013 (analysis async real) reutilizando patron de jobs y trazabilidad aplicado en export.
-3. Activar CLARO-014 (digest SES 08:00) sobre base de identidades de correo verificadas.
+1. Ejecutar CLARO-014 (digest SES 08:00) end-to-end con identidad de correo operativa y trazabilidad de corrida.
+2. Retomar CLARO-011 (FTS + cursor pagination) para robustecer consultas operativas.
+3. Preparar CLARO-016 (dashboards CloudWatch/X-Ray) para observabilidad de runtime.

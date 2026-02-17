@@ -389,6 +389,33 @@ resource "aws_iam_role_policy_attachment" "lambda_report_sqs" {
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaSQSQueueExecutionRole"
 }
 
+resource "aws_iam_role" "lambda_analysis" {
+  name = "${local.name_prefix}-lambda-analysis-role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Action = "sts:AssumeRole"
+        Effect = "Allow"
+        Principal = {
+          Service = "lambda.amazonaws.com"
+        }
+      }
+    ]
+  })
+}
+
+resource "aws_iam_role_policy_attachment" "lambda_analysis_basic" {
+  role       = aws_iam_role.lambda_analysis.name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+}
+
+resource "aws_iam_role_policy_attachment" "lambda_analysis_sqs" {
+  role       = aws_iam_role.lambda_analysis.name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaSQSQueueExecutionRole"
+}
+
 resource "aws_iam_role" "lambda_migrations" {
   name = "${local.name_prefix}-lambda-migrations-role"
 
@@ -430,7 +457,7 @@ resource "aws_lambda_function" "api" {
 
   environment {
     variables = {
-      BEDROCK_MODEL_ID            = "anthropic.claude-haiku-4-5-20251001-v1:0"
+      BEDROCK_MODEL_ID            = "us.anthropic.claude-haiku-4-5-20251001-v1:0"
       APP_ENV                     = var.environment
       PROVIDER_KEYS_SECRET_ARN    = data.aws_secretsmanager_secret.provider_keys.arn
       APP_CONFIG_SECRET_ARN       = data.aws_secretsmanager_secret.app_config.arn
@@ -447,6 +474,7 @@ resource "aws_lambda_function" "api" {
       EXPORT_QUEUE_URL            = aws_sqs_queue.export.url
       INCIDENT_QUEUE_URL          = aws_sqs_queue.incident_evaluation.url
       REPORT_QUEUE_URL            = aws_sqs_queue.report_generation.url
+      ANALYSIS_QUEUE_URL          = aws_sqs_queue.analysis_generation.url
       REPORT_CONFIDENCE_THRESHOLD = tostring(var.report_confidence_threshold)
       REPORT_DEFAULT_TIMEZONE     = var.report_default_timezone
       REPORT_EMAIL_SENDER         = var.ses_sender_email
@@ -524,14 +552,14 @@ resource "aws_lambda_function" "incident_worker" {
 
   environment {
     variables = {
-      APP_ENV                 = var.environment
-      DB_RESOURCE_ARN         = aws_rds_cluster.aurora.arn
-      DB_SECRET_ARN           = data.aws_secretsmanager_secret.database.arn
-      DB_NAME                 = var.db_name
-      ALERT_EMAIL_SENDER      = var.ses_sender_email
-      ALERT_EMAIL_RECIPIENTS  = var.alert_email_recipients
-      ALERT_COOLDOWN_MINUTES  = tostring(var.alert_cooldown_minutes)
-      ALERT_SIGNAL_VERSION    = var.alert_signal_version
+      APP_ENV                = var.environment
+      DB_RESOURCE_ARN        = aws_rds_cluster.aurora.arn
+      DB_SECRET_ARN          = data.aws_secretsmanager_secret.database.arn
+      DB_NAME                = var.db_name
+      ALERT_EMAIL_SENDER     = var.ses_sender_email
+      ALERT_EMAIL_RECIPIENTS = var.alert_email_recipients
+      ALERT_COOLDOWN_MINUTES = tostring(var.alert_cooldown_minutes)
+      ALERT_SIGNAL_VERSION   = var.alert_signal_version
     }
   }
 }
@@ -560,6 +588,29 @@ resource "aws_lambda_function" "report_worker" {
       REPORT_DEFAULT_TIMEZONE     = var.report_default_timezone
       REPORT_EMAIL_SENDER         = var.ses_sender_email
       ALERT_EMAIL_SENDER          = var.ses_sender_email
+    }
+  }
+}
+
+resource "aws_lambda_function" "analysis_worker" {
+  function_name = "${local.name_prefix}-analysis-worker"
+  role          = aws_iam_role.lambda_analysis.arn
+  runtime       = "nodejs22.x"
+  handler       = "analysis/worker.main"
+
+  filename         = var.lambda_package_path
+  source_code_hash = filebase64sha256(var.lambda_package_path)
+
+  timeout     = 300
+  memory_size = 1024
+
+  environment {
+    variables = {
+      APP_ENV          = var.environment
+      DB_RESOURCE_ARN  = aws_rds_cluster.aurora.arn
+      DB_SECRET_ARN    = data.aws_secretsmanager_secret.database.arn
+      DB_NAME          = var.db_name
+      BEDROCK_MODEL_ID = "us.anthropic.claude-haiku-4-5-20251001-v1:0"
     }
   }
 }
@@ -677,6 +728,7 @@ resource "aws_apigatewayv2_route" "private_routes" {
     "GET /v1/analyze/competitors",
     "POST /v1/analysis/runs",
     "GET /v1/analysis/history",
+    "GET /v1/analysis/runs/{id}",
     "POST /v1/exports/csv",
     "GET /v1/exports/{id}",
     "GET /v1/reports/center",
@@ -710,6 +762,9 @@ resource "aws_apigatewayv2_route" "private_routes" {
     "GET /v1/config/taxonomies/{kind}",
     "POST /v1/config/taxonomies/{kind}",
     "PATCH /v1/config/taxonomies/{kind}/{id}",
+    "GET /v1/config/source-scoring/weights",
+    "POST /v1/config/source-scoring/weights",
+    "PATCH /v1/config/source-scoring/weights/{id}",
     "GET /v1/config/audit",
     "POST /v1/config/audit/export"
   ])
@@ -847,6 +902,29 @@ resource "aws_sqs_queue" "report_generation" {
 resource "aws_lambda_event_source_mapping" "report_queue_to_worker" {
   event_source_arn = aws_sqs_queue.report_generation.arn
   function_name    = aws_lambda_function.report_worker.arn
+  batch_size       = 1
+}
+
+resource "aws_sqs_queue" "analysis_generation_dlq" {
+  name                      = "${local.name_prefix}-analysis-generation-dlq"
+  message_retention_seconds = 1209600
+  kms_master_key_id         = aws_kms_key.app.arn
+}
+
+resource "aws_sqs_queue" "analysis_generation" {
+  name                       = "${local.name_prefix}-analysis-generation"
+  visibility_timeout_seconds = 360
+  message_retention_seconds  = 345600
+  kms_master_key_id          = aws_kms_key.app.arn
+  redrive_policy = jsonencode({
+    deadLetterTargetArn = aws_sqs_queue.analysis_generation_dlq.arn
+    maxReceiveCount     = 5
+  })
+}
+
+resource "aws_lambda_event_source_mapping" "analysis_queue_to_worker" {
+  event_source_arn = aws_sqs_queue.analysis_generation.arn
+  function_name    = aws_lambda_function.analysis_worker.arn
   batch_size       = 1
 }
 

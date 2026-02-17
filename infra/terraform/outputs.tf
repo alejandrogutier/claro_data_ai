@@ -23,7 +23,7 @@ output "aurora_endpoint" {
 }
 
 output "bedrock_model_id" {
-  value = "anthropic.claude-haiku-4-5-20251001-v1:0"
+  value = "us.anthropic.claude-haiku-4-5-20251001-v1:0"
 }
 
 output "ingestion_state_machine_arn" {
@@ -42,6 +42,10 @@ output "incident_evaluation_queue_url" {
   value = aws_sqs_queue.incident_evaluation.url
 }
 
+output "analysis_generation_queue_url" {
+  value = aws_sqs_queue.analysis_generation.url
+}
+
 output "db_migration_lambda_name" {
   value = aws_lambda_function.db_migration_runner.function_name
 }
@@ -52,4 +56,8 @@ output "export_worker_lambda_name" {
 
 output "incident_worker_lambda_name" {
   value = aws_lambda_function.incident_worker.function_name
+}
+
+output "analysis_worker_lambda_name" {
+  value = aws_lambda_function.analysis_worker.function_name
 }

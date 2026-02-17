@@ -414,6 +414,26 @@ const waitReportRunTerminal = async (apiBase, viewerToken, reportRunId) => {
   throw new Error(`report run timeout id=${reportRunId}`);
 };
 
+const waitAnalysisRunTerminal = async (apiBase, viewerToken, analysisRunId) => {
+  for (let attempt = 1; attempt <= 90; attempt += 1) {
+    const response = await request({
+      method: "GET",
+      url: `${apiBase}/v1/analysis/runs/${analysisRunId}`,
+      token: viewerToken
+    });
+    assertStatus(response.status, 200, "GET /v1/analysis/runs/{id}");
+
+    const status = response.json?.run?.status;
+    if (status === "completed" || status === "failed") {
+      return response.json;
+    }
+
+    await sleep(4000);
+  }
+
+  throw new Error(`analysis run timeout id=${analysisRunId}`);
+};
+
 const ensureReportsSurface = async (apiBase, viewerToken, analystToken, adminToken) => {
   const viewerCreateTemplateDenied = await request({
     method: "POST",
@@ -655,6 +675,186 @@ const ensureAnalyzeSurface = async (apiBase, viewerToken) => {
   }
 };
 
+const ensureSourceScoringSurface = async (apiBase, viewerToken, adminToken) => {
+  const listEmpty = await request({
+    method: "GET",
+    url: `${apiBase}/v1/config/source-scoring/weights`,
+    token: viewerToken
+  });
+  assertStatus(listEmpty.status, 200, "GET /v1/config/source-scoring/weights");
+  assertCondition(Array.isArray(listEmpty.json?.items), "source-scoring weights must return items[]");
+
+  const viewerCreateDenied = await request({
+    method: "POST",
+    url: `${apiBase}/v1/config/source-scoring/weights`,
+    token: viewerToken,
+    body: {
+      provider: "viewer-denied",
+      weight: 0.55
+    }
+  });
+  assertStatus(viewerCreateDenied.status, 403, "POST /v1/config/source-scoring/weights viewer denied");
+
+  const analyzeChannel = await request({
+    method: "GET",
+    url: `${apiBase}/v1/analyze/channel?limit=20`,
+    token: viewerToken
+  });
+  assertStatus(analyzeChannel.status, 200, "GET /v1/analyze/channel for source-scoring");
+  assertCondition(Array.isArray(analyzeChannel.json?.items), "analyze channel items must be array for source-scoring");
+
+  if ((analyzeChannel.json?.items ?? []).length === 0) {
+    console.log("[WARN] source-scoring metric impact check skipped: no channel rows available");
+    return;
+  }
+
+  const targetProvider = analyzeChannel.json.items[0].provider;
+  assertCondition(typeof targetProvider === "string" && targetProvider.length > 0, "source-scoring provider candidate invalid");
+
+  const createWeight = await request({
+    method: "POST",
+    url: `${apiBase}/v1/config/source-scoring/weights`,
+    token: adminToken,
+    body: {
+      provider: targetProvider,
+      source_name: null,
+      weight: 0.95,
+      is_active: true
+    }
+  });
+  assertCondition(createWeight.status === 201 || createWeight.status === 409, `source-scoring create expected 201/409, got ${createWeight.status}`);
+
+  let weightId = createWeight.json?.id;
+  if (!weightId) {
+    const listByProvider = await request({
+      method: "GET",
+      url: `${apiBase}/v1/config/source-scoring/weights?provider=${encodeURIComponent(targetProvider)}&include_inactive=true`,
+      token: viewerToken
+    });
+    assertStatus(listByProvider.status, 200, "GET /v1/config/source-scoring/weights by provider");
+    const fallback = (listByProvider.json?.items ?? []).find((item) => item.source_name === null);
+    weightId = fallback?.id;
+  }
+
+  assertCondition(typeof weightId === "string" && UUID_REGEX.test(weightId), "source-scoring weight id invalid");
+
+  const patchHigh = await request({
+    method: "PATCH",
+    url: `${apiBase}/v1/config/source-scoring/weights/${weightId}`,
+    token: adminToken,
+    body: {
+      weight: 0.95,
+      is_active: true
+    }
+  });
+  assertStatus(patchHigh.status, 200, "PATCH /v1/config/source-scoring/weights/{id} high");
+
+  const highChannel = await request({
+    method: "GET",
+    url: `${apiBase}/v1/analyze/channel?limit=40`,
+    token: viewerToken
+  });
+  assertStatus(highChannel.status, 200, "GET /v1/analyze/channel after high weight");
+  const highRow = (highChannel.json?.items ?? []).find((row) => row.provider === targetProvider);
+  assertCondition(highRow && typeof highRow.quality_score === "number", "missing high weight channel row");
+
+  const patchLow = await request({
+    method: "PATCH",
+    url: `${apiBase}/v1/config/source-scoring/weights/${weightId}`,
+    token: adminToken,
+    body: {
+      weight: 0.10,
+      is_active: true
+    }
+  });
+  assertStatus(patchLow.status, 200, "PATCH /v1/config/source-scoring/weights/{id} low");
+
+  const lowChannel = await request({
+    method: "GET",
+    url: `${apiBase}/v1/analyze/channel?limit=40`,
+    token: viewerToken
+  });
+  assertStatus(lowChannel.status, 200, "GET /v1/analyze/channel after low weight");
+  const lowRow = (lowChannel.json?.items ?? []).find((row) => row.provider === targetProvider);
+  assertCondition(lowRow && typeof lowRow.quality_score === "number", "missing low weight channel row");
+
+  const qualityDelta = Math.abs(highRow.quality_score - lowRow.quality_score);
+  assertCondition(qualityDelta >= 1, "source-scoring did not produce expected KPI quality_score delta");
+
+  const auditForSourceWeight = await request({
+    method: "GET",
+    url: `${apiBase}/v1/config/audit?limit=30&resource_type=SourceWeight`,
+    token: viewerToken
+  });
+  assertStatus(auditForSourceWeight.status, 200, "GET /v1/config/audit?resource_type=SourceWeight");
+  assertCondition(Array.isArray(auditForSourceWeight.json?.items), "source-scoring audit filter should return items");
+};
+
+const ensureAnalysisAsyncSurface = async (apiBase, viewerToken, analystToken) => {
+  const viewerDenied = await request({
+    method: "POST",
+    url: `${apiBase}/v1/analysis/runs`,
+    token: viewerToken,
+    body: {
+      scope: "overview"
+    }
+  });
+  assertStatus(viewerDenied.status, 403, "POST /v1/analysis/runs viewer denied");
+
+  const idemKey = `contract-analysis-${Date.now()}`;
+  const createRun = await request({
+    method: "POST",
+    url: `${apiBase}/v1/analysis/runs`,
+    token: analystToken,
+    body: {
+      scope: "overview",
+      source_type: "news",
+      prompt_version: "analysis-v1",
+      limit: 80,
+      idempotency_key: idemKey,
+      filters: {}
+    }
+  });
+  assertStatus(createRun.status, 202, "POST /v1/analysis/runs analyst");
+  assertCondition(typeof createRun.json?.analysis_run_id === "string", "analysis_run_id missing");
+  assertCondition(typeof createRun.json?.reused === "boolean", "analysis reused flag missing");
+  assertCondition(typeof createRun.json?.input_count === "number", "analysis input_count missing");
+
+  const analysisRunId = createRun.json.analysis_run_id;
+
+  const history = await request({
+    method: "GET",
+    url: `${apiBase}/v1/analysis/history?limit=30`,
+    token: viewerToken
+  });
+  assertStatus(history.status, 200, "GET /v1/analysis/history");
+  assertCondition(Array.isArray(history.json?.items), "analysis history items must be array");
+  assertCondition(
+    (history.json.items ?? []).some((item) => item.id === analysisRunId),
+    "analysis history should contain created run"
+  );
+
+  const terminal = await waitAnalysisRunTerminal(apiBase, viewerToken, analysisRunId);
+  assertCondition(terminal?.run?.status === "completed", "analysis run must complete successfully");
+  assertCondition(terminal?.output && typeof terminal.output === "object", "analysis run output must be an object");
+
+  const reused = await request({
+    method: "POST",
+    url: `${apiBase}/v1/analysis/runs`,
+    token: analystToken,
+    body: {
+      scope: "overview",
+      source_type: "news",
+      prompt_version: "analysis-v1",
+      limit: 80,
+      idempotency_key: idemKey,
+      filters: {}
+    }
+  });
+  assertStatus(reused.status, 202, "POST /v1/analysis/runs idempotent");
+  assertCondition(reused.json?.reused === true, "analysis idempotency must return reused=true");
+};
+
 const pickIncidentStatus = (currentStatus) => {
   if (currentStatus === "open") return "acknowledged";
   return "open";
@@ -773,6 +973,8 @@ const main = async () => {
   await ensureReportsSurface(apiBase, viewerToken, analystToken, adminToken);
 
   await ensureConfigSurface(apiBase, viewerToken, analystToken, adminToken);
+  await ensureSourceScoringSurface(apiBase, viewerToken, adminToken);
+  await ensureAnalysisAsyncSurface(apiBase, viewerToken, analystToken);
 
   const contentItem = await ensureContentItem(apiBase, analystToken, viewerToken, term);
   await waitNewsFeed(apiBase, viewerToken, term.id);

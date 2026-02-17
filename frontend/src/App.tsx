@@ -6,6 +6,7 @@ import { AccountsPage } from "./pages/AccountsPage";
 import { AnalyzeChannelPage } from "./pages/AnalyzeChannelPage";
 import { AnalyzeCompetitorsPage } from "./pages/AnalyzeCompetitorsPage";
 import { AnalyzeOverviewPage } from "./pages/AnalyzeOverviewPage";
+import { AnalyzeRunsPage } from "./pages/AnalyzeRunsPage";
 import { AuditPage } from "./pages/AuditPage";
 import { CompetitorsPage } from "./pages/CompetitorsPage";
 import { ConnectorsPage } from "./pages/ConnectorsPage";
@@ -16,6 +17,7 @@ import { MonitorOverviewPage } from "./pages/MonitorOverviewPage";
 import { ReportsCenterPage } from "./pages/ReportsCenterPage";
 import { ReportsSchedulesPage } from "./pages/ReportsSchedulesPage";
 import { ReportTemplatesPage } from "./pages/ReportTemplatesPage";
+import { SourceScoringPage } from "./pages/SourceScoringPage";
 import { TaxonomyPage } from "./pages/TaxonomyPage";
 import { TermsPage } from "./pages/TermsPage";
 
@@ -66,6 +68,7 @@ export const App = () => {
         <Route path="analyze/overview" element={<AnalyzeOverviewPage />} />
         <Route path="analyze/channel" element={<AnalyzeChannelPage />} />
         <Route path="analyze/competitors" element={<AnalyzeCompetitorsPage />} />
+        <Route path="analyze/runs" element={<AnalyzeRunsPage />} />
 
         <Route path="reports" element={<Navigate to="/app/reports/center" replace />} />
         <Route path="reports/center" element={<ReportsCenterPage />} />
@@ -77,6 +80,7 @@ export const App = () => {
         <Route path="config/competitors" element={<CompetitorsPage />} />
         <Route path="config/queries" element={<TermsPage />} />
         <Route path="config/taxonomy" element={<TaxonomyPage />} />
+        <Route path="config/source-scoring" element={<SourceScoringPage />} />
         <Route path="config/alerts" element={<Navigate to="/app/monitor/incidents" replace />} />
         <Route path="config/report-templates" element={<Navigate to="/app/reports/templates" replace />} />
         <Route path="config/audit" element={<AuditPage />} />

@@ -60,6 +60,37 @@ export type ConnectorPatchInput = {
   frequencyMinutes?: number;
 };
 
+export type SourceWeightRecord = {
+  id: string;
+  provider: string;
+  sourceName: string | null;
+  weight: number;
+  isActive: boolean;
+  updatedByUserId: string | null;
+  updatedByName: string | null;
+  updatedByEmail: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
+export type SourceWeightCreateInput = {
+  provider: string;
+  sourceName?: string | null;
+  weight: number;
+  isActive?: boolean;
+};
+
+export type SourceWeightUpdateInput = {
+  sourceName?: string | null;
+  weight?: number;
+  isActive?: boolean;
+};
+
+export type SourceWeightListFilters = {
+  provider?: string;
+  includeInactive?: boolean;
+};
+
 export type OwnedAccountRecord = {
   id: string;
   platform: string;
@@ -235,6 +266,12 @@ const parseStringArray = (value: string | null): string[] => {
   }
 };
 
+const parseDecimal = (value: string | null, fallback = 0): number => {
+  if (!value) return fallback;
+  const parsed = Number.parseFloat(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
+};
+
 const normalizeHealth = (value: string | null): ConnectorHealth => {
   if (value === "healthy" || value === "degraded" || value === "offline") return value;
   return "unknown";
@@ -301,6 +338,44 @@ const parseConnectorRunRow = (row: SqlRow | undefined): ConnectorSyncRunRecord |
     triggeredByUserId,
     createdAt
   };
+};
+
+const parseSourceWeightRow = (row: SqlRow | undefined): SourceWeightRecord | null => {
+  const id = fieldString(row, 0);
+  const provider = fieldString(row, 1);
+  const sourceName = fieldString(row, 2);
+  const weight = parseDecimal(fieldString(row, 3), Number.NaN);
+  const isActive = fieldBoolean(row, 4);
+  const updatedByUserId = fieldString(row, 5);
+  const updatedByName = fieldString(row, 6);
+  const updatedByEmail = fieldString(row, 7);
+  const createdAt = fieldDate(row, 8);
+  const updatedAt = fieldDate(row, 9);
+
+  if (!id || !provider || !Number.isFinite(weight) || isActive === null || !createdAt || !updatedAt) {
+    return null;
+  }
+
+  return {
+    id,
+    provider,
+    sourceName,
+    weight,
+    isActive,
+    updatedByUserId,
+    updatedByName,
+    updatedByEmail,
+    createdAt,
+    updatedAt
+  };
+};
+
+const normalizeProvider = (value: string): string => value.trim().toLowerCase();
+
+const normalizeSourceName = (value: string | null | undefined): string | null => {
+  if (value === undefined || value === null) return null;
+  const normalized = value.trim();
+  return normalized.length > 0 ? normalized : null;
 };
 
 const parseOwnedAccountRow = (row: SqlRow | undefined): OwnedAccountRecord | null => {
@@ -450,6 +525,63 @@ const decodeCursor = (value?: string): AuditCursorPayload | null => {
 
 class ConfigStore {
   constructor(private readonly rds: RdsDataClient) {}
+
+  private async getSourceWeightById(id: string, transactionId?: string): Promise<SourceWeightRecord | null> {
+    const response = await this.rds.execute(
+      `
+        SELECT
+          sw."id"::text,
+          sw."provider",
+          sw."sourceName",
+          sw."weight"::text,
+          sw."isActive",
+          sw."updatedByUserId"::text,
+          u."name",
+          u."email",
+          sw."createdAt",
+          sw."updatedAt"
+        FROM "public"."SourceWeight" sw
+        LEFT JOIN "public"."User" u
+          ON u."id" = sw."updatedByUserId"
+        WHERE sw."id" = CAST(:id AS UUID)
+        LIMIT 1
+      `,
+      [sqlUuid("id", id)],
+      { transactionId }
+    );
+
+    return parseSourceWeightRow(response.records?.[0]);
+  }
+
+  private async findSourceWeightByIdentity(
+    provider: string,
+    sourceName: string | null,
+    excludeId?: string,
+    transactionId?: string
+  ): Promise<string | null> {
+    const response = await this.rds.execute(
+      `
+        SELECT "id"::text
+        FROM "public"."SourceWeight"
+        WHERE
+          LOWER("provider") = LOWER(:provider)
+          AND (
+            (CAST(:source_name AS TEXT) IS NULL AND "sourceName" IS NULL)
+            OR (LOWER(COALESCE("sourceName", '')) = LOWER(COALESCE(CAST(:source_name AS TEXT), '')))
+          )
+          AND (CAST(:exclude_id AS UUID) IS NULL OR "id" <> CAST(:exclude_id AS UUID))
+        LIMIT 1
+      `,
+      [
+        sqlString("provider", provider),
+        sqlString("source_name", sourceName),
+        sqlUuid("exclude_id", excludeId ?? null)
+      ],
+      { transactionId }
+    );
+
+    return fieldString(response.records?.[0], 0);
+  }
 
   private async appendAudit(input: AuditWriteInput, transactionId?: string): Promise<void> {
     await this.rds.execute(
@@ -787,6 +919,212 @@ class ConfigStore {
     );
 
     return (response.records ?? []).map(parseConnectorRunRow).filter((item): item is ConnectorSyncRunRecord => item !== null);
+  }
+
+  async listSourceWeights(filters: SourceWeightListFilters, limit = 500): Promise<SourceWeightRecord[]> {
+    const safeLimit = Math.min(500, Math.max(1, limit));
+    const conditions: string[] = [];
+    const params: SqlParameter[] = [sqlLong("limit", safeLimit)];
+
+    if (!filters.includeInactive) {
+      conditions.push('sw."isActive" = TRUE');
+    }
+
+    if (filters.provider) {
+      conditions.push('LOWER(sw."provider") = LOWER(:provider)');
+      params.push(sqlString("provider", filters.provider));
+    }
+
+    const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
+
+    const response = await this.rds.execute(
+      `
+        SELECT
+          sw."id"::text,
+          sw."provider",
+          sw."sourceName",
+          sw."weight"::text,
+          sw."isActive",
+          sw."updatedByUserId"::text,
+          u."name",
+          u."email",
+          sw."createdAt",
+          sw."updatedAt"
+        FROM "public"."SourceWeight" sw
+        LEFT JOIN "public"."User" u
+          ON u."id" = sw."updatedByUserId"
+        ${whereClause}
+        ORDER BY
+          sw."provider" ASC,
+          CASE WHEN sw."sourceName" IS NULL THEN 0 ELSE 1 END ASC,
+          sw."sourceName" ASC,
+          sw."id" ASC
+        LIMIT :limit
+      `,
+      params
+    );
+
+    return (response.records ?? []).map(parseSourceWeightRow).filter((item): item is SourceWeightRecord => item !== null);
+  }
+
+  async createSourceWeight(
+    input: SourceWeightCreateInput,
+    actorUserId: string,
+    requestId?: string
+  ): Promise<SourceWeightRecord> {
+    const provider = normalizeProvider(input.provider);
+    const sourceName = normalizeSourceName(input.sourceName);
+    const weight = Number(input.weight);
+    if (!provider) {
+      throw new AppStoreError("validation", "provider is required");
+    }
+    if (!Number.isFinite(weight) || weight < 0 || weight > 1) {
+      throw new AppStoreError("validation", "weight must be between 0 and 1");
+    }
+
+    const tx = await this.rds.beginTransaction();
+
+    try {
+      const existingId = await this.findSourceWeightByIdentity(provider, sourceName, undefined, tx);
+      if (existingId) {
+        throw new AppStoreError("conflict", "Source weight already exists for provider/source_name");
+      }
+
+      const response = await this.rds.execute(
+        `
+          INSERT INTO "public"."SourceWeight"
+            ("id", "provider", "sourceName", "weight", "isActive", "updatedByUserId", "createdAt", "updatedAt")
+          VALUES
+            (CAST(:id AS UUID), :provider, :source_name, CAST(:weight AS DECIMAL(3,2)), :is_active, CAST(:updated_by_user_id AS UUID), NOW(), NOW())
+          RETURNING "id"::text
+        `,
+        [
+          sqlUuid("id", randomUUID()),
+          sqlString("provider", provider),
+          sqlString("source_name", sourceName),
+          sqlString("weight", weight.toFixed(2)),
+          sqlBoolean("is_active", input.isActive ?? true),
+          sqlUuid("updated_by_user_id", actorUserId)
+        ],
+        { transactionId: tx }
+      );
+
+      const weightId = fieldString(response.records?.[0], 0);
+      if (!weightId) {
+        throw new Error("Failed to create source weight");
+      }
+
+      const created = await this.getSourceWeightById(weightId, tx);
+      if (!created) {
+        throw new Error("Failed to load created source weight");
+      }
+
+      await this.appendAudit(
+        {
+          actorUserId,
+          action: "source_weight_created",
+          resourceType: "SourceWeight",
+          resourceId: created.id,
+          requestId,
+          after: created
+        },
+        tx
+      );
+
+      await this.rds.commitTransaction(tx);
+      return created;
+    } catch (error) {
+      await this.rds.rollbackTransaction(tx).catch(() => undefined);
+      if (isUniqueViolation(error)) {
+        throw new AppStoreError("conflict", "Source weight already exists for provider/source_name");
+      }
+      throw error;
+    }
+  }
+
+  async updateSourceWeight(
+    id: string,
+    input: SourceWeightUpdateInput,
+    actorUserId: string,
+    requestId?: string
+  ): Promise<SourceWeightRecord> {
+    const tx = await this.rds.beginTransaction();
+
+    try {
+      const before = await this.getSourceWeightById(id, tx);
+      if (!before) {
+        throw new AppStoreError("not_found", "Source weight not found");
+      }
+
+      const nextSourceName = input.sourceName !== undefined ? normalizeSourceName(input.sourceName) : before.sourceName;
+      const identityConflict = await this.findSourceWeightByIdentity(before.provider, nextSourceName, id, tx);
+      if (identityConflict) {
+        throw new AppStoreError("conflict", "Source weight already exists for provider/source_name");
+      }
+
+      const setParts: string[] = ['"updatedAt" = NOW()', '"updatedByUserId" = CAST(:updated_by_user_id AS UUID)'];
+      const params: SqlParameter[] = [sqlUuid("id", id), sqlUuid("updated_by_user_id", actorUserId)];
+
+      if (input.sourceName !== undefined) {
+        setParts.push('"sourceName" = :source_name');
+        params.push(sqlString("source_name", normalizeSourceName(input.sourceName)));
+      }
+
+      if (input.weight !== undefined) {
+        const numericWeight = Number(input.weight);
+        if (!Number.isFinite(numericWeight) || numericWeight < 0 || numericWeight > 1) {
+          throw new AppStoreError("validation", "weight must be between 0 and 1");
+        }
+        setParts.push('"weight" = CAST(:weight AS DECIMAL(3,2))');
+        params.push(sqlString("weight", numericWeight.toFixed(2)));
+      }
+
+      if (input.isActive !== undefined) {
+        setParts.push('"isActive" = :is_active');
+        params.push(sqlBoolean("is_active", input.isActive));
+      }
+
+      if (setParts.length === 2) {
+        throw new AppStoreError("conflict", "No changes requested for source weight");
+      }
+
+      await this.rds.execute(
+        `
+          UPDATE "public"."SourceWeight"
+          SET ${setParts.join(", ")}
+          WHERE "id" = CAST(:id AS UUID)
+        `,
+        params,
+        { transactionId: tx }
+      );
+
+      const after = await this.getSourceWeightById(id, tx);
+      if (!after) {
+        throw new Error("Failed to load updated source weight");
+      }
+
+      await this.appendAudit(
+        {
+          actorUserId,
+          action: "source_weight_updated",
+          resourceType: "SourceWeight",
+          resourceId: after.id,
+          requestId,
+          before,
+          after
+        },
+        tx
+      );
+
+      await this.rds.commitTransaction(tx);
+      return after;
+    } catch (error) {
+      await this.rds.rollbackTransaction(tx).catch(() => undefined);
+      if (isUniqueViolation(error)) {
+        throw new AppStoreError("conflict", "Source weight already exists for provider/source_name");
+      }
+      throw error;
+    }
   }
 
   async listOwnedAccounts(limit: number): Promise<OwnedAccountRecord[]> {

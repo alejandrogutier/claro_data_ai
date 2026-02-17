@@ -16,6 +16,7 @@ export type AppEnv = {
   ingestionDefaultTerms?: string;
   incidentQueueUrl?: string;
   reportQueueUrl?: string;
+  analysisQueueUrl?: string;
   reportConfidenceThreshold?: number;
   reportDefaultTimezone?: string;
   reportEmailSender?: string;
@@ -28,7 +29,7 @@ export type AppEnv = {
 export const env: AppEnv = {
   appEnv: process.env.APP_ENV ?? "prod",
   awsRegion: process.env.AWS_REGION ?? "us-east-1",
-  bedrockModelId: process.env.BEDROCK_MODEL_ID ?? "anthropic.claude-haiku-4-5-20251001-v1:0",
+  bedrockModelId: process.env.BEDROCK_MODEL_ID ?? "us.anthropic.claude-haiku-4-5-20251001-v1:0",
   providerKeysSecretName: process.env.PROVIDER_KEYS_SECRET_NAME,
   appConfigSecretName: process.env.APP_CONFIG_SECRET_NAME,
   awsCredentialsSecretName: process.env.AWS_CREDENTIALS_SECRET_NAME,
@@ -45,6 +46,7 @@ export const env: AppEnv = {
   ingestionDefaultTerms: process.env.INGESTION_DEFAULT_TERMS,
   incidentQueueUrl: process.env.INCIDENT_QUEUE_URL,
   reportQueueUrl: process.env.REPORT_QUEUE_URL,
+  analysisQueueUrl: process.env.ANALYSIS_QUEUE_URL,
   reportConfidenceThreshold: process.env.REPORT_CONFIDENCE_THRESHOLD
     ? Number.parseFloat(process.env.REPORT_CONFIDENCE_THRESHOLD)
     : 0.65,

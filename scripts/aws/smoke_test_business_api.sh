@@ -193,6 +193,33 @@ wait_report_run_terminal() {
   exit 1
 }
 
+wait_analysis_run_terminal() {
+  local analysis_run_id="$1"
+  local token="$2"
+
+  for i in {1..90}; do
+    local code
+    code="$(curl -s -o /tmp/claro-analysis-run-status.json -w "%{http_code}" -H "Authorization: Bearer $token" "$API_BASE/v1/analysis/runs/$analysis_run_id")"
+    if [[ "$code" != "200" ]]; then
+      echo "[FAIL] GET /v1/analysis/runs/$analysis_run_id expected 200 got=$code"
+      cat /tmp/claro-analysis-run-status.json
+      exit 1
+    fi
+
+    local status
+    status="$(jq -r '.run.status // empty' /tmp/claro-analysis-run-status.json)"
+    if [[ "$status" == "completed" || "$status" == "failed" ]]; then
+      echo "$status"
+      return 0
+    fi
+
+    sleep 4
+  done
+
+  echo "[FAIL] analysis run timeout analysis_run_id=$analysis_run_id"
+  exit 1
+}
+
 echo "[1] Health and auth checks"
 CODE="$(curl -s -o /tmp/claro-health.json -w "%{http_code}" "$API_BASE/v1/health")"
 assert_code "$CODE" "200" "GET /v1/health"
@@ -470,6 +497,108 @@ AUDIT_DOWNLOAD_URL="$(jq -r '.download_url // empty' /tmp/claro-config-audit-exp
 if [[ -z "$AUDIT_DOWNLOAD_URL" || "$AUDIT_DOWNLOAD_URL" == "null" ]]; then
   echo "[FAIL] audit export missing download_url"
   cat /tmp/claro-config-audit-export.json
+  exit 1
+fi
+
+echo "[3.25] Source scoring configurable"
+CODE="$(curl -s -o /tmp/claro-source-weights-list.json -w "%{http_code}" -H "Authorization: Bearer $VIEWER_TOKEN" "$API_BASE/v1/config/source-scoring/weights")"
+assert_code "$CODE" "200" "GET /v1/config/source-scoring/weights viewer"
+
+CODE="$(curl -s -o /tmp/claro-source-weights-create-viewer.json -w "%{http_code}" -X POST -H "Authorization: Bearer $VIEWER_TOKEN" -H "Content-Type: application/json" -d '{"provider":"viewer-denied","weight":0.5}' "$API_BASE/v1/config/source-scoring/weights")"
+assert_code "$CODE" "403" "POST /v1/config/source-scoring/weights viewer denied"
+
+SOURCE_PROVIDER="$(jq -r '.items[0].provider // empty' /tmp/claro-analyze-channel-viewer.json)"
+if [[ -z "$SOURCE_PROVIDER" ]]; then
+  echo "[WARN] source-scoring KPI impact check skipped: no providers in analyze/channel"
+else
+  CODE="$(curl -s -o /tmp/claro-source-weights-create-admin.json -w "%{http_code}" -X POST -H "Authorization: Bearer $ADMIN_TOKEN" -H "Content-Type: application/json" -d "{\"provider\":\"$SOURCE_PROVIDER\",\"source_name\":null,\"weight\":0.95,\"is_active\":true}" "$API_BASE/v1/config/source-scoring/weights")"
+  if [[ "$CODE" != "201" && "$CODE" != "409" ]]; then
+    echo "[FAIL] POST /v1/config/source-scoring/weights admin expected 201/409 got=$CODE"
+    cat /tmp/claro-source-weights-create-admin.json
+    exit 1
+  fi
+
+  SOURCE_WEIGHT_ID="$(jq -r '.id // empty' /tmp/claro-source-weights-create-admin.json)"
+  if [[ -z "$SOURCE_WEIGHT_ID" ]]; then
+    CODE="$(curl -s -o /tmp/claro-source-weights-provider-list.json -w "%{http_code}" -H "Authorization: Bearer $VIEWER_TOKEN" "$API_BASE/v1/config/source-scoring/weights?provider=$SOURCE_PROVIDER&include_inactive=true")"
+    assert_code "$CODE" "200" "GET /v1/config/source-scoring/weights by provider"
+    SOURCE_WEIGHT_ID="$(jq -r '.items[] | select(.source_name == null) | .id' /tmp/claro-source-weights-provider-list.json | head -n 1)"
+  fi
+
+  if [[ -z "$SOURCE_WEIGHT_ID" ]]; then
+    echo "[FAIL] source weight id not found for provider=$SOURCE_PROVIDER"
+    exit 1
+  fi
+
+  CODE="$(curl -s -o /tmp/claro-source-weights-patch-high.json -w "%{http_code}" -X PATCH -H "Authorization: Bearer $ADMIN_TOKEN" -H "Content-Type: application/json" -d '{"weight":0.95,"is_active":true}' "$API_BASE/v1/config/source-scoring/weights/$SOURCE_WEIGHT_ID")"
+  assert_code "$CODE" "200" "PATCH /v1/config/source-scoring/weights/{id} high"
+
+  CODE="$(curl -s -o /tmp/claro-analyze-channel-high-weight.json -w "%{http_code}" -H "Authorization: Bearer $VIEWER_TOKEN" "$API_BASE/v1/analyze/channel?limit=40")"
+  assert_code "$CODE" "200" "GET /v1/analyze/channel after high source weight"
+  HIGH_Q="$(jq -r --arg P "$SOURCE_PROVIDER" '.items[] | select(.provider==$P) | .quality_score' /tmp/claro-analyze-channel-high-weight.json | head -n 1)"
+
+  CODE="$(curl -s -o /tmp/claro-source-weights-patch-low.json -w "%{http_code}" -X PATCH -H "Authorization: Bearer $ADMIN_TOKEN" -H "Content-Type: application/json" -d '{"weight":0.10,"is_active":true}' "$API_BASE/v1/config/source-scoring/weights/$SOURCE_WEIGHT_ID")"
+  assert_code "$CODE" "200" "PATCH /v1/config/source-scoring/weights/{id} low"
+
+  CODE="$(curl -s -o /tmp/claro-analyze-channel-low-weight.json -w "%{http_code}" -H "Authorization: Bearer $VIEWER_TOKEN" "$API_BASE/v1/analyze/channel?limit=40")"
+  assert_code "$CODE" "200" "GET /v1/analyze/channel after low source weight"
+  LOW_Q="$(jq -r --arg P "$SOURCE_PROVIDER" '.items[] | select(.provider==$P) | .quality_score' /tmp/claro-analyze-channel-low-weight.json | head -n 1)"
+
+  if [[ -z "$HIGH_Q" || -z "$LOW_Q" || "$HIGH_Q" == "null" || "$LOW_Q" == "null" ]]; then
+    echo "[FAIL] missing quality_score for provider=$SOURCE_PROVIDER after source-scoring patches"
+    exit 1
+  fi
+
+  DELTA="$(node -e "const a=Number(process.argv[1]); const b=Number(process.argv[2]); process.stdout.write(String(Math.abs(a-b)));" "$HIGH_Q" "$LOW_Q")"
+  DELTA_OK="$(node -e "const d=Number(process.argv[1]); process.stdout.write(d >= 1 ? 'true' : 'false');" "$DELTA")"
+  if [[ "$DELTA_OK" != "true" ]]; then
+    echo "[FAIL] source-scoring expected quality_score delta >= 1 (got $DELTA)"
+    exit 1
+  fi
+
+  CODE="$(curl -s -o /tmp/claro-source-audit-list.json -w "%{http_code}" -H "Authorization: Bearer $VIEWER_TOKEN" "$API_BASE/v1/config/audit?limit=20&resource_type=SourceWeight")"
+  assert_code "$CODE" "200" "GET /v1/config/audit resource_type=SourceWeight"
+fi
+
+echo "[3.26] Analysis async real endpoints"
+CODE="$(curl -s -o /tmp/claro-analysis-create-viewer.json -w "%{http_code}" -X POST -H "Authorization: Bearer $VIEWER_TOKEN" -H "Content-Type: application/json" -d '{"scope":"overview"}' "$API_BASE/v1/analysis/runs")"
+assert_code "$CODE" "403" "POST /v1/analysis/runs viewer denied"
+
+ANALYSIS_IDEM_KEY="smoke-analysis-$(date +%s)"
+CODE="$(curl -s -o /tmp/claro-analysis-create-analyst.json -w "%{http_code}" -X POST -H "Authorization: Bearer $ANALYST_TOKEN" -H "Content-Type: application/json" -d "{\"scope\":\"overview\",\"source_type\":\"news\",\"prompt_version\":\"analysis-v1\",\"limit\":80,\"idempotency_key\":\"$ANALYSIS_IDEM_KEY\",\"filters\":{}}" "$API_BASE/v1/analysis/runs")"
+assert_code "$CODE" "202" "POST /v1/analysis/runs analyst"
+
+ANALYSIS_RUN_ID="$(jq -r '.analysis_run_id // empty' /tmp/claro-analysis-create-analyst.json)"
+if [[ -z "$ANALYSIS_RUN_ID" ]]; then
+  echo "[FAIL] analysis_run_id missing"
+  cat /tmp/claro-analysis-create-analyst.json
+  exit 1
+fi
+
+CODE="$(curl -s -o /tmp/claro-analysis-history-viewer.json -w "%{http_code}" -H "Authorization: Bearer $VIEWER_TOKEN" "$API_BASE/v1/analysis/history?limit=30")"
+assert_code "$CODE" "200" "GET /v1/analysis/history viewer"
+
+ANALYSIS_STATUS="$(wait_analysis_run_terminal "$ANALYSIS_RUN_ID" "$VIEWER_TOKEN")"
+if [[ "$ANALYSIS_STATUS" != "completed" ]]; then
+  echo "[FAIL] analysis run did not complete successfully (status=$ANALYSIS_STATUS)"
+  cat /tmp/claro-analysis-run-status.json
+  exit 1
+fi
+
+ANALYSIS_SUMMARY="$(jq -r '.output.sintesis_general // empty' /tmp/claro-analysis-run-status.json)"
+if [[ -z "$ANALYSIS_SUMMARY" ]]; then
+  echo "[FAIL] completed analysis run missing output.sintesis_general"
+  cat /tmp/claro-analysis-run-status.json
+  exit 1
+fi
+
+CODE="$(curl -s -o /tmp/claro-analysis-create-idem.json -w "%{http_code}" -X POST -H "Authorization: Bearer $ANALYST_TOKEN" -H "Content-Type: application/json" -d "{\"scope\":\"overview\",\"source_type\":\"news\",\"prompt_version\":\"analysis-v1\",\"limit\":80,\"idempotency_key\":\"$ANALYSIS_IDEM_KEY\",\"filters\":{}}" "$API_BASE/v1/analysis/runs")"
+assert_code "$CODE" "202" "POST /v1/analysis/runs idempotent reuse"
+
+ANALYSIS_REUSED="$(jq -r '.reused // empty' /tmp/claro-analysis-create-idem.json)"
+if [[ "$ANALYSIS_REUSED" != "true" ]]; then
+  echo "[FAIL] expected reused=true in idempotent analysis run response"
+  cat /tmp/claro-analysis-create-idem.json
   exit 1
 fi
 

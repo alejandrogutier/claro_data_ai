@@ -19,6 +19,7 @@ cp -R dist/* "$STAGING_DIR/"
 cp package.json package-lock.json "$STAGING_DIR/"
 mkdir -p "$STAGING_DIR/prisma"
 cp -R prisma/migrations "$STAGING_DIR/prisma/"
+cp -R prompts "$STAGING_DIR/"
 
 echo "[4/4] Packaging Lambda artifact"
 

@@ -9,6 +9,14 @@ export type MonitorOverviewResponse = components["schemas"]["MonitorOverviewResp
 export type AnalyzeOverviewResponse = components["schemas"]["AnalyzeOverviewResponse"];
 export type AnalyzeChannelResponse = components["schemas"]["AnalyzeChannelResponse"];
 export type AnalyzeCompetitorsResponse = components["schemas"]["AnalyzeCompetitorsResponse"];
+export type CreateAnalysisRunRequest = components["schemas"]["CreateAnalysisRunRequest"];
+export type AnalysisRunAccepted = components["schemas"]["AnalysisRunAccepted"];
+export type AnalysisRun = components["schemas"]["AnalysisRun"];
+export type AnalysisRunStatus = components["schemas"]["AnalysisRunStatus"];
+export type AnalysisRunScope = components["schemas"]["AnalysisRunScope"];
+export type AnalysisSourceType = components["schemas"]["SourceType"];
+export type AnalysisRunListResponse = components["schemas"]["AnalysisRunListResponse"];
+export type AnalysisRunDetailResponse = components["schemas"]["AnalysisRunDetailResponse"];
 export type IncidentStatus = components["schemas"]["IncidentStatus"];
 export type IncidentSeverity = components["schemas"]["MonitorSeverity"];
 export type Incident = components["schemas"]["Incident"];
@@ -37,6 +45,10 @@ export type TaxonomyEntry = components["schemas"]["TaxonomyEntry"];
 export type TaxonomyListResponse = components["schemas"]["TaxonomyListResponse"];
 export type CreateTaxonomyEntryRequest = components["schemas"]["CreateTaxonomyEntryRequest"];
 export type UpdateTaxonomyEntryRequest = components["schemas"]["UpdateTaxonomyEntryRequest"];
+export type SourceWeight = components["schemas"]["SourceWeight"];
+export type SourceWeightListResponse = components["schemas"]["SourceWeightListResponse"];
+export type CreateSourceWeightRequest = components["schemas"]["CreateSourceWeightRequest"];
+export type UpdateSourceWeightRequest = components["schemas"]["UpdateSourceWeightRequest"];
 export type AuditItem = components["schemas"]["AuditItem"];
 export type AuditListResponse = components["schemas"]["AuditListResponse"];
 export type CreateAuditExportRequest = components["schemas"]["CreateAuditExportRequest"];
@@ -179,6 +191,28 @@ export class ApiClient {
     return this.request<AnalyzeCompetitorsResponse>("/v1/analyze/competitors", {
       query: { limit }
     });
+  }
+
+  createAnalysisRun(payload: CreateAnalysisRunRequest): Promise<AnalysisRunAccepted> {
+    return this.request<AnalysisRunAccepted>("/v1/analysis/runs", {
+      method: "POST",
+      body: payload
+    });
+  }
+
+  listAnalysisHistory(query: {
+    limit?: number;
+    cursor?: string;
+    status?: AnalysisRunStatus;
+    scope?: AnalysisRunScope;
+    from?: string;
+    to?: string;
+  }): Promise<AnalysisRunListResponse> {
+    return this.request<AnalysisRunListResponse>("/v1/analysis/history", { query });
+  }
+
+  getAnalysisRun(id: string): Promise<AnalysisRunDetailResponse> {
+    return this.request<AnalysisRunDetailResponse>(`/v1/analysis/runs/${id}`);
   }
 
   listMonitorIncidents(query: {
@@ -375,6 +409,29 @@ export class ApiClient {
 
   patchTaxonomyEntry(kind: TaxonomyKind, id: string, payload: UpdateTaxonomyEntryRequest): Promise<TaxonomyEntry> {
     return this.request<TaxonomyEntry>(`/v1/config/taxonomies/${kind}/${id}`, {
+      method: "PATCH",
+      body: payload
+    });
+  }
+
+  listSourceWeights(provider?: string, includeInactive = false): Promise<SourceWeightListResponse> {
+    return this.request<SourceWeightListResponse>("/v1/config/source-scoring/weights", {
+      query: {
+        provider,
+        include_inactive: includeInactive ? "true" : undefined
+      }
+    });
+  }
+
+  createSourceWeight(payload: CreateSourceWeightRequest): Promise<SourceWeight> {
+    return this.request<SourceWeight>("/v1/config/source-scoring/weights", {
+      method: "POST",
+      body: payload
+    });
+  }
+
+  patchSourceWeight(id: string, payload: UpdateSourceWeightRequest): Promise<SourceWeight> {
+    return this.request<SourceWeight>(`/v1/config/source-scoring/weights/${id}`, {
       method: "PATCH",
       body: payload
     });
