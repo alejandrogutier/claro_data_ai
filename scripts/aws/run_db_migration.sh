@@ -12,6 +12,7 @@ FUNCTION_NAME="$(terraform -chdir=infra/terraform output -raw db_migration_lambd
 TMP_OUT="/tmp/claro-db-migration-response.json"
 
 aws lambda invoke \
+  --cli-binary-format raw-in-base64-out \
   --region "$AWS_REGION" \
   --function-name "$FUNCTION_NAME" \
   --payload '{}' \

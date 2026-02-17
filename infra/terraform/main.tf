@@ -416,6 +416,28 @@ resource "aws_iam_role_policy_attachment" "lambda_analysis_sqs" {
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaSQSQueueExecutionRole"
 }
 
+resource "aws_iam_role" "lambda_digest" {
+  name = "${local.name_prefix}-lambda-digest-role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Action = "sts:AssumeRole"
+        Effect = "Allow"
+        Principal = {
+          Service = "lambda.amazonaws.com"
+        }
+      }
+    ]
+  })
+}
+
+resource "aws_iam_role_policy_attachment" "lambda_digest_basic" {
+  role       = aws_iam_role.lambda_digest.name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+}
+
 resource "aws_iam_role" "lambda_migrations" {
   name = "${local.name_prefix}-lambda-migrations-role"
 
@@ -560,6 +582,33 @@ resource "aws_lambda_function" "incident_worker" {
       ALERT_EMAIL_RECIPIENTS = var.alert_email_recipients
       ALERT_COOLDOWN_MINUTES = tostring(var.alert_cooldown_minutes)
       ALERT_SIGNAL_VERSION   = var.alert_signal_version
+    }
+  }
+}
+
+resource "aws_lambda_function" "digest_worker" {
+  function_name = "${local.name_prefix}-digest-worker"
+  role          = aws_iam_role.lambda_digest.arn
+  runtime       = "nodejs22.x"
+  handler       = "digest/worker.main"
+
+  filename         = var.lambda_package_path
+  source_code_hash = filebase64sha256(var.lambda_package_path)
+
+  timeout     = 180
+  memory_size = 512
+
+  environment {
+    variables = {
+      APP_ENV                 = var.environment
+      DB_RESOURCE_ARN         = aws_rds_cluster.aurora.arn
+      DB_SECRET_ARN           = data.aws_secretsmanager_secret.database.arn
+      DB_NAME                 = var.db_name
+      EXPORT_BUCKET_NAME      = aws_s3_bucket.exports.bucket
+      REPORT_DEFAULT_TIMEZONE = var.report_default_timezone
+      REPORT_EMAIL_SENDER     = var.ses_sender_email
+      ALERT_EMAIL_SENDER      = var.ses_sender_email
+      ALERT_EMAIL_RECIPIENTS  = var.alert_email_recipients
     }
   }
 }
@@ -964,6 +1013,30 @@ resource "aws_lambda_permission" "report_scheduler_eventbridge" {
   function_name = aws_lambda_function.report_scheduler.function_name
   principal     = "events.amazonaws.com"
   source_arn    = aws_cloudwatch_event_rule.report_schedule.arn
+}
+
+resource "aws_cloudwatch_event_rule" "digest_daily" {
+  name                = "${local.name_prefix}-digest-daily-8am-bogota"
+  schedule_expression = "cron(0 13 * * ? *)"
+}
+
+resource "aws_cloudwatch_event_target" "digest_daily" {
+  rule      = aws_cloudwatch_event_rule.digest_daily.name
+  target_id = "digest-worker-lambda"
+  arn       = aws_lambda_function.digest_worker.arn
+  input = jsonencode({
+    trigger_type    = "scheduled"
+    recipient_scope = "ops"
+    requested_at    = "eventbridge"
+  })
+}
+
+resource "aws_lambda_permission" "digest_worker_eventbridge" {
+  statement_id  = "AllowExecutionFromEventBridgeDigestWorker"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.digest_worker.function_name
+  principal     = "events.amazonaws.com"
+  source_arn    = aws_cloudwatch_event_rule.digest_daily.arn
 }
 
 resource "aws_iam_role" "step_functions" {

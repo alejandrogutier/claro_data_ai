@@ -235,6 +235,66 @@ resource "aws_iam_role_policy" "lambda_incident_access" {
   })
 }
 
+resource "aws_iam_role_policy" "lambda_digest_access" {
+  name = "${local.name_prefix}-lambda-digest-access"
+  role = aws_iam_role.lambda_digest.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "secretsmanager:GetSecretValue",
+          "secretsmanager:DescribeSecret"
+        ]
+        Resource = [data.aws_secretsmanager_secret.database.arn]
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "rds-data:ExecuteStatement",
+          "rds-data:BatchExecuteStatement",
+          "rds-data:BeginTransaction",
+          "rds-data:CommitTransaction",
+          "rds-data:RollbackTransaction"
+        ]
+        Resource = [aws_rds_cluster.aurora.arn]
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "s3:PutObject",
+          "s3:PutObjectTagging",
+          "s3:GetObject"
+        ]
+        Resource = ["${aws_s3_bucket.exports.arn}/*"]
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "ses:SendEmail",
+          "ses:SendRawEmail",
+          "ses:GetIdentityVerificationAttributes",
+          "sesv2:GetEmailIdentity",
+          "sesv2:SendEmail"
+        ]
+        Resource = ["*"]
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "kms:Decrypt",
+          "kms:Encrypt",
+          "kms:GenerateDataKey",
+          "kms:DescribeKey"
+        ]
+        Resource = [aws_kms_key.app.arn]
+      }
+    ]
+  })
+}
+
 resource "aws_iam_role_policy" "lambda_report_access" {
   name = "${local.name_prefix}-lambda-report-access"
   role = aws_iam_role.lambda_report.id

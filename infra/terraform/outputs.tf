@@ -58,6 +58,10 @@ output "incident_worker_lambda_name" {
   value = aws_lambda_function.incident_worker.function_name
 }
 
+output "digest_worker_lambda_name" {
+  value = aws_lambda_function.digest_worker.function_name
+}
+
 output "analysis_worker_lambda_name" {
   value = aws_lambda_function.analysis_worker.function_name
 }

@@ -716,4 +716,22 @@ fi
 
 wait_export_completed "$EXPORT_ID" "$ANALYST_TOKEN"
 
+echo "[6] Digest daily (SES)"
+DIGEST_FUNCTION_NAME="$(terraform -chdir=infra/terraform output -raw digest_worker_lambda_name)"
+DIGEST_REQ_ID="smoke-digest-$(date +%s)"
+aws lambda invoke \
+  --cli-binary-format raw-in-base64-out \
+  --region "$AWS_REGION" \
+  --function-name "$DIGEST_FUNCTION_NAME" \
+  --payload "{\"trigger_type\":\"manual\",\"recipient_scope\":\"ops\",\"request_id\":\"$DIGEST_REQ_ID\"}" \
+  /tmp/claro-digest-response.json >/tmp/claro-digest-meta.json
+
+DIGEST_STATUS="$(jq -r '.status // empty' /tmp/claro-digest-response.json)"
+if [[ "$DIGEST_STATUS" != "completed" && "$DIGEST_STATUS" != "skipped" ]]; then
+  echo "[FAIL] digest run expected completed|skipped got=$DIGEST_STATUS"
+  cat /tmp/claro-digest-response.json
+  exit 1
+fi
+echo "[OK] digest run -> $DIGEST_STATUS"
+
 echo "Smoke business API completed"

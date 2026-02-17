@@ -23,7 +23,7 @@
 | CLARO-011 | todo | 0% | Ninguno | FTS + cursor pagination pendiente |
 | CLARO-012 | done | 100% | Ninguno | Desplegado y validado en AWS: source scoring configurable (`GET/POST/PATCH`), auditoria `before/after`, score efectivo dinamico en monitor/analyze/incidents/content feed, UI `/app/config/source-scoring`, contract+smoke en verde |
 | CLARO-013 | done | 100% | Ninguno | Desplegado y validado en AWS: `/v1/analysis/runs|history|runs/{id}`, idempotencia/fingerprint, worker SQS+Bedrock estricto (inference profile), historial/detalle + UI `/app/analyze/runs`, contract+smoke en verde |
-| CLARO-014 | doing | 20% | SES requiere verificacion de identidad real de correo | SES identity creada (`digest@example.com`); siguiente bloque operativo tras cierre de CLARO-012/013 |
+| CLARO-014 | doing | 80% | SES requiere verificacion de identidad real de correo + recipients no vacios | Digest worker + EventBridge daily 08:00 Bogota desplegados; smoke AWS valida invocacion (`completed|skipped`); email queda best-effort segun verificacion SES/recipients |
 | CLARO-015 | done | 100% | Ninguno | Export async operativo (`POST /v1/exports/csv` + `GET /v1/exports/{id}`), worker SQS y URL firmada al completar |
 | CLARO-016 | todo | 0% | Ninguno | Dashboards CloudWatch/X-Ray pendientes |
 | CLARO-017 | done | 100% | Ninguno | OpenAPI actualizado + `npm run contract:test` + smoke business extendido (`state/bulk/classification/export`) |
@@ -58,8 +58,8 @@
    - Mitigacion: cargar catalogos base priorizados y marcar KPI sin base suficiente como `insufficient_data`.
 6. **Riesgo**: umbrales de severidad pueden disparar ruido en CLARO-036.
    - Mitigacion: iniciar alertas con observacion pasiva y ajustar thresholds/cooldown con datos reales de 1 semana.
-7. **Riesgo**: `ALERT_EMAIL_RECIPIENTS` vacio en runtime actual, por lo que notificacion queda solo in-app.
-   - Mitigacion: cargar lista CSV de destinatarios verificados en SES para activar correo operativo.
+7. **Riesgo**: `ALERT_EMAIL_RECIPIENTS` vacio en runtime actual, por lo que notificacion/digest por correo queda solo best-effort (in-app sigue operativo).
+   - Mitigacion: cargar lista CSV de destinatarios verificados en SES para activar correo operativo y digest diario.
 
 ## Decisiones Cerradas de Arquitectura y Producto
 - AWS serverless en `us-east-1`.

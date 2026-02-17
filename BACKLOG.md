@@ -57,7 +57,7 @@ Este contrato se usa junto a `UX_PLANNING.md` secciones `2.3`, `7.4`, `21`, `26`
 | CLARO-042 | checklist transversal | CLARO-037, CLARO-038, CLARO-035 | gate go-live completo y aprobado |
 
 ## Now
-- CLARO-014 | doing | P2 | Digest diario SES 08:00 | siguiente bloque tras cierre CLARO-012/013: activar envio operativo con identidad SES verificada y trazabilidad de corrida
+- CLARO-014 | doing | P2 | Digest diario SES 08:00 | worker + schedule desplegados; pendiente verificacion SES sender + recipients para envio real
 
 ## Next
 - CLARO-040 | todo | P2 | Loop de calidad semantica | falso positivo con reason code + recalibracion mensual de reglas/umbrales. UX_REF: 13
