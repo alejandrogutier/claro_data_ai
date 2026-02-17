@@ -214,18 +214,24 @@ resource "aws_lambda_function" "api" {
   function_name = "${local.name_prefix}-api"
   role          = aws_iam_role.lambda_api.arn
   runtime       = "nodejs22.x"
-  handler       = "dist/handler.main"
+  handler       = "lambda/handler.main"
 
-  s3_bucket = var.api_lambda_s3_bucket
-  s3_key    = var.api_lambda_s3_key
+  filename         = var.lambda_package_path
+  source_code_hash = filebase64sha256(var.lambda_package_path)
 
   timeout     = 30
   memory_size = 512
 
   environment {
     variables = {
-      BEDROCK_MODEL_ID = "anthropic.claude-haiku-4-5-20251001-v1:0"
-      APP_ENV          = var.environment
+      BEDROCK_MODEL_ID            = "anthropic.claude-haiku-4-5-20251001-v1:0"
+      APP_ENV                     = var.environment
+      PROVIDER_KEYS_SECRET_ARN    = data.aws_secretsmanager_secret.provider_keys.arn
+      APP_CONFIG_SECRET_ARN       = data.aws_secretsmanager_secret.app_config.arn
+      AWS_CREDENTIALS_SECRET_ARN  = data.aws_secretsmanager_secret.aws_credentials.arn
+      PROVIDER_KEYS_SECRET_NAME   = data.aws_secretsmanager_secret.provider_keys.name
+      APP_CONFIG_SECRET_NAME      = data.aws_secretsmanager_secret.app_config.name
+      AWS_CREDENTIALS_SECRET_NAME = data.aws_secretsmanager_secret.aws_credentials.name
     }
   }
 }
@@ -405,7 +411,7 @@ resource "aws_security_group" "aurora" {
     from_port   = 5432
     to_port     = 5432
     protocol    = "tcp"
-    cidr_blocks = ["10.0.0.0/8"]
+    cidr_blocks = [data.aws_vpc.selected.cidr_block]
   }
 
   egress {
@@ -420,7 +426,7 @@ resource "aws_rds_cluster" "aurora" {
   cluster_identifier     = "${local.name_prefix}-aurora"
   engine                 = "aurora-postgresql"
   engine_mode            = "provisioned"
-  engine_version         = "16.3"
+  engine_version         = "16.11"
   database_name          = var.db_name
   master_username        = var.db_master_username
   master_password        = var.db_master_password
@@ -443,16 +449,6 @@ resource "aws_rds_cluster_instance" "aurora_writer" {
   engine               = aws_rds_cluster.aurora.engine
   engine_version       = aws_rds_cluster.aurora.engine_version
   db_subnet_group_name = aws_db_subnet_group.aurora.name
-}
-
-resource "aws_secretsmanager_secret" "provider_keys" {
-  name       = "${local.name_prefix}/provider-api-keys"
-  kms_key_id = aws_kms_key.app.arn
-}
-
-resource "aws_secretsmanager_secret" "app_config" {
-  name       = "${local.name_prefix}/app-config"
-  kms_key_id = aws_kms_key.app.arn
 }
 
 resource "aws_ses_email_identity" "sender" {

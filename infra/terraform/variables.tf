@@ -36,14 +36,10 @@ variable "private_subnet_ids" {
   description = "Subnets privadas para Aurora"
 }
 
-variable "api_lambda_s3_bucket" {
+variable "lambda_package_path" {
   type        = string
-  description = "Bucket con paquete zip de Lambda API"
-}
-
-variable "api_lambda_s3_key" {
-  type        = string
-  description = "Objeto zip de Lambda API"
+  description = "Ruta local al zip de Lambda API"
+  default     = "../../build/lambda-api.zip"
 }
 
 variable "db_name" {
@@ -73,9 +69,29 @@ variable "monthly_budget_usd" {
 variable "budget_email" {
   type        = string
   description = "Email para alertas de budget"
+  default     = "ops@example.com"
 }
 
 variable "ses_sender_email" {
   type        = string
   description = "Sender verificado en SES"
+  default     = "digest@example.com"
+}
+
+variable "provider_keys_secret_name" {
+  type        = string
+  description = "Nombre del secreto con API keys de proveedores"
+  default     = "claro-data-prod/provider-api-keys"
+}
+
+variable "app_config_secret_name" {
+  type        = string
+  description = "Nombre del secreto con configuracion de app"
+  default     = "claro-data-prod/app-config"
+}
+
+variable "aws_credentials_secret_name" {
+  type        = string
+  description = "Nombre del secreto con credenciales AWS legado"
+  default     = "claro-data-prod/aws-credentials"
 }

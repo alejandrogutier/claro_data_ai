@@ -10,6 +10,12 @@ Definir el sistema de agentes operativos de `claro_data` para ingesta, clasifica
 - Idempotencia obligatoria en jobs asíncronos y reprocesos.
 - Seguridad por defecto: secretos en Secrets Manager, cifrado con KMS, least privilege en IAM.
 
+## Flujo Git y Despliegue AWS
+- El desarrollo funcional y técnico se realiza en la rama `developer`.
+- La rama `main` es la rama productiva conectada a AWS.
+- Solo cambios validados deben promoverse de `developer` hacia `main`.
+- No se debe desarrollar directamente en `main`.
+
 ## Roles de Usuario y Permisos
 - `Admin`: administra términos, pesos de fuente, estados, usuarios e infraestructura operativa.
 - `Analyst`: clasifica, analiza, archiva/oculta/restaura, exporta, consulta dashboards.

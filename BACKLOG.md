@@ -1,8 +1,7 @@
 # Backlog
 
 ## Now
-- CLARO-001 | doing | P0 | Seguridad inicial: migrar secretos y rotar credenciales expuestas | creado `.env.example`, `.gitignore` y checklist en `SECURITY_ROTATION.md`; pendiente rotacion real en proveedores/AWS
-- CLARO-002 | doing | P0 | Terraform base de plataforma AWS | baseline creado en `infra/terraform` (KMS, S3, CloudFront, Cognito, API/Lambda, SQS, EventBridge, Step Functions, Aurora, Secrets, SES, Budget)
+- CLARO-001 | doing | P0 | Seguridad inicial: migrar secretos a variables seguras | secretos cargados en Secrets Manager (`claro-data-prod/*`) sin rotacion por decision operativa; falta consumo runtime en Lambda
 - CLARO-004 | doing | P0 | Aurora PostgreSQL + Prisma + esquema inicial | `prisma/schema.prisma` creado con tablas/enums core; pendiente migracion real e indices FTS SQL
 - CLARO-017 | doing | P2 | OpenAPI 3.1 + pruebas de contrato | especificacion base creada en `openapi/v1.yaml`; faltan pruebas de contrato
 
@@ -28,3 +27,4 @@
 
 ## Done (2026-02)
 - CLARO-000 | done | P1 | Definicion inicial de arquitectura y plan base | direccion funcional y tecnica acordada
+- CLARO-002 | done | P0 | Terraform base de plataforma AWS | infraestructura desplegada en AWS (KMS, S3, CloudFront, Cognito, API/Lambda, SQS, EventBridge, Step Functions, Aurora, SES, Budget)

@@ -18,6 +18,9 @@ Provisionar base de arquitectura AWS para V1 en una sola region (`us-west-2`).
 
 ## Uso
 ```bash
+./scripts/aws/build_lambda_package.sh
+./scripts/aws/load_secrets_from_env.sh
+./scripts/aws/generate_terraform_tfvars.sh
 terraform init
 terraform plan -var-file=terraform.tfvars
 terraform apply -var-file=terraform.tfvars
@@ -25,4 +28,8 @@ terraform apply -var-file=terraform.tfvars
 
 ## Notas
 - Este modulo es un baseline de arranque. Ajustar networking (CIDR/SG), dominios y politicas IAM por entorno real.
-- El paquete Lambda se asume publicado en S3 (`api_lambda_s3_bucket`/`api_lambda_s3_key`).
+- Los secretos se leen desde Secrets Manager via nombres configurables:
+  - `claro-data-prod/provider-api-keys`
+  - `claro-data-prod/app-config`
+  - `claro-data-prod/aws-credentials`
+- El artefacto Lambda se empaqueta localmente en `build/lambda-api.zip`.
