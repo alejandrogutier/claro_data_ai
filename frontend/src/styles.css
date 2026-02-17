@@ -187,6 +187,45 @@ a:hover {
   color: var(--claro-red-dark);
 }
 
+.kpi-caption {
+  color: var(--claro-muted);
+  font-size: 0.86rem;
+}
+
+.scope-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 12px;
+}
+
+.severity-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 86px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 1.1rem;
+  color: #fff;
+  background: #6b7280;
+}
+
+.severity-sev1 {
+  background: #8c000f;
+}
+
+.severity-sev2 {
+  background: #d9480f;
+}
+
+.severity-sev3 {
+  background: #f59f00;
+}
+
+.severity-sev4 {
+  background: #2f9e44;
+}
+
 .feed-card {
   background: var(--claro-surface-strong);
   border: 1px solid var(--claro-border);

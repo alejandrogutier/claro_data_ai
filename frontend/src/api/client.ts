@@ -5,6 +5,7 @@ export type TermListResponse = components["schemas"]["TermListResponse"];
 export type CreateTermRequest = components["schemas"]["CreateTermRequest"];
 export type UpdateTermRequest = components["schemas"]["UpdateTermRequest"];
 export type NewsFeedResponse = components["schemas"]["NewsFeedResponse"];
+export type MonitorOverviewResponse = components["schemas"]["MonitorOverviewResponse"];
 export type MetaResponse = components["schemas"]["MetaResponse"];
 export type Connector = components["schemas"]["Connector"];
 export type ConnectorListResponse = components["schemas"]["ConnectorListResponse"];
@@ -129,6 +130,10 @@ export class ApiClient {
         term_id: termId
       }
     });
+  }
+
+  getMonitorOverview(): Promise<MonitorOverviewResponse> {
+    return this.request<MonitorOverviewResponse>("/v1/monitor/overview");
   }
 
   getMeta(): Promise<MetaResponse> {

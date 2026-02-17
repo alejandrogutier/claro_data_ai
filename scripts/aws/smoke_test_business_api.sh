@@ -165,8 +165,23 @@ assert_code "$CODE" "200" "GET /v1/health"
 CODE="$(curl -s -o /tmp/claro-meta-no-token.json -w "%{http_code}" "$API_BASE/v1/meta")"
 assert_code "$CODE" "401" "GET /v1/meta without token"
 
+CODE="$(curl -s -o /tmp/claro-overview-no-token.json -w "%{http_code}" "$API_BASE/v1/monitor/overview")"
+assert_code "$CODE" "401" "GET /v1/monitor/overview without token"
+
 CODE="$(curl -s -o /tmp/claro-meta-viewer.json -w "%{http_code}" -H "Authorization: Bearer $VIEWER_TOKEN" "$API_BASE/v1/meta")"
 assert_code "$CODE" "200" "GET /v1/meta viewer"
+
+CODE="$(curl -s -o /tmp/claro-overview-viewer.json -w "%{http_code}" -H "Authorization: Bearer $VIEWER_TOKEN" "$API_BASE/v1/monitor/overview")"
+assert_code "$CODE" "200" "GET /v1/monitor/overview viewer"
+
+OV_WINDOW_DAYS="$(jq -r '.window_days // empty' /tmp/claro-overview-viewer.json)"
+OV_SOURCE_TYPE="$(jq -r '.source_type // empty' /tmp/claro-overview-viewer.json)"
+OV_FORMULA="$(jq -r '.formula_version // empty' /tmp/claro-overview-viewer.json)"
+if [[ "$OV_WINDOW_DAYS" != "7" || "$OV_SOURCE_TYPE" != "news" || "$OV_FORMULA" != "kpi-v1" ]]; then
+  echo "[FAIL] overview payload mismatch (window/source/formula)"
+  cat /tmp/claro-overview-viewer.json
+  exit 1
+fi
 
 CODE="$(curl -s -o /tmp/claro-content-viewer.json -w "%{http_code}" -H "Authorization: Bearer $VIEWER_TOKEN" "$API_BASE/v1/content?limit=5")"
 assert_code "$CODE" "200" "GET /v1/content viewer"

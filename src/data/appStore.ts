@@ -112,6 +112,50 @@ type MetaResponse = {
   states: MetaCountItem[];
 };
 
+type MonitorSeverity = "SEV1" | "SEV2" | "SEV3" | "SEV4";
+
+type MonitorScopeKpiRecord = {
+  items: number;
+  classifiedItems: number;
+  positivos: number;
+  negativos: number;
+  neutrales: number;
+  sentimientoNeto: number;
+  riesgoActivo: number;
+  qualityScore: number;
+  bhs: number;
+  sov: number;
+  insufficientData: boolean;
+};
+
+type MonitorTotalsKpiRecord = {
+  items: number;
+  classifiedItems: number;
+  sentimientoNeto: number;
+  bhs: number;
+  riesgoActivo: number;
+  severidad: MonitorSeverity;
+  sovClaro: number;
+  sovCompetencia: number;
+  insufficientData: boolean;
+};
+
+type MonitorOverviewRecord = {
+  generatedAt: Date;
+  windowDays: 7;
+  sourceType: "news";
+  formulaVersion: "kpi-v1";
+  totals: MonitorTotalsKpiRecord;
+  byScope: {
+    claro: MonitorScopeKpiRecord;
+    competencia: MonitorScopeKpiRecord;
+  };
+  diagnostics: {
+    unscopedItems: number;
+    unknownSentimentItems: number;
+  };
+};
+
 type IngestionRunSnapshot = {
   status: "queued" | "running" | "completed" | "failed";
   startedAt: Date | null;
@@ -237,6 +281,42 @@ const parseJsonArrayString = (value: string | null): string[] | null => {
   } catch {
     return null;
   }
+};
+
+const clamp = (value: number, min: number, max: number): number => {
+  if (value < min) return min;
+  if (value > max) return max;
+  return value;
+};
+
+const roundMetric = (value: number): number => Math.round(value * 100) / 100;
+
+const normalizeSentimiento = (value: string | null): "positive" | "negative" | "neutral" | "unknown" | null => {
+  if (!value) return null;
+  const normalized = value.trim().toLowerCase();
+  if (!normalized) return null;
+  if (normalized === "positive" || normalized === "positivo") return "positive";
+  if (normalized === "negative" || normalized === "negativo") return "negative";
+  if (normalized === "neutral" || normalized === "neutro") return "neutral";
+  return "unknown";
+};
+
+const calculateSentimientoNeto = (positivos: number, negativos: number, classifiedItems: number): number =>
+  ((positivos - negativos) / Math.max(classifiedItems, 1)) * 100;
+
+const calculateRiesgoActivo = (negativos: number, classifiedItems: number): number =>
+  (negativos / Math.max(classifiedItems, 1)) * 100;
+
+const toSeveridad = (riesgoActivo: number): MonitorSeverity => {
+  if (riesgoActivo >= 80) return "SEV1";
+  if (riesgoActivo >= 60) return "SEV2";
+  if (riesgoActivo >= 40) return "SEV3";
+  return "SEV4";
+};
+
+const calculateBhs = (sentimientoNeto: number, qualityScore: number, riesgoActivo: number): number => {
+  const sentimentScore = clamp(50 + sentimientoNeto / 2, 0, 100);
+  return 0.5 * sentimentScore + 0.25 * qualityScore + 0.25 * (100 - riesgoActivo);
 };
 
 const parseContentRow = (row: SqlRow): ContentRecord | null => {
@@ -1266,6 +1346,165 @@ class AppStore {
     return record;
   }
 
+  async getMonitorOverview(): Promise<MonitorOverviewRecord> {
+    const effectiveWindowDays = 7;
+    const windowStart = new Date(Date.now() - effectiveWindowDays * 24 * 60 * 60 * 1000);
+    const response = await this.rds.execute(
+      `
+        SELECT
+          COALESCE(t."scope"::text, '') AS scope,
+          cls."sentimiento",
+          ci."sourceScore"::text
+        FROM "public"."ContentItem" ci
+        LEFT JOIN "public"."TrackedTerm" t ON t."id" = ci."termId"
+        LEFT JOIN LATERAL (
+          SELECT c."sentimiento"
+          FROM "public"."Classification" c
+          WHERE c."contentItemId" = ci."id"
+          ORDER BY c."createdAt" DESC
+          LIMIT 1
+        ) cls ON TRUE
+        WHERE
+          ci."sourceType" = CAST('news' AS "public"."SourceType")
+          AND ci."state" = CAST('active' AS "public"."ContentState")
+          AND COALESCE(ci."publishedAt", ci."createdAt") >= :window_start
+      `,
+      [sqlTimestamp("window_start", windowStart)]
+    );
+
+    type ScopeAccumulator = {
+      items: number;
+      classifiedItems: number;
+      positivos: number;
+      negativos: number;
+      neutrales: number;
+      qualitySum: number;
+    };
+
+    const scopeAccumulators: Record<TermScope, ScopeAccumulator> = {
+      claro: { items: 0, classifiedItems: 0, positivos: 0, negativos: 0, neutrales: 0, qualitySum: 0 },
+      competencia: { items: 0, classifiedItems: 0, positivos: 0, negativos: 0, neutrales: 0, qualitySum: 0 }
+    };
+
+    let items = 0;
+    let classifiedItems = 0;
+    let positivos = 0;
+    let negativos = 0;
+    let neutrales = 0;
+    let unknownSentimentItems = 0;
+    let unscopedItems = 0;
+    let qualitySum = 0;
+
+    for (const row of response.records ?? []) {
+      const scope = fieldString(row, 0) as TermScope | null;
+      const sentimientoRaw = fieldString(row, 1);
+      const sourceScoreValue = fieldString(row, 2);
+      const parsedSourceScore = sourceScoreValue === null ? Number.NaN : Number.parseFloat(sourceScoreValue);
+      const sourceScore = Number.isFinite(parsedSourceScore) ? parsedSourceScore : 0.5;
+
+      items += 1;
+      qualitySum += sourceScore;
+
+      const normalizedSentimiento = normalizeSentimiento(sentimientoRaw);
+      if (normalizedSentimiento === "positive") {
+        positivos += 1;
+        classifiedItems += 1;
+      } else if (normalizedSentimiento === "negative") {
+        negativos += 1;
+        classifiedItems += 1;
+      } else if (normalizedSentimiento === "neutral") {
+        neutrales += 1;
+        classifiedItems += 1;
+      } else if (normalizedSentimiento === "unknown") {
+        unknownSentimentItems += 1;
+      }
+
+      if (scope === "claro" || scope === "competencia") {
+        const scopeAccumulator = scopeAccumulators[scope];
+        scopeAccumulator.items += 1;
+        scopeAccumulator.qualitySum += sourceScore;
+
+        if (normalizedSentimiento === "positive") {
+          scopeAccumulator.positivos += 1;
+          scopeAccumulator.classifiedItems += 1;
+        } else if (normalizedSentimiento === "negative") {
+          scopeAccumulator.negativos += 1;
+          scopeAccumulator.classifiedItems += 1;
+        } else if (normalizedSentimiento === "neutral") {
+          scopeAccumulator.neutrales += 1;
+          scopeAccumulator.classifiedItems += 1;
+        }
+      } else {
+        unscopedItems += 1;
+      }
+    }
+
+    const totalQualityScore = items > 0 ? (qualitySum / items) * 100 : 50;
+    const sentimientoNeto = calculateSentimientoNeto(positivos, negativos, classifiedItems);
+    const riesgoActivo = calculateRiesgoActivo(negativos, classifiedItems);
+    const severidad = toSeveridad(riesgoActivo);
+    const bhs = calculateBhs(sentimientoNeto, totalQualityScore, riesgoActivo);
+
+    const scopedItemsTotal = scopeAccumulators.claro.items + scopeAccumulators.competencia.items;
+    const scopedQualityTotal = scopeAccumulators.claro.qualitySum + scopeAccumulators.competencia.qualitySum;
+
+    const toScopeRecord = (scope: TermScope): MonitorScopeKpiRecord => {
+      const accumulator = scopeAccumulators[scope];
+      const scopeSentimientoNeto = calculateSentimientoNeto(
+        accumulator.positivos,
+        accumulator.negativos,
+        accumulator.classifiedItems
+      );
+      const scopeRiesgoActivo = calculateRiesgoActivo(accumulator.negativos, accumulator.classifiedItems);
+      const scopeQualityScore = accumulator.items > 0 ? (accumulator.qualitySum / accumulator.items) * 100 : 50;
+      const volumeShare = scopedItemsTotal > 0 ? accumulator.items / scopedItemsTotal : 0;
+      const qualityShare = scopedQualityTotal > 0 ? accumulator.qualitySum / scopedQualityTotal : 0;
+      const sov = (0.4 * volumeShare + 0.6 * qualityShare) * 100;
+
+      return {
+        items: accumulator.items,
+        classifiedItems: accumulator.classifiedItems,
+        positivos: accumulator.positivos,
+        negativos: accumulator.negativos,
+        neutrales: accumulator.neutrales,
+        sentimientoNeto: roundMetric(scopeSentimientoNeto),
+        riesgoActivo: roundMetric(scopeRiesgoActivo),
+        qualityScore: roundMetric(scopeQualityScore),
+        bhs: roundMetric(calculateBhs(scopeSentimientoNeto, scopeQualityScore, scopeRiesgoActivo)),
+        sov: roundMetric(sov),
+        insufficientData: accumulator.classifiedItems < 20
+      };
+    };
+
+    const byScope = {
+      claro: toScopeRecord("claro"),
+      competencia: toScopeRecord("competencia")
+    };
+
+    return {
+      generatedAt: new Date(),
+      windowDays: effectiveWindowDays,
+      sourceType: "news",
+      formulaVersion: "kpi-v1",
+      totals: {
+        items,
+        classifiedItems,
+        sentimientoNeto: roundMetric(sentimientoNeto),
+        bhs: roundMetric(bhs),
+        riesgoActivo: roundMetric(riesgoActivo),
+        severidad,
+        sovClaro: byScope.claro.sov,
+        sovCompetencia: byScope.competencia.sov,
+        insufficientData: classifiedItems < 20
+      },
+      byScope,
+      diagnostics: {
+        unscopedItems,
+        unknownSentimentItems
+      }
+    };
+  }
+
   async getMeta(): Promise<MetaResponse> {
     const [providersRes, categoriesRes, sentimientosRes, statesRes] = await Promise.all([
       this.rds.execute(
@@ -1373,6 +1612,10 @@ export type {
   ManualClassificationInput,
   MetaCountItem,
   MetaResponse,
+  MonitorOverviewRecord,
+  MonitorScopeKpiRecord,
+  MonitorSeverity,
+  MonitorTotalsKpiRecord,
   TermRecord,
   TermScope,
   TermsPage,

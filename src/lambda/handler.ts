@@ -14,6 +14,7 @@ import { createAnalysisRun, listAnalysisHistory } from "../routes/v1/analysis";
 import { createCsvExport, getCsvExport } from "../routes/v1/exports";
 import { getMeta } from "../routes/v1/meta";
 import { getNewsFeed } from "../routes/v1/feed";
+import { getMonitorOverview } from "../routes/v1/monitor";
 import {
   createConfigAccount,
   createConfigCompetitor,
@@ -51,6 +52,7 @@ const roleRules: RoleRule[] = [
   { pattern: /^POST \/v1\/exports\/csv$/, requiredRole: "Analyst" },
   { pattern: /^GET \/v1\/exports\/[^/]+$/, requiredRole: "Analyst" },
   { pattern: /^GET \/v1\/feed\/news$/, requiredRole: "Viewer" },
+  { pattern: /^GET \/v1\/monitor\/overview$/, requiredRole: "Viewer" },
   { pattern: /^GET \/v1\/meta$/, requiredRole: "Viewer" },
   { pattern: /^GET \/v1\/connectors$/, requiredRole: "Viewer" },
   { pattern: /^PATCH \/v1\/connectors\/[^/]+$/, requiredRole: "Analyst" },
@@ -129,6 +131,7 @@ export const main = async (event: APIGatewayProxyEventV2) => {
   if (key === "POST /v1/exports/csv") return createCsvExport(event);
   if (key.match(/^GET \/v1\/exports\/[^/]+$/)) return getCsvExport(event);
   if (key === "GET /v1/feed/news") return getNewsFeed(event);
+  if (key === "GET /v1/monitor/overview") return getMonitorOverview();
   if (key === "GET /v1/meta") return getMeta();
   if (key === "GET /v1/connectors") return listConnectors(event);
   if (key.match(/^PATCH \/v1\/connectors\/[^/]+$/)) return patchConnector(event);

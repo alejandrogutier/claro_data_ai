@@ -304,6 +304,53 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/monitor/overview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** KPIs de overview (V1 news-only, ventana fija de 7 dias) */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Resumen KPI de monitoreo */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["MonitorOverviewResponse"];
+                    };
+                };
+                401: components["responses"]["Unauthorized"];
+                403: components["responses"]["Forbidden"];
+                /** @description Error interno */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/content/{id}/state": {
         parameters: {
             query?: never;
@@ -1503,6 +1550,52 @@ export interface components {
             filters?: {
                 [key: string]: unknown;
             };
+        };
+        /** @enum {string} */
+        MonitorSeverity: "SEV1" | "SEV2" | "SEV3" | "SEV4";
+        MonitorScopeKpi: {
+            items: number;
+            classified_items: number;
+            positivos: number;
+            negativos: number;
+            neutrales: number;
+            sentimiento_neto: number;
+            riesgo_activo: number;
+            quality_score: number;
+            bhs: number;
+            sov: number;
+            insufficient_data: boolean;
+        };
+        MonitorTotalsKpi: {
+            items: number;
+            classified_items: number;
+            sentimiento_neto: number;
+            bhs: number;
+            riesgo_activo: number;
+            severidad: components["schemas"]["MonitorSeverity"];
+            sov_claro: number;
+            sov_competencia: number;
+            insufficient_data: boolean;
+        };
+        MonitorDiagnostics: {
+            unscoped_items: number;
+            unknown_sentiment_items: number;
+        };
+        MonitorOverviewResponse: {
+            /** Format: date-time */
+            generated_at: string;
+            /** @constant */
+            window_days: 7;
+            /** @constant */
+            source_type: "news";
+            /** @constant */
+            formula_version: "kpi-v1";
+            totals: components["schemas"]["MonitorTotalsKpi"];
+            by_scope: {
+                claro: components["schemas"]["MonitorScopeKpi"];
+                competencia: components["schemas"]["MonitorScopeKpi"];
+            };
+            diagnostics: components["schemas"]["MonitorDiagnostics"];
         };
         MetaResponse: {
             providers?: components["schemas"]["MetaCountItem"][];

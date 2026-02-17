@@ -382,6 +382,56 @@ const ensureConfigSurface = async (apiBase, viewerToken, analystToken, adminToke
   );
 };
 
+const ensureMonitorOverview = async (apiBase, viewerToken) => {
+  const unauthorized = await request({
+    method: "GET",
+    url: `${apiBase}/v1/monitor/overview`
+  });
+  assertStatus(unauthorized.status, 401, "GET /v1/monitor/overview without token");
+
+  const response = await request({
+    method: "GET",
+    url: `${apiBase}/v1/monitor/overview`,
+    token: viewerToken
+  });
+  assertStatus(response.status, 200, "GET /v1/monitor/overview");
+
+  assertCondition(Number.isFinite(Date.parse(response.json?.generated_at || "")), "overview.generated_at must be ISO datetime");
+  assertCondition(response.json?.window_days === 7, "overview.window_days must be 7");
+  assertCondition(response.json?.source_type === "news", "overview.source_type must be news");
+  assertCondition(response.json?.formula_version === "kpi-v1", "overview.formula_version must be kpi-v1");
+
+  const totals = response.json?.totals;
+  assertCondition(totals && typeof totals === "object", "overview.totals must be object");
+  assertCondition(typeof totals.items === "number", "overview.totals.items must be number");
+  assertCondition(typeof totals.classified_items === "number", "overview.totals.classified_items must be number");
+  assertCondition(typeof totals.sentimiento_neto === "number", "overview.totals.sentimiento_neto must be number");
+  assertCondition(typeof totals.bhs === "number", "overview.totals.bhs must be number");
+  assertCondition(typeof totals.riesgo_activo === "number", "overview.totals.riesgo_activo must be number");
+  assertCondition(["SEV1", "SEV2", "SEV3", "SEV4"].includes(totals.severidad), "overview.totals.severidad invalid");
+  assertCondition(typeof totals.sov_claro === "number", "overview.totals.sov_claro must be number");
+  assertCondition(typeof totals.sov_competencia === "number", "overview.totals.sov_competencia must be number");
+  assertCondition(typeof totals.insufficient_data === "boolean", "overview.totals.insufficient_data must be boolean");
+
+  const byScope = response.json?.by_scope;
+  assertCondition(byScope && typeof byScope === "object", "overview.by_scope must be object");
+  for (const scope of ["claro", "competencia"]) {
+    const bucket = byScope[scope];
+    assertCondition(bucket && typeof bucket === "object", `overview.by_scope.${scope} must be object`);
+    assertCondition(typeof bucket.items === "number", `overview.by_scope.${scope}.items must be number`);
+    assertCondition(typeof bucket.classified_items === "number", `overview.by_scope.${scope}.classified_items must be number`);
+    assertCondition(typeof bucket.sentimiento_neto === "number", `overview.by_scope.${scope}.sentimiento_neto must be number`);
+    assertCondition(typeof bucket.riesgo_activo === "number", `overview.by_scope.${scope}.riesgo_activo must be number`);
+    assertCondition(typeof bucket.bhs === "number", `overview.by_scope.${scope}.bhs must be number`);
+    assertCondition(typeof bucket.sov === "number", `overview.by_scope.${scope}.sov must be number`);
+  }
+
+  const diagnostics = response.json?.diagnostics;
+  assertCondition(diagnostics && typeof diagnostics === "object", "overview.diagnostics must be object");
+  assertCondition(typeof diagnostics.unscoped_items === "number", "overview.diagnostics.unscoped_items must be number");
+  assertCondition(typeof diagnostics.unknown_sentiment_items === "number", "overview.diagnostics.unknown_sentiment_items must be number");
+};
+
 const main = async () => {
   loadEnv();
 
@@ -404,6 +454,7 @@ const main = async () => {
   const metaViewer = await request({ method: "GET", url: `${apiBase}/v1/meta`, token: viewerToken });
   assertStatus(metaViewer.status, 200, "GET /v1/meta viewer");
   assertCondition(Array.isArray(metaViewer.json?.providers), "meta.providers must be array");
+  await ensureMonitorOverview(apiBase, viewerToken);
 
   await ensureConfigSurface(apiBase, viewerToken, analystToken, adminToken);
 
