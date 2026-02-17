@@ -57,10 +57,9 @@ Este contrato se usa junto a `UX_PLANNING.md` secciones `2.3`, `7.4`, `21`, `26`
 | CLARO-042 | checklist transversal | CLARO-037, CLARO-038, CLARO-035 | gate go-live completo y aprobado |
 
 ## Now
-- CLARO-034 | doing | P1 | Modulo Analisis (3 paginas) | sprint activo para `/app/analyze/*` y endpoints `GET /v1/analyze/*` (overview, channel, competitors). UX_REF: 10, 21.3
+- CLARO-035 | doing | P1 | Modulo Reportes (3 paginas) | arranque posterior al cierre de CLARO-034; se reutiliza export async `/v1/exports/*` y gobernanza de CLARO-039. UX_REF: 11, 16, 21.4
 
 ## Next
-- CLARO-035 | todo | P1 | Modulo Reportes (3 paginas) | historial/centro, plantillas y programacion/envios (salida `Web + CSV`). UX_REF: 11, 16, 21.4
 - CLARO-040 | todo | P2 | Loop de calidad semantica | falso positivo con reason code + recalibracion mensual de reglas/umbrales. UX_REF: 13
 - CLARO-041 | todo | P2 | UX de adopcion | diccionario de KPI en app + tour guiado basico por rol. UX_REF: 18, 26, 27
 - CLARO-042 | todo | P1 | Go-live readiness social | gate con 16 cuentas activas + set final competidores + UAT 2 semanas + piloto 1 semana. UX_REF: 23, 24, 27
@@ -123,3 +122,4 @@ Antes de mover `doing` -> `done`:
 - CLARO-023 | done | P1 | Dashboard Overview Salud de Marca | `/v1/monitor/overview` operativo (news-only 7d) y UI de `/app/monitor/overview` conectada a KPIs reales (`BHS`, `SOV`, `sentimiento_neto`, `riesgo_activo`, `severidad`)
 - CLARO-033 | done | P1 | Motor de KPIs BHS/SOV severidad | formulas `kpi-v1` implementadas en backend (BHS 50/25/25, SOV 60/40 calidad-volumen, severidad `SEV1..SEV4`) con contract/smoke en verde
 - CLARO-036 | done | P1 | Alertas e Incidentes | backend+frontend+infra desplegados: `/v1/monitor/incidents*`, worker programado 15m (EventBridge->SQS->Lambda), ruta `/app/monitor/incidents`, redirect `/app/config/alerts`, auditoria y SLA visible
+- CLARO-034 | done | P1 | Modulo Analisis (3 paginas) | backend `GET /v1/analyze/*` + rutas `/app/analyze/overview|channel|competitors` con drill-down funcional y validacion contract/smoke en runtime AWS

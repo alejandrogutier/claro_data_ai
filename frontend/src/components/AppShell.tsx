@@ -28,6 +28,17 @@ export const AppShell = () => {
             Incidentes
           </NavLink>
 
+          <p className="nav-group-title">Analisis</p>
+          <NavLink to="/app/analyze/overview" className="nav-link">
+            Overview Marca
+          </NavLink>
+          <NavLink to="/app/analyze/channel" className="nav-link">
+            Por Canal
+          </NavLink>
+          <NavLink to="/app/analyze/competitors" className="nav-link">
+            Benchmark Competencia
+          </NavLink>
+
           <p className="nav-group-title">Configuracion</p>
           <NavLink to="/app/config/connectors" className="nav-link">
             Conectores

@@ -198,6 +198,30 @@ a:hover {
   gap: 12px;
 }
 
+.analysis-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.analysis-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 12px;
+}
+
+.delta-positive {
+  color: var(--claro-positive);
+}
+
+.delta-negative {
+  color: #b91c1c;
+}
+
+.delta-neutral {
+  color: var(--claro-muted);
+}
+
 .severity-chip {
   display: inline-flex;
   align-items: center;

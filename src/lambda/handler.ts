@@ -11,6 +11,7 @@ import {
   updateContentState
 } from "../routes/v1/content";
 import { createAnalysisRun, listAnalysisHistory } from "../routes/v1/analysis";
+import { getAnalyzeChannel, getAnalyzeCompetitors, getAnalyzeOverview } from "../routes/v1/analyze";
 import { createCsvExport, getCsvExport } from "../routes/v1/exports";
 import { getMeta } from "../routes/v1/meta";
 import { getNewsFeed } from "../routes/v1/feed";
@@ -54,6 +55,9 @@ const roleRules: RoleRule[] = [
   { pattern: /^PATCH \/v1\/content\/[^/]+\/state$/, requiredRole: "Analyst" },
   { pattern: /^POST \/v1\/content\/bulk\/state$/, requiredRole: "Analyst" },
   { pattern: /^PATCH \/v1\/content\/[^/]+\/classification$/, requiredRole: "Analyst" },
+  { pattern: /^GET \/v1\/analyze\/overview$/, requiredRole: "Viewer" },
+  { pattern: /^GET \/v1\/analyze\/channel$/, requiredRole: "Viewer" },
+  { pattern: /^GET \/v1\/analyze\/competitors$/, requiredRole: "Viewer" },
   { pattern: /^POST \/v1\/analysis\/runs$/, requiredRole: "Analyst" },
   { pattern: /^GET \/v1\/analysis\/history$/, requiredRole: "Viewer" },
   { pattern: /^POST \/v1\/exports\/csv$/, requiredRole: "Analyst" },
@@ -136,6 +140,10 @@ export const main = async (event: APIGatewayProxyEventV2) => {
   if (key.match(/^PATCH \/v1\/content\/[^/]+\/state$/)) return updateContentState(event);
   if (key === "POST /v1/content/bulk/state") return bulkUpdateContentState(event);
   if (key.match(/^PATCH \/v1\/content\/[^/]+\/classification$/)) return updateClassification(event);
+
+  if (key === "GET /v1/analyze/overview") return getAnalyzeOverview();
+  if (key === "GET /v1/analyze/channel") return getAnalyzeChannel(event);
+  if (key === "GET /v1/analyze/competitors") return getAnalyzeCompetitors(event);
 
   if (key === "POST /v1/analysis/runs") return createAnalysisRun(event);
   if (key === "GET /v1/analysis/history") return listAnalysisHistory();

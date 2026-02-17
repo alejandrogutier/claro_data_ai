@@ -183,6 +183,28 @@ if [[ "$OV_WINDOW_DAYS" != "7" || "$OV_SOURCE_TYPE" != "news" || "$OV_FORMULA" !
   exit 1
 fi
 
+echo "[1.0] Analyze endpoints"
+CODE="$(curl -s -o /tmp/claro-analyze-overview-no-token.json -w "%{http_code}" "$API_BASE/v1/analyze/overview")"
+assert_code "$CODE" "401" "GET /v1/analyze/overview without token"
+
+CODE="$(curl -s -o /tmp/claro-analyze-overview-viewer.json -w "%{http_code}" -H "Authorization: Bearer $VIEWER_TOKEN" "$API_BASE/v1/analyze/overview")"
+assert_code "$CODE" "200" "GET /v1/analyze/overview viewer"
+
+AN_WINDOW_DAYS="$(jq -r '.window_days // empty' /tmp/claro-analyze-overview-viewer.json)"
+AN_SOURCE_TYPE="$(jq -r '.source_type // empty' /tmp/claro-analyze-overview-viewer.json)"
+AN_FORMULA="$(jq -r '.formula_version // empty' /tmp/claro-analyze-overview-viewer.json)"
+if [[ "$AN_WINDOW_DAYS" != "7" || "$AN_SOURCE_TYPE" != "news" || "$AN_FORMULA" != "analysis-v1" ]]; then
+  echo "[FAIL] analyze overview payload mismatch (window/source/formula)"
+  cat /tmp/claro-analyze-overview-viewer.json
+  exit 1
+fi
+
+CODE="$(curl -s -o /tmp/claro-analyze-channel-viewer.json -w "%{http_code}" -H "Authorization: Bearer $VIEWER_TOKEN" "$API_BASE/v1/analyze/channel?limit=20")"
+assert_code "$CODE" "200" "GET /v1/analyze/channel viewer"
+
+CODE="$(curl -s -o /tmp/claro-analyze-competitors-viewer.json -w "%{http_code}" -H "Authorization: Bearer $VIEWER_TOKEN" "$API_BASE/v1/analyze/competitors?limit=20")"
+assert_code "$CODE" "200" "GET /v1/analyze/competitors viewer"
+
 echo "[1.1] Incident endpoints"
 CODE="$(curl -s -o /tmp/claro-incidents-no-token.json -w "%{http_code}" "$API_BASE/v1/monitor/incidents")"
 assert_code "$CODE" "401" "GET /v1/monitor/incidents without token"

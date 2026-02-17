@@ -3,6 +3,9 @@ import { RequireAuth } from "./auth/RequireAuth";
 import { AppShell } from "./components/AppShell";
 import { AuthCallbackPage } from "./pages/AuthCallbackPage";
 import { AccountsPage } from "./pages/AccountsPage";
+import { AnalyzeChannelPage } from "./pages/AnalyzeChannelPage";
+import { AnalyzeCompetitorsPage } from "./pages/AnalyzeCompetitorsPage";
+import { AnalyzeOverviewPage } from "./pages/AnalyzeOverviewPage";
 import { AuditPage } from "./pages/AuditPage";
 import { CompetitorsPage } from "./pages/CompetitorsPage";
 import { ConnectorsPage } from "./pages/ConnectorsPage";
@@ -56,6 +59,11 @@ export const App = () => {
           }
         />
         <Route path="monitor/incidents" element={<IncidentsPage />} />
+
+        <Route path="analyze" element={<Navigate to="/app/analyze/overview" replace />} />
+        <Route path="analyze/overview" element={<AnalyzeOverviewPage />} />
+        <Route path="analyze/channel" element={<AnalyzeChannelPage />} />
+        <Route path="analyze/competitors" element={<AnalyzeCompetitorsPage />} />
 
         <Route path="config/connectors" element={<ConnectorsPage />} />
         <Route path="config/accounts" element={<AccountsPage />} />

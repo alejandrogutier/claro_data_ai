@@ -6,6 +6,9 @@ export type CreateTermRequest = components["schemas"]["CreateTermRequest"];
 export type UpdateTermRequest = components["schemas"]["UpdateTermRequest"];
 export type NewsFeedResponse = components["schemas"]["NewsFeedResponse"];
 export type MonitorOverviewResponse = components["schemas"]["MonitorOverviewResponse"];
+export type AnalyzeOverviewResponse = components["schemas"]["AnalyzeOverviewResponse"];
+export type AnalyzeChannelResponse = components["schemas"]["AnalyzeChannelResponse"];
+export type AnalyzeCompetitorsResponse = components["schemas"]["AnalyzeCompetitorsResponse"];
 export type IncidentStatus = components["schemas"]["IncidentStatus"];
 export type IncidentSeverity = components["schemas"]["MonitorSeverity"];
 export type Incident = components["schemas"]["Incident"];
@@ -144,6 +147,22 @@ export class ApiClient {
 
   getMonitorOverview(): Promise<MonitorOverviewResponse> {
     return this.request<MonitorOverviewResponse>("/v1/monitor/overview");
+  }
+
+  getAnalyzeOverview(): Promise<AnalyzeOverviewResponse> {
+    return this.request<AnalyzeOverviewResponse>("/v1/analyze/overview");
+  }
+
+  getAnalyzeChannel(limit = 20): Promise<AnalyzeChannelResponse> {
+    return this.request<AnalyzeChannelResponse>("/v1/analyze/channel", {
+      query: { limit }
+    });
+  }
+
+  getAnalyzeCompetitors(limit = 20): Promise<AnalyzeCompetitorsResponse> {
+    return this.request<AnalyzeCompetitorsResponse>("/v1/analyze/competitors", {
+      query: { limit }
+    });
   }
 
   listMonitorIncidents(query: {

@@ -381,6 +381,77 @@ paths:
           $ref: '#/components/responses/NotFound'
         '422':
           $ref: '#/components/responses/ValidationError'
+  /v1/analyze/overview:
+    get:
+      tags: [Analysis]
+      summary: Overview de analisis con variacion contra periodo anterior
+      responses:
+        '200':
+          description: Resumen de analisis V1 (news-only, ventana fija de 7 dias)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AnalyzeOverviewResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          description: Error interno
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /v1/analyze/channel:
+    get:
+      tags: [Analysis]
+      summary: Analisis por canal/proveedor
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Desglose por canal/proveedor
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AnalyzeChannelResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '500':
+          description: Error interno
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /v1/analyze/competitors:
+    get:
+      tags: [Analysis]
+      summary: Benchmark de competencia sobre set cerrado (scope=competencia)
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Benchmark de competidores
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AnalyzeCompetitorsResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '500':
+          description: Error interno
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
   /v1/content/{id}/state:
     patch:
       tags: [Content]
@@ -1563,6 +1634,199 @@ components:
               $ref: '#/components/schemas/MonitorScopeKpi'
         diagnostics:
           $ref: '#/components/schemas/MonitorDiagnostics'
+    AnalyzeOverviewDelta:
+      type: object
+      required: [items, classified_items, sentimiento_neto, bhs, riesgo_activo, sov_claro, sov_competencia]
+      properties:
+        items:
+          type: integer
+        classified_items:
+          type: integer
+        sentimiento_neto:
+          type: number
+        bhs:
+          type: number
+        riesgo_activo:
+          type: number
+        sov_claro:
+          type: number
+        sov_competencia:
+          type: number
+    AnalyzeOverviewResponse:
+      type: object
+      required: [generated_at, window_days, source_type, formula_version, totals, previous_totals, delta, by_scope, diagnostics]
+      properties:
+        generated_at:
+          type: string
+          format: date-time
+        window_days:
+          type: integer
+          const: 7
+        source_type:
+          type: string
+          const: news
+        formula_version:
+          type: string
+          const: analysis-v1
+        totals:
+          $ref: '#/components/schemas/MonitorTotalsKpi'
+        previous_totals:
+          $ref: '#/components/schemas/MonitorTotalsKpi'
+        delta:
+          $ref: '#/components/schemas/AnalyzeOverviewDelta'
+        by_scope:
+          type: object
+          required: [claro, competencia]
+          properties:
+            claro:
+              $ref: '#/components/schemas/MonitorScopeKpi'
+            competencia:
+              $ref: '#/components/schemas/MonitorScopeKpi'
+        diagnostics:
+          $ref: '#/components/schemas/MonitorDiagnostics'
+    AnalyzeCategoryCount:
+      type: object
+      required: [value, count]
+      properties:
+        value:
+          type: string
+        count:
+          type: integer
+    AnalyzeChannelItem:
+      type: object
+      required:
+        [provider, items, classified_items, positivos, negativos, neutrales, sentimiento_neto, riesgo_activo, quality_score, bhs, severidad, top_categories, insufficient_data]
+      properties:
+        provider:
+          type: string
+        items:
+          type: integer
+        classified_items:
+          type: integer
+        positivos:
+          type: integer
+        negativos:
+          type: integer
+        neutrales:
+          type: integer
+        sentimiento_neto:
+          type: number
+        riesgo_activo:
+          type: number
+        quality_score:
+          type: number
+        bhs:
+          type: number
+        severidad:
+          $ref: '#/components/schemas/MonitorSeverity'
+        top_categories:
+          type: array
+          items:
+            $ref: '#/components/schemas/AnalyzeCategoryCount'
+        insufficient_data:
+          type: boolean
+    AnalyzeChannelResponse:
+      type: object
+      required: [generated_at, window_days, source_type, formula_version, totals, items]
+      properties:
+        generated_at:
+          type: string
+          format: date-time
+        window_days:
+          type: integer
+          const: 7
+        source_type:
+          type: string
+          const: news
+        formula_version:
+          type: string
+          const: analysis-v1
+        totals:
+          type: object
+          required: [providers, items, classified_items]
+          properties:
+            providers:
+              type: integer
+            items:
+              type: integer
+            classified_items:
+              type: integer
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/AnalyzeChannelItem'
+    AnalyzeScopeBenchmark:
+      type: object
+      required:
+        [items, classified_items, positivos, negativos, neutrales, sentimiento_neto, riesgo_activo, quality_score, bhs, severidad, sov, insufficient_data]
+      properties:
+        items:
+          type: integer
+        classified_items:
+          type: integer
+        positivos:
+          type: integer
+        negativos:
+          type: integer
+        neutrales:
+          type: integer
+        sentimiento_neto:
+          type: number
+        riesgo_activo:
+          type: number
+        quality_score:
+          type: number
+        bhs:
+          type: number
+        severidad:
+          $ref: '#/components/schemas/MonitorSeverity'
+        sov:
+          type: number
+        insufficient_data:
+          type: boolean
+    AnalyzeCompetitorItem:
+      allOf:
+        - $ref: '#/components/schemas/AnalyzeScopeBenchmark'
+        - type: object
+          required: [term_id, term_name]
+          properties:
+            term_id:
+              type: string
+              format: uuid
+            term_name:
+              type: string
+    AnalyzeCompetitorsResponse:
+      type: object
+      required: [generated_at, window_days, source_type, formula_version, baseline_claro, competitors, totals]
+      properties:
+        generated_at:
+          type: string
+          format: date-time
+        window_days:
+          type: integer
+          const: 7
+        source_type:
+          type: string
+          const: news
+        formula_version:
+          type: string
+          const: analysis-v1
+        baseline_claro:
+          $ref: '#/components/schemas/AnalyzeScopeBenchmark'
+        competitors:
+          type: array
+          items:
+            $ref: '#/components/schemas/AnalyzeCompetitorItem'
+        totals:
+          type: object
+          required: [competitor_terms, items, classified_items]
+          properties:
+            competitor_terms:
+              type: integer
+            items:
+              type: integer
+            classified_items:
+              type: integer
     IncidentOwner:
       type: object
       required: [user_id]

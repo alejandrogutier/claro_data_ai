@@ -557,6 +557,153 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/analyze/overview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Overview de analisis con variacion contra periodo anterior */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Resumen de analisis V1 (news-only, ventana fija de 7 dias) */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["AnalyzeOverviewResponse"];
+                    };
+                };
+                401: components["responses"]["Unauthorized"];
+                403: components["responses"]["Forbidden"];
+                /** @description Error interno */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/analyze/channel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Analisis por canal/proveedor */
+        get: {
+            parameters: {
+                query?: {
+                    limit?: components["parameters"]["Limit"];
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Desglose por canal/proveedor */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["AnalyzeChannelResponse"];
+                    };
+                };
+                401: components["responses"]["Unauthorized"];
+                403: components["responses"]["Forbidden"];
+                422: components["responses"]["ValidationError"];
+                /** @description Error interno */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/analyze/competitors": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Benchmark de competencia sobre set cerrado (scope=competencia) */
+        get: {
+            parameters: {
+                query?: {
+                    limit?: components["parameters"]["Limit"];
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Benchmark de competidores */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["AnalyzeCompetitorsResponse"];
+                    };
+                };
+                401: components["responses"]["Unauthorized"];
+                403: components["responses"]["Forbidden"];
+                422: components["responses"]["ValidationError"];
+                /** @description Error interno */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/content/{id}/state": {
         parameters: {
             query?: never;
@@ -1804,6 +1951,104 @@ export interface components {
                 competencia: components["schemas"]["MonitorScopeKpi"];
             };
             diagnostics: components["schemas"]["MonitorDiagnostics"];
+        };
+        AnalyzeOverviewDelta: {
+            items: number;
+            classified_items: number;
+            sentimiento_neto: number;
+            bhs: number;
+            riesgo_activo: number;
+            sov_claro: number;
+            sov_competencia: number;
+        };
+        AnalyzeOverviewResponse: {
+            /** Format: date-time */
+            generated_at: string;
+            /** @constant */
+            window_days: 7;
+            /** @constant */
+            source_type: "news";
+            /** @constant */
+            formula_version: "analysis-v1";
+            totals: components["schemas"]["MonitorTotalsKpi"];
+            previous_totals: components["schemas"]["MonitorTotalsKpi"];
+            delta: components["schemas"]["AnalyzeOverviewDelta"];
+            by_scope: {
+                claro: components["schemas"]["MonitorScopeKpi"];
+                competencia: components["schemas"]["MonitorScopeKpi"];
+            };
+            diagnostics: components["schemas"]["MonitorDiagnostics"];
+        };
+        AnalyzeCategoryCount: {
+            value: string;
+            count: number;
+        };
+        AnalyzeChannelItem: {
+            provider: string;
+            items: number;
+            classified_items: number;
+            positivos: number;
+            negativos: number;
+            neutrales: number;
+            sentimiento_neto: number;
+            riesgo_activo: number;
+            quality_score: number;
+            bhs: number;
+            severidad: components["schemas"]["MonitorSeverity"];
+            top_categories: components["schemas"]["AnalyzeCategoryCount"][];
+            insufficient_data: boolean;
+        };
+        AnalyzeChannelResponse: {
+            /** Format: date-time */
+            generated_at: string;
+            /** @constant */
+            window_days: 7;
+            /** @constant */
+            source_type: "news";
+            /** @constant */
+            formula_version: "analysis-v1";
+            totals: {
+                providers: number;
+                items: number;
+                classified_items: number;
+            };
+            items: components["schemas"]["AnalyzeChannelItem"][];
+        };
+        AnalyzeScopeBenchmark: {
+            items: number;
+            classified_items: number;
+            positivos: number;
+            negativos: number;
+            neutrales: number;
+            sentimiento_neto: number;
+            riesgo_activo: number;
+            quality_score: number;
+            bhs: number;
+            severidad: components["schemas"]["MonitorSeverity"];
+            sov: number;
+            insufficient_data: boolean;
+        };
+        AnalyzeCompetitorItem: components["schemas"]["AnalyzeScopeBenchmark"] & {
+            /** Format: uuid */
+            term_id: string;
+            term_name: string;
+        };
+        AnalyzeCompetitorsResponse: {
+            /** Format: date-time */
+            generated_at: string;
+            /** @constant */
+            window_days: 7;
+            /** @constant */
+            source_type: "news";
+            /** @constant */
+            formula_version: "analysis-v1";
+            baseline_claro: components["schemas"]["AnalyzeScopeBenchmark"];
+            competitors: components["schemas"]["AnalyzeCompetitorItem"][];
+            totals: {
+                competitor_terms: number;
+                items: number;
+                classified_items: number;
+            };
         };
         IncidentOwner: {
             /** Format: uuid */

@@ -441,6 +441,66 @@ const ensureMonitorOverview = async (apiBase, viewerToken) => {
   assertCondition(typeof diagnostics.unknown_sentiment_items === "number", "overview.diagnostics.unknown_sentiment_items must be number");
 };
 
+const ensureAnalyzeSurface = async (apiBase, viewerToken) => {
+  const unauthorizedOverview = await request({
+    method: "GET",
+    url: `${apiBase}/v1/analyze/overview`
+  });
+  assertStatus(unauthorizedOverview.status, 401, "GET /v1/analyze/overview without token");
+
+  const overview = await request({
+    method: "GET",
+    url: `${apiBase}/v1/analyze/overview`,
+    token: viewerToken
+  });
+  assertStatus(overview.status, 200, "GET /v1/analyze/overview");
+  assertCondition(overview.json?.window_days === 7, "analyze.overview window_days must be 7");
+  assertCondition(overview.json?.source_type === "news", "analyze.overview source_type must be news");
+  assertCondition(overview.json?.formula_version === "analysis-v1", "analyze.overview formula_version must be analysis-v1");
+  assertCondition(overview.json?.totals && typeof overview.json.totals === "object", "analyze.overview totals must be object");
+  assertCondition(
+    overview.json?.previous_totals && typeof overview.json.previous_totals === "object",
+    "analyze.overview previous_totals must be object"
+  );
+  assertCondition(overview.json?.delta && typeof overview.json.delta === "object", "analyze.overview delta must be object");
+
+  const channel = await request({
+    method: "GET",
+    url: `${apiBase}/v1/analyze/channel?limit=20`,
+    token: viewerToken
+  });
+  assertStatus(channel.status, 200, "GET /v1/analyze/channel");
+  assertCondition(Array.isArray(channel.json?.items), "analyze.channel items must be array");
+  assertCondition(channel.json?.totals && typeof channel.json.totals === "object", "analyze.channel totals must be object");
+  for (const row of channel.json.items ?? []) {
+    assertCondition(typeof row.provider === "string" && row.provider.length > 0, "analyze.channel item.provider invalid");
+    assertCondition(typeof row.items === "number", "analyze.channel item.items must be number");
+    assertCondition(typeof row.riesgo_activo === "number", "analyze.channel item.riesgo_activo must be number");
+    assertCondition(Array.isArray(row.top_categories), "analyze.channel item.top_categories must be array");
+  }
+
+  const competitors = await request({
+    method: "GET",
+    url: `${apiBase}/v1/analyze/competitors?limit=20`,
+    token: viewerToken
+  });
+  assertStatus(competitors.status, 200, "GET /v1/analyze/competitors");
+  assertCondition(
+    competitors.json?.baseline_claro && typeof competitors.json.baseline_claro === "object",
+    "analyze.competitors baseline_claro must be object"
+  );
+  assertCondition(Array.isArray(competitors.json?.competitors), "analyze.competitors competitors must be array");
+  assertCondition(
+    competitors.json?.totals && typeof competitors.json.totals === "object",
+    "analyze.competitors totals must be object"
+  );
+  for (const row of competitors.json.competitors ?? []) {
+    assertCondition(typeof row.term_id === "string" && UUID_REGEX.test(row.term_id), "analyze.competitors term_id invalid");
+    assertCondition(typeof row.term_name === "string" && row.term_name.length > 0, "analyze.competitors term_name invalid");
+    assertCondition(typeof row.sov === "number", "analyze.competitors row.sov must be number");
+  }
+};
+
 const pickIncidentStatus = (currentStatus) => {
   if (currentStatus === "open") return "acknowledged";
   return "open";
@@ -554,6 +614,7 @@ const main = async () => {
   assertStatus(metaViewer.status, 200, "GET /v1/meta viewer");
   assertCondition(Array.isArray(metaViewer.json?.providers), "meta.providers must be array");
   await ensureMonitorOverview(apiBase, viewerToken);
+  await ensureAnalyzeSurface(apiBase, viewerToken);
   await ensureIncidentFlow(apiBase, viewerToken, analystToken);
 
   await ensureConfigSurface(apiBase, viewerToken, analystToken, adminToken);
