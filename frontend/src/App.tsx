@@ -2,10 +2,16 @@ import { Navigate, Route, Routes } from "react-router-dom";
 import { RequireAuth } from "./auth/RequireAuth";
 import { AppShell } from "./components/AppShell";
 import { AuthCallbackPage } from "./pages/AuthCallbackPage";
-import { ConfigStubPage } from "./pages/ConfigStubPage";
+import { AccountsPage } from "./pages/AccountsPage";
+import { AlertsPage } from "./pages/AlertsPage";
+import { AuditPage } from "./pages/AuditPage";
+import { CompetitorsPage } from "./pages/CompetitorsPage";
+import { ConnectorsPage } from "./pages/ConnectorsPage";
 import { LoginPage } from "./pages/LoginPage";
 import { MonitorFeedPage } from "./pages/MonitorFeedPage";
 import { MonitorOverviewPage } from "./pages/MonitorOverviewPage";
+import { ReportTemplatesPage } from "./pages/ReportTemplatesPage";
+import { TaxonomyPage } from "./pages/TaxonomyPage";
 import { TermsPage } from "./pages/TermsPage";
 
 export const App = () => {
@@ -50,77 +56,14 @@ export const App = () => {
           }
         />
 
-        <Route
-          path="config/connectors"
-          element={
-            <ConfigStubPage
-              title="Configuracion de Conectores"
-              objective="Gestion de salud de conectores Hootsuite, Awario y fuentes de noticias."
-              blockedBy={["CLARO-037 Integracion de conectores", "CLARO-038 Catalogos Admin"]}
-            />
-          }
-        />
-        <Route
-          path="config/accounts"
-          element={
-            <ConfigStubPage
-              title="Cuentas Propias"
-              objective="Administracion de cuentas oficiales de Claro para monitoreo social."
-              blockedBy={["CLARO-038 Catalogos Admin", "CLARO-042 Go-live readiness"]}
-            />
-          }
-        />
-        <Route
-          path="config/competitors"
-          element={
-            <ConfigStubPage
-              title="Competidores"
-              objective="Definicion del set oficial de competidores para SOV."
-              blockedBy={["CLARO-038 Catalogos Admin", "CLARO-042 Go-live readiness"]}
-            />
-          }
-        />
+        <Route path="config/connectors" element={<ConnectorsPage />} />
+        <Route path="config/accounts" element={<AccountsPage />} />
+        <Route path="config/competitors" element={<CompetitorsPage />} />
         <Route path="config/queries" element={<TermsPage />} />
-        <Route
-          path="config/taxonomy"
-          element={
-            <ConfigStubPage
-              title="Taxonomias"
-              objective="Catalogos de negocio, regiones y campanas para filtros y reportes."
-              blockedBy={["CLARO-038 Catalogos Admin"]}
-            />
-          }
-        />
-        <Route
-          path="config/alerts"
-          element={
-            <ConfigStubPage
-              title="Reglas de Alertas"
-              objective="Configuracion de umbrales de severidad, ventanas y destinatarios."
-              blockedBy={["CLARO-033 Motor KPI", "CLARO-036 Alertas e incidentes"]}
-            />
-          }
-        />
-        <Route
-          path="config/report-templates"
-          element={
-            <ConfigStubPage
-              title="Plantillas de Reporte"
-              objective="Configuracion base de plantillas y audiencia de reportes automáticos."
-              blockedBy={["CLARO-035 Modulo reportes", "CLARO-039 Gobernanza de exportes"]}
-            />
-          }
-        />
-        <Route
-          path="config/audit"
-          element={
-            <ConfigStubPage
-              title="Auditoria de Configuracion"
-              objective="Trazabilidad de cambios de configuracion con filtros y export controlado."
-              blockedBy={["CLARO-039 Gobernanza de datos/exportes"]}
-            />
-          }
-        />
+        <Route path="config/taxonomy" element={<TaxonomyPage />} />
+        <Route path="config/alerts" element={<AlertsPage />} />
+        <Route path="config/report-templates" element={<ReportTemplatesPage />} />
+        <Route path="config/audit" element={<AuditPage />} />
       </Route>
 
       <Route path="*" element={<Navigate to="/app/monitor/feed-claro" replace />} />

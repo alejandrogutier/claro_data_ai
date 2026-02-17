@@ -6,6 +6,27 @@ export type CreateTermRequest = components["schemas"]["CreateTermRequest"];
 export type UpdateTermRequest = components["schemas"]["UpdateTermRequest"];
 export type NewsFeedResponse = components["schemas"]["NewsFeedResponse"];
 export type MetaResponse = components["schemas"]["MetaResponse"];
+export type Connector = components["schemas"]["Connector"];
+export type ConnectorListResponse = components["schemas"]["ConnectorListResponse"];
+export type PatchConnectorRequest = components["schemas"]["PatchConnectorRequest"];
+export type ConnectorSyncRun = components["schemas"]["ConnectorSyncRun"];
+export type ConnectorRunListResponse = components["schemas"]["ConnectorRunListResponse"];
+export type OwnedAccount = components["schemas"]["OwnedAccount"];
+export type OwnedAccountListResponse = components["schemas"]["OwnedAccountListResponse"];
+export type CreateOwnedAccountRequest = components["schemas"]["CreateOwnedAccountRequest"];
+export type UpdateOwnedAccountRequest = components["schemas"]["UpdateOwnedAccountRequest"];
+export type Competitor = components["schemas"]["Competitor"];
+export type CompetitorListResponse = components["schemas"]["CompetitorListResponse"];
+export type CreateCompetitorRequest = components["schemas"]["CreateCompetitorRequest"];
+export type UpdateCompetitorRequest = components["schemas"]["UpdateCompetitorRequest"];
+export type TaxonomyEntry = components["schemas"]["TaxonomyEntry"];
+export type TaxonomyListResponse = components["schemas"]["TaxonomyListResponse"];
+export type CreateTaxonomyEntryRequest = components["schemas"]["CreateTaxonomyEntryRequest"];
+export type UpdateTaxonomyEntryRequest = components["schemas"]["UpdateTaxonomyEntryRequest"];
+export type AuditItem = components["schemas"]["AuditItem"];
+export type AuditListResponse = components["schemas"]["AuditListResponse"];
+export type CreateAuditExportRequest = components["schemas"]["CreateAuditExportRequest"];
+export type AuditExportResponse = components["schemas"]["AuditExportResponse"];
 
 type HttpMethod = "GET" | "POST" | "PATCH";
 
@@ -17,6 +38,7 @@ type RequestOptions = {
 };
 
 export type TermScope = "claro" | "competencia";
+export type TaxonomyKind = "categories" | "business_lines" | "macro_regions" | "campaigns";
 
 export class ApiError extends Error {
   constructor(
@@ -111,5 +133,112 @@ export class ApiClient {
 
   getMeta(): Promise<MetaResponse> {
     return this.request<MetaResponse>("/v1/meta");
+  }
+
+  listConnectors(limit = 100): Promise<ConnectorListResponse> {
+    return this.request<ConnectorListResponse>("/v1/connectors", {
+      query: { limit }
+    });
+  }
+
+  patchConnector(id: string, payload: PatchConnectorRequest): Promise<Connector> {
+    return this.request<Connector>(`/v1/connectors/${id}`, {
+      method: "PATCH",
+      body: payload
+    });
+  }
+
+  triggerConnectorSync(id: string): Promise<ConnectorSyncRun> {
+    return this.request<ConnectorSyncRun>(`/v1/connectors/${id}/sync`, {
+      method: "POST",
+      body: {}
+    });
+  }
+
+  listConnectorRuns(id: string, limit = 20): Promise<ConnectorRunListResponse> {
+    return this.request<ConnectorRunListResponse>(`/v1/connectors/${id}/runs`, {
+      query: { limit }
+    });
+  }
+
+  listConfigAccounts(limit = 200): Promise<OwnedAccountListResponse> {
+    return this.request<OwnedAccountListResponse>("/v1/config/accounts", {
+      query: { limit }
+    });
+  }
+
+  createConfigAccount(payload: CreateOwnedAccountRequest): Promise<OwnedAccount> {
+    return this.request<OwnedAccount>("/v1/config/accounts", {
+      method: "POST",
+      body: payload
+    });
+  }
+
+  patchConfigAccount(id: string, payload: UpdateOwnedAccountRequest): Promise<OwnedAccount> {
+    return this.request<OwnedAccount>(`/v1/config/accounts/${id}`, {
+      method: "PATCH",
+      body: payload
+    });
+  }
+
+  listConfigCompetitors(limit = 200): Promise<CompetitorListResponse> {
+    return this.request<CompetitorListResponse>("/v1/config/competitors", {
+      query: { limit }
+    });
+  }
+
+  createConfigCompetitor(payload: CreateCompetitorRequest): Promise<Competitor> {
+    return this.request<Competitor>("/v1/config/competitors", {
+      method: "POST",
+      body: payload
+    });
+  }
+
+  patchConfigCompetitor(id: string, payload: UpdateCompetitorRequest): Promise<Competitor> {
+    return this.request<Competitor>(`/v1/config/competitors/${id}`, {
+      method: "PATCH",
+      body: payload
+    });
+  }
+
+  listTaxonomy(kind: TaxonomyKind, includeInactive = false): Promise<TaxonomyListResponse> {
+    return this.request<TaxonomyListResponse>(`/v1/config/taxonomies/${kind}`, {
+      query: {
+        include_inactive: includeInactive ? "true" : undefined
+      }
+    });
+  }
+
+  createTaxonomyEntry(kind: TaxonomyKind, payload: CreateTaxonomyEntryRequest): Promise<TaxonomyEntry> {
+    return this.request<TaxonomyEntry>(`/v1/config/taxonomies/${kind}`, {
+      method: "POST",
+      body: payload
+    });
+  }
+
+  patchTaxonomyEntry(kind: TaxonomyKind, id: string, payload: UpdateTaxonomyEntryRequest): Promise<TaxonomyEntry> {
+    return this.request<TaxonomyEntry>(`/v1/config/taxonomies/${kind}/${id}`, {
+      method: "PATCH",
+      body: payload
+    });
+  }
+
+  listConfigAudit(query: {
+    limit?: number;
+    cursor?: string;
+    resource_type?: string;
+    action?: string;
+    actor_user_id?: string;
+    from?: string;
+    to?: string;
+  }): Promise<AuditListResponse> {
+    return this.request<AuditListResponse>("/v1/config/audit", { query });
+  }
+
+  exportConfigAudit(payload: CreateAuditExportRequest): Promise<AuditExportResponse> {
+    return this.request<AuditExportResponse>("/v1/config/audit/export", {
+      method: "POST",
+      body: payload
+    });
   }
 }

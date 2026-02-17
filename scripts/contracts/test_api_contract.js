@@ -265,6 +265,123 @@ const waitExportCompleted = async (apiBase, analystToken, exportId) => {
   throw new Error(`export job did not complete in expected time: ${exportId}`);
 };
 
+const ensureConfigSurface = async (apiBase, viewerToken, analystToken, adminToken) => {
+  const connectors = await request({
+    method: "GET",
+    url: `${apiBase}/v1/connectors?limit=20`,
+    token: viewerToken
+  });
+  assertStatus(connectors.status, 200, "GET /v1/connectors");
+  assertCondition(Array.isArray(connectors.json?.items), "connectors.items must be array");
+
+  const firstConnector = connectors.json.items[0];
+  if (firstConnector?.id) {
+    const sync = await request({
+      method: "POST",
+      url: `${apiBase}/v1/connectors/${firstConnector.id}/sync`,
+      token: analystToken
+    });
+    assertStatus(sync.status, 202, "POST /v1/connectors/{id}/sync");
+
+    const runs = await request({
+      method: "GET",
+      url: `${apiBase}/v1/connectors/${firstConnector.id}/runs?limit=5`,
+      token: viewerToken
+    });
+    assertStatus(runs.status, 200, "GET /v1/connectors/{id}/runs");
+    assertCondition(Array.isArray(runs.json?.items), "connector runs must be array");
+  }
+
+  const accountHandle = `claro-contract-${Date.now()}`;
+  const accountCreate = await request({
+    method: "POST",
+    url: `${apiBase}/v1/config/accounts`,
+    token: adminToken,
+    body: {
+      platform: "x",
+      handle: accountHandle,
+      account_name: "Claro Contract",
+      status: "active",
+      campaign_tags: ["contract"]
+    }
+  });
+  assertStatus(accountCreate.status, 201, "POST /v1/config/accounts");
+
+  const accounts = await request({
+    method: "GET",
+    url: `${apiBase}/v1/config/accounts?limit=20`,
+    token: viewerToken
+  });
+  assertStatus(accounts.status, 200, "GET /v1/config/accounts");
+  assertCondition(Array.isArray(accounts.json?.items), "accounts.items must be array");
+
+  const competitorName = `competitor-contract-${Date.now()}`;
+  const competitorCreate = await request({
+    method: "POST",
+    url: `${apiBase}/v1/config/competitors`,
+    token: adminToken,
+    body: {
+      brand_name: competitorName,
+      aliases: ["contract-brand"],
+      priority: 5,
+      status: "active"
+    }
+  });
+  assertStatus(competitorCreate.status, 201, "POST /v1/config/competitors");
+
+  const competitors = await request({
+    method: "GET",
+    url: `${apiBase}/v1/config/competitors?limit=20`,
+    token: viewerToken
+  });
+  assertStatus(competitors.status, 200, "GET /v1/config/competitors");
+  assertCondition(Array.isArray(competitors.json?.items), "competitors.items must be array");
+
+  const taxonomyKey = `contract_${Date.now()}`;
+  const taxonomyCreate = await request({
+    method: "POST",
+    url: `${apiBase}/v1/config/taxonomies/categories`,
+    token: adminToken,
+    body: {
+      key: taxonomyKey,
+      label: "Contract Category",
+      is_active: true,
+      sort_order: 120
+    }
+  });
+  assertStatus(taxonomyCreate.status, 201, "POST /v1/config/taxonomies/{kind}");
+
+  const taxonomyList = await request({
+    method: "GET",
+    url: `${apiBase}/v1/config/taxonomies/categories`,
+    token: viewerToken
+  });
+  assertStatus(taxonomyList.status, 200, "GET /v1/config/taxonomies/{kind}");
+  assertCondition(Array.isArray(taxonomyList.json?.items), "taxonomy.items must be array");
+
+  const auditList = await request({
+    method: "GET",
+    url: `${apiBase}/v1/config/audit?limit=20`,
+    token: viewerToken
+  });
+  assertStatus(auditList.status, 200, "GET /v1/config/audit");
+  assertCondition(Array.isArray(auditList.json?.items), "audit.items must be array");
+
+  const auditExport = await request({
+    method: "POST",
+    url: `${apiBase}/v1/config/audit/export`,
+    token: analystToken,
+    body: {
+      limit: 200
+    }
+  });
+  assertStatus(auditExport.status, 202, "POST /v1/config/audit/export");
+  assertCondition(
+    typeof auditExport.json?.download_url === "string" && auditExport.json.download_url.startsWith("https://"),
+    "audit export must return signed download_url"
+  );
+};
+
 const main = async () => {
   loadEnv();
 
@@ -287,6 +404,8 @@ const main = async () => {
   const metaViewer = await request({ method: "GET", url: `${apiBase}/v1/meta`, token: viewerToken });
   assertStatus(metaViewer.status, 200, "GET /v1/meta viewer");
   assertCondition(Array.isArray(metaViewer.json?.providers), "meta.providers must be array");
+
+  await ensureConfigSurface(apiBase, viewerToken, analystToken, adminToken);
 
   const contentItem = await ensureContentItem(apiBase, analystToken, viewerToken, term);
   await waitNewsFeed(apiBase, viewerToken, term.id);

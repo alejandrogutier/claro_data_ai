@@ -57,7 +57,10 @@ Este contrato se usa junto a `UX_PLANNING.md` secciones `2.3`, `7.4`, `21`, `26`
 | CLARO-042 | checklist transversal | CLARO-037, CLARO-038, CLARO-035 | gate go-live completo y aprobado |
 
 ## Now
-- CLARO-031 | doing | P1 | Configuracion V1 social/news (8 pantallas) | modulo ya expone 8 rutas (`/app/config/*`): `queries` operativo con CRUD + `scope` (`claro|competencia`), 7 pantallas en shell/stub con bloqueos declarados en UI para `CLARO-037/038/039`. UX_REF: 8, 21.1
+- CLARO-031 | doing | P1 | Configuracion V1 social/news (8 pantallas) | rutas `/app/config/*` sin stub critico: `connectors`, `accounts`, `competitors`, `queries`, `taxonomy`, `alerts`, `report-templates`, `audit` con wiring a backend real; pendiente validacion post-deploy en AWS. UX_REF: 8, 21.1
+- CLARO-037 | doing | P1 | Integracion Hootsuite/Awario/News a 15m | backend base de conectores operativo (`/v1/connectors*`), sync manual y runs; pendiente despliegue y smoke en entorno productivo. UX_REF: 4, 8.1, 14
+- CLARO-038 | doing | P1 | Catalogos administrables por Admin | CRUD base para cuentas, competidores y taxonomias (`/v1/config/accounts|competitors|taxonomies/*`); pendiente carga catalogos definitivos. UX_REF: 8.2, 8.3, 8.5
+- CLARO-039 | doing | P1 | Gobernanza de datos y exportes | auditoria paginada + export CSV sanitizado por rol (`/v1/config/audit` + `/v1/config/audit/export`); pendiente hardening de politicas finales de PII. UX_REF: 17, 21.4
 
 ## Next
 - CLARO-023 | todo | P1 | Dashboard Overview Salud de Marca | KPIs fijos (`BHS`, `SOV`, `sentimiento neto`, `riesgo activo`) y tendencia 7d. UX_REF: 9.1, 12, 21.2
@@ -65,9 +68,6 @@ Este contrato se usa junto a `UX_PLANNING.md` secciones `2.3`, `7.4`, `21`, `26`
 - CLARO-034 | todo | P1 | Modulo Analisis (3 paginas) | overview marca, deep-dive por canal y benchmark competencia. UX_REF: 10, 21.3
 - CLARO-035 | todo | P1 | Modulo Reportes (3 paginas) | historial/centro, plantillas y programacion/envios (salida `Web + CSV`). UX_REF: 11, 16, 21.4
 - CLARO-036 | todo | P1 | Alertas e Incidentes | in-app+email, cooldown 60m, asignacion manual+reglas, SLA respuesta SEV-1 <=30m. UX_REF: 9.4, 12.4, 21.2
-- CLARO-037 | todo | P1 | Integracion Hootsuite/Awario/News a 15m | pull programado, health por conector, idempotencia y dedupe cross-source. UX_REF: 4, 8.1, 14
-- CLARO-038 | todo | P1 | Catalogos administrables por Admin | lineas de negocio, macro-regiones Colombia, campañas (`campana > iniciativa`). UX_REF: 8.2, 8.3, 8.5
-- CLARO-039 | todo | P1 | Gobernanza de datos y exportes | retencion activa 24 meses, PII minimizada/enmascarada, CSV sanitizado (100k max), PII completa solo Admin. UX_REF: 17, 21.4
 - CLARO-040 | todo | P2 | Loop de calidad semantica | falso positivo con reason code + recalibracion mensual de reglas/umbrales. UX_REF: 13
 - CLARO-041 | todo | P2 | UX de adopcion | diccionario de KPI en app + tour guiado basico por rol. UX_REF: 18, 26, 27
 - CLARO-042 | todo | P1 | Go-live readiness social | gate con 16 cuentas activas + set final competidores + UAT 2 semanas + piloto 1 semana. UX_REF: 23, 24, 27

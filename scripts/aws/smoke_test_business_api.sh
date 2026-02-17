@@ -316,6 +316,53 @@ if [[ "$FEED_COUNT" -ge 2 ]]; then
   fi
 fi
 
+echo "[3.2] Config backend surface"
+CODE="$(curl -s -o /tmp/claro-connectors-list.json -w "%{http_code}" -H "Authorization: Bearer $VIEWER_TOKEN" "$API_BASE/v1/connectors?limit=20")"
+assert_code "$CODE" "200" "GET /v1/connectors viewer"
+
+CONNECTOR_ID="$(jq -r '.items[0].id // empty' /tmp/claro-connectors-list.json)"
+if [[ -n "$CONNECTOR_ID" ]]; then
+  CODE="$(curl -s -o /tmp/claro-connectors-sync.json -w "%{http_code}" -X POST -H "Authorization: Bearer $ANALYST_TOKEN" "$API_BASE/v1/connectors/$CONNECTOR_ID/sync")"
+  assert_code "$CODE" "202" "POST /v1/connectors/{id}/sync analyst"
+
+  CODE="$(curl -s -o /tmp/claro-connectors-runs.json -w "%{http_code}" -H "Authorization: Bearer $VIEWER_TOKEN" "$API_BASE/v1/connectors/$CONNECTOR_ID/runs?limit=5")"
+  assert_code "$CODE" "200" "GET /v1/connectors/{id}/runs viewer"
+fi
+
+ACCOUNT_HANDLE="smoke-account-$(date +%s)"
+CODE="$(curl -s -o /tmp/claro-config-account-create.json -w "%{http_code}" -X POST -H "Authorization: Bearer $ADMIN_TOKEN" -H "Content-Type: application/json" -d "{\"platform\":\"x\",\"handle\":\"$ACCOUNT_HANDLE\",\"account_name\":\"Smoke Account\",\"status\":\"active\",\"campaign_tags\":[\"smoke\"]}" "$API_BASE/v1/config/accounts")"
+assert_code "$CODE" "201" "POST /v1/config/accounts admin"
+
+CODE="$(curl -s -o /tmp/claro-config-accounts-list.json -w "%{http_code}" -H "Authorization: Bearer $VIEWER_TOKEN" "$API_BASE/v1/config/accounts?limit=20")"
+assert_code "$CODE" "200" "GET /v1/config/accounts viewer"
+
+COMP_NAME="smoke-competitor-$(date +%s)"
+CODE="$(curl -s -o /tmp/claro-config-competitor-create.json -w "%{http_code}" -X POST -H "Authorization: Bearer $ADMIN_TOKEN" -H "Content-Type: application/json" -d "{\"brand_name\":\"$COMP_NAME\",\"aliases\":[\"smoke\"],\"priority\":5,\"status\":\"active\"}" "$API_BASE/v1/config/competitors")"
+assert_code "$CODE" "201" "POST /v1/config/competitors admin"
+
+CODE="$(curl -s -o /tmp/claro-config-competitors-list.json -w "%{http_code}" -H "Authorization: Bearer $VIEWER_TOKEN" "$API_BASE/v1/config/competitors?limit=20")"
+assert_code "$CODE" "200" "GET /v1/config/competitors viewer"
+
+TAX_KEY="smoke_tax_$(date +%s)"
+CODE="$(curl -s -o /tmp/claro-config-tax-create.json -w "%{http_code}" -X POST -H "Authorization: Bearer $ADMIN_TOKEN" -H "Content-Type: application/json" -d "{\"key\":\"$TAX_KEY\",\"label\":\"Smoke Taxonomy\",\"is_active\":true,\"sort_order\":120}" "$API_BASE/v1/config/taxonomies/categories")"
+assert_code "$CODE" "201" "POST /v1/config/taxonomies/{kind} admin"
+
+CODE="$(curl -s -o /tmp/claro-config-tax-list.json -w "%{http_code}" -H "Authorization: Bearer $VIEWER_TOKEN" "$API_BASE/v1/config/taxonomies/categories")"
+assert_code "$CODE" "200" "GET /v1/config/taxonomies/{kind} viewer"
+
+CODE="$(curl -s -o /tmp/claro-config-audit-list.json -w "%{http_code}" -H "Authorization: Bearer $VIEWER_TOKEN" "$API_BASE/v1/config/audit?limit=20")"
+assert_code "$CODE" "200" "GET /v1/config/audit viewer"
+
+CODE="$(curl -s -o /tmp/claro-config-audit-export.json -w "%{http_code}" -X POST -H "Authorization: Bearer $ANALYST_TOKEN" -H "Content-Type: application/json" -d '{"limit":200}' "$API_BASE/v1/config/audit/export")"
+assert_code "$CODE" "202" "POST /v1/config/audit/export analyst"
+
+AUDIT_DOWNLOAD_URL="$(jq -r '.download_url // empty' /tmp/claro-config-audit-export.json)"
+if [[ -z "$AUDIT_DOWNLOAD_URL" || "$AUDIT_DOWNLOAD_URL" == "null" ]]; then
+  echo "[FAIL] audit export missing download_url"
+  cat /tmp/claro-config-audit-export.json
+  exit 1
+fi
+
 echo "[4] Editorial operations (state, bulk, classification)"
 CODE="$(curl -s -o /tmp/claro-content-for-state.json -w "%{http_code}" -H "Authorization: Bearer $VIEWER_TOKEN" "$API_BASE/v1/content?limit=1&term_id=$SMOKE_TERM_ID&source_type=news")"
 assert_code "$CODE" "200" "GET /v1/content for editorial tests"

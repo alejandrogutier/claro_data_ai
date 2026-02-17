@@ -2,8 +2,8 @@
 
 ## Estado General
 - Proyecto: `Inception`
-- Avance global: `95%`
-- Historias en curso: `CLARO-031`
+- Avance global: `97%`
+- Historias en curso: `CLARO-031, CLARO-037, CLARO-038, CLARO-039`
 - Ambiente objetivo inicial: `prod` unico en `us-east-1`
 - Ultima actualizacion: `2026-02-17`
 
@@ -33,8 +33,11 @@
 | CLARO-021 | done | 100% | Ninguno | Blueprint UX/UI inicial consolidado y extendido a vision social/news/competencia |
 | CLARO-022 | done | 100% | Ninguno | Frontend base creado en `frontend/` con React+Vite, login Cognito Hosted UI (PKCE), app shell y guardas RBAC |
 | CLARO-029 | done | 100% | Ninguno | OpenAPI alineado con `/v1/feed/news` y pipeline `openapi-typescript` operativo con cliente tipado para frontend |
-| CLARO-031 | doing | 70% | Dependencias funcionales pendientes de `CLARO-037/038/039` | 8 rutas de configuracion ya habilitadas en frontend; `Queries` operativa con CRUD + `scope` (`claro|competencia`) y 7 pantallas en shell/stub con bloqueos visibles |
+| CLARO-031 | doing | 92% | Falta redeploy/validacion contra runtime AWS actual | 8 rutas config activas sin stubs criticos en frontend (`connectors`, `accounts`, `competitors`, `queries`, `taxonomy`, `alerts`, `report-templates`, `audit`) con consumo de backend real |
 | CLARO-032 | done | 100% | Ninguno | Monitoreo V1 completo con rutas separadas (`/app/monitor/overview`, `/app/monitor/feed-claro`, `/app/monitor/feed-competencia`) y consumo de feed limitado a 2 noticias por query |
+| CLARO-037 | doing | 85% | Pendiente despliegue Terraform/Lambda en AWS | Endpoints de conectores implementados (`GET /v1/connectors`, `PATCH /v1/connectors/{id}`, `POST /v1/connectors/{id}/sync`, `GET /v1/connectors/{id}/runs`) + contrato actualizado |
+| CLARO-038 | doing | 85% | Pendiente despliegue y carga de catalogos reales | CRUD base implementado para cuentas, competidores y taxonomias (`/v1/config/accounts`, `/v1/config/competitors`, `/v1/config/taxonomies/*`) con auditoria |
+| CLARO-039 | doing | 80% | Pendiente hardening final de politicas PII y despliegue | `GET /v1/config/audit` + `POST /v1/config/audit/export` implementados con sanitizacion por rol y export CSV firmado |
 | CLARO-044 | done | 100% | Ninguno | Deploy automatico Amplify en `main` validado; `VITE_*` cargadas en branch, rewrite SPA en `200`, callback/logout Cognito agregados para dominio Amplify y login funcional en URL publica |
 
 ## Riesgos Activos y Mitigacion
@@ -48,6 +51,8 @@
    - Mitigacion: minimizacion/enmascaramiento PII y export completo solo para Admin.
 5. **Riesgo**: drift temporal entre contrato/codigo y runtime AWS desplegado.
    - Mitigacion: aplicar Terraform + redeploy Lambda antes de correr contract/smoke de release.
+6. **Riesgo**: contract tests locales contra AWS aun no reflejan endpoints nuevos de config.
+   - Mitigacion: desplegar cambios (`terraform apply` + package/deploy Lambda) y re-ejecutar `npm run contract:test` y smoke.
 
 ## Decisiones Cerradas de Arquitectura y Producto
 - AWS serverless en `us-east-1`.
@@ -62,7 +67,7 @@
 - Zona horaria operativa: `America/Bogota`.
 
 ## Proximos Hitos
-1. Cerrar funcionalidad de `CLARO-031` sobre las 7 pantallas en shell, destrabando dependencias de `CLARO-037/038/039`.
-2. Activar motor KPI de negocio (`BHS/SOV/severidad`) y alertas (CLARO-033/036).
-3. Retomar CLARO-013 (analysis async real) reutilizando patron de jobs y trazabilidad aplicado en export.
-4. Completar CLARO-035/039 para centro de reportes y gobernanza de exportes en frontend.
+1. Desplegar backend + Terraform de `CLARO-037/038/039` y validar `contract:test` + smoke en AWS.
+2. Cerrar formalmente `CLARO-031` tras validacion end-to-end en runtime productivo.
+3. Activar motor KPI de negocio (`BHS/SOV/severidad`) y alertas (CLARO-033/036).
+4. Retomar CLARO-013 (analysis async real) reutilizando patron de jobs y trazabilidad aplicado en export.

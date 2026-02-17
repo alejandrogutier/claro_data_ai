@@ -540,7 +540,22 @@ resource "aws_apigatewayv2_route" "private_routes" {
     "POST /v1/exports/csv",
     "GET /v1/exports/{id}",
     "GET /v1/feed/news",
-    "GET /v1/meta"
+    "GET /v1/meta",
+    "GET /v1/connectors",
+    "PATCH /v1/connectors/{id}",
+    "POST /v1/connectors/{id}/sync",
+    "GET /v1/connectors/{id}/runs",
+    "GET /v1/config/accounts",
+    "POST /v1/config/accounts",
+    "PATCH /v1/config/accounts/{id}",
+    "GET /v1/config/competitors",
+    "POST /v1/config/competitors",
+    "PATCH /v1/config/competitors/{id}",
+    "GET /v1/config/taxonomies/{kind}",
+    "POST /v1/config/taxonomies/{kind}",
+    "PATCH /v1/config/taxonomies/{kind}/{id}",
+    "GET /v1/config/audit",
+    "POST /v1/config/audit/export"
   ])
 
   api_id             = aws_apigatewayv2_api.http.id
