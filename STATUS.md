@@ -2,8 +2,8 @@
 
 ## Estado General
 - Proyecto: `Inception`
-- Avance global: `86%`
-- Historias en curso: `CLARO-029, CLARO-031, CLARO-032`
+- Avance global: `91%`
+- Historias en curso: `CLARO-031, CLARO-032, CLARO-044`
 - Ambiente objetivo inicial: `prod` unico en `us-east-1`
 - Ultima actualizacion: `2026-02-17`
 
@@ -31,9 +31,11 @@
 | CLARO-019 | todo | 0% | Riesgo legal/compliance | Politica de licencias pendiente |
 | CLARO-020 | todo | 0% | Riesgo de privacidad | Gobernanza de datos sociales pendiente |
 | CLARO-021 | done | 100% | Ninguno | Blueprint UX/UI inicial consolidado y extendido a vision social/news/competencia |
-| CLARO-029 | doing | 70% | Diferencias puntuales OpenAPI/runtime por cerrar | Pipeline de cliente tipado definido |
-| CLARO-031 | doing | 25% | Falta implementacion | Scope de configuracion V1 (8 pantallas) definido |
-| CLARO-032 | doing | 20% | Falta implementacion | Scope de monitoreo V1 (overview + feed Claro + feed competencia) definido |
+| CLARO-022 | done | 100% | Ninguno | Frontend base creado en `frontend/` con React+Vite, login Cognito Hosted UI (PKCE), app shell y guardas RBAC |
+| CLARO-029 | done | 100% | Ninguno | OpenAPI alineado con `/v1/feed/news` y pipeline `openapi-typescript` operativo con cliente tipado para frontend |
+| CLARO-031 | doing | 35% | Faltan 7 pantallas del modulo | Vertical minimo de queries/terminos operativo (CRUD base sobre `TrackedTerm`) |
+| CLARO-032 | doing | 40% | Faltan overview y feed competencia | Vertical minimo de feed operativo (`/app/feed` + `/v1/feed/news` con limite 2) |
+| CLARO-044 | doing | 45% | Falta configurar secretos/repo en GitHub y ejecutar deploy real | Workflows CI + deploy Amplify creados en `.github/workflows` |
 
 ## Riesgos Activos y Mitigacion
 1. **Riesgo**: catalogos reales aun no cargados (16 cuentas + competidores finales).
@@ -44,6 +46,8 @@
    - Mitigacion: filtro automatico obligatorio y loop mensual de recalibracion.
 4. **Riesgo**: manejo de datos sensibles en social listening.
    - Mitigacion: minimizacion/enmascaramiento PII y export completo solo para Admin.
+5. **Riesgo**: drift temporal entre contrato/codigo y runtime AWS desplegado.
+   - Mitigacion: aplicar Terraform + redeploy Lambda antes de correr contract/smoke de release.
 
 ## Decisiones Cerradas de Arquitectura y Producto
 - AWS serverless en `us-east-1`.
@@ -58,8 +62,8 @@
 - Zona horaria operativa: `America/Bogota`.
 
 ## Proximos Hitos
-1. Cerrar CLARO-029 (paridad OpenAPI/runtime + cliente tipado frontend) sobre contrato ya consolidado de backend.
-2. Implementar modulo de configuracion V1 completo (CLARO-031).
-3. Implementar monitoreo V1 con feed principal y feed competencia (CLARO-032).
+1. Ejecutar deploy real de frontend en AWS Amplify desde `main` y validar URL publicada (CLARO-044).
+2. Completar modulo de configuracion V1 restante (CLARO-031).
+3. Completar monitoreo V1 (overview + competencia) (CLARO-032).
 4. Activar motor KPI de negocio (`BHS/SOV/severidad`) y alertas (CLARO-033/036).
 5. Retomar CLARO-013 (analysis async real) reutilizando patron de jobs y trazabilidad aplicado en export.

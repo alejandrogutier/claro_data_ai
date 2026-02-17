@@ -14,6 +14,7 @@ tags:
   - name: Terms
   - name: Ingestion
   - name: Content
+  - name: Feed
   - name: Analysis
   - name: Exports
   - name: Meta
@@ -193,6 +194,32 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '403':
           $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+  /v1/feed/news:
+    get:
+      tags: [Feed]
+      summary: Feed de noticias por query (maximo 2 items mas recientes)
+      parameters:
+        - name: term_id
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Feed de noticias mas recientes para la query
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NewsFeedResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
         '422':
           $ref: '#/components/responses/ValidationError'
   /v1/content/{id}/state:
@@ -640,6 +667,7 @@ components:
           minimum: 1
           maximum: 500
           default: 100
+          description: Valor solicitado; para `source_type=news` el valor efectivo aplicado por runtime es 2.
     IngestionRunAccepted:
       type: object
       required: [run_id, status, input]
@@ -686,6 +714,10 @@ components:
               type: string
             maxArticlesPerTerm:
               type: integer
+              description: Valor efectivo aplicado por runtime (news fijo en 2).
+            requestedMaxArticlesPerTerm:
+              type: integer
+              description: Valor solicitado por el cliente antes de aplicar politicas de limite.
     UpdateContentStateRequest:
       type: object
       required: [target_state]
@@ -902,6 +934,21 @@ components:
             $ref: '#/components/schemas/ContentItem'
         page_info:
           $ref: '#/components/schemas/PageInfo'
+    NewsFeedResponse:
+      type: object
+      required: [term_id, limit, items]
+      properties:
+        term_id:
+          type: string
+          format: uuid
+        limit:
+          type: integer
+          const: 2
+        items:
+          type: array
+          maxItems: 2
+          items:
+            $ref: '#/components/schemas/ContentItem'
     PageInfo:
       type: object
       required: [has_next]

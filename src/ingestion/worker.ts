@@ -20,6 +20,7 @@ type IngestionDispatchMessage = {
 
 const s3 = new AWS.S3({ region: env.awsRegion });
 const RUN_DUPLICATE_WINDOW_MS = 10 * 60 * 1000;
+const NEWS_MAX_ARTICLES_PER_TERM = 2;
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 const isUuid = (value: string): boolean => UUID_REGEX.test(value);
@@ -78,6 +79,21 @@ const parseLimit = (value: unknown): number => {
   return Math.min(500, Math.max(1, Math.floor(value)));
 };
 
+const toPublishedAtMs = (value: string | undefined): number => {
+  if (!value) return 0;
+  const parsed = Date.parse(value);
+  return Number.isFinite(parsed) ? parsed : 0;
+};
+
+const limitNewsItems = <T extends { canonicalUrl: string; publishedAt?: string }>(items: T[], limit: number): T[] =>
+  [...items]
+    .sort((a, b) => {
+      const byDate = toPublishedAtMs(b.publishedAt) - toPublishedAtMs(a.publishedAt);
+      if (byDate !== 0) return byDate;
+      return a.canonicalUrl.localeCompare(b.canonicalUrl);
+    })
+    .slice(0, Math.max(1, limit));
+
 const parseMessage = (body: string): IngestionDispatchMessage => {
   try {
     const parsed = JSON.parse(body) as unknown;
@@ -124,7 +140,8 @@ const processRecord = async (
   const runId = message.runId && isUuid(message.runId) ? message.runId : randomUUID();
   const triggerType = message.triggerType ?? "scheduled";
   const language = parseLanguage(message.language);
-  const maxArticlesPerTerm = parseLimit(message.maxArticlesPerTerm);
+  const requestedMaxArticlesPerTerm = parseLimit(message.maxArticlesPerTerm);
+  const effectiveMaxArticlesPerTerm = Math.min(NEWS_MAX_ARTICLES_PER_TERM, requestedMaxArticlesPerTerm);
   const requestedTermIds = parseTermIds(message.termIds);
 
   let terms = parseTerms(message.terms);
@@ -156,6 +173,7 @@ const processRecord = async (
   let providersFailed = 0;
   let itemsRaw = 0;
   let itemsDeduped = 0;
+  let itemsTrimmedByLimit = 0;
   let itemsPersisted = 0;
   let runStarted = false;
 
@@ -188,7 +206,7 @@ const processRecord = async (
       runId,
       triggerType,
       language,
-      maxArticlesPerTerm,
+      maxArticlesPerTerm: effectiveMaxArticlesPerTerm,
       requestId: message.requestId,
       startedAt
     });
@@ -198,17 +216,19 @@ const processRecord = async (
 
   try {
     for (const term of terms) {
-      const termId = sqlStore ? await sqlStore.ensureTrackedTerm(term, language, maxArticlesPerTerm) : null;
+      const termId = sqlStore ? await sqlStore.ensureTrackedTerm(term, language, effectiveMaxArticlesPerTerm) : null;
 
       const providerResults = await fetchFromProviders({
         term,
         language,
-        maxArticlesPerTerm,
+        maxArticlesPerTerm: effectiveMaxArticlesPerTerm,
         providerKeys
       });
 
       const merged = providerResults.flatMap((result) => result.items);
       const deduped = dedupeByCanonicalUrl(merged);
+      const limited = limitNewsItems(deduped, effectiveMaxArticlesPerTerm);
+      const trimmedByLimit = Math.max(0, deduped.length - limited.length);
       const failedProviders = providerResults.filter((result) => Boolean(result.error)).length;
       const successfulProviders = providerResults.length - failedProviders;
 
@@ -220,14 +240,18 @@ const processRecord = async (
         term,
         termIds: requestedTermIds,
         language,
-        maxArticlesPerTerm,
+        requestedMaxArticlesPerTerm,
+        effectiveMaxArticlesPerTerm,
         providerResults,
+        mergedCount: merged.length,
         dedupedCount: deduped.length,
+        trimmedByLimit,
+        limitedCount: limited.length,
         ingestedAt: new Date().toISOString(),
-        items: deduped
+        items: limited
       });
 
-      const persistableItems: PersistableContentItem[] = deduped.map((article) => ({
+      const persistableItems: PersistableContentItem[] = limited.map((article) => ({
         article,
         termId,
         runId,
@@ -236,14 +260,14 @@ const processRecord = async (
         rawPayloadS3Key: rawS3Key
       }));
 
-      let insertedCanonicalUrls = new Set<string>(deduped.map((item) => item.canonicalUrl));
+      let insertedCanonicalUrls = new Set<string>(limited.map((item) => item.canonicalUrl));
       if (sqlStore) {
         const refs = await sqlStore.upsertContentItems(persistableItems);
         insertedCanonicalUrls = await sqlStore.upsertRunContentLinks(runId, term, refs);
       }
 
       const persistedByProvider = new Map<string, number>();
-      for (const article of deduped) {
+      for (const article of limited) {
         if (!insertedCanonicalUrls.has(article.canonicalUrl)) continue;
         persistedByProvider.set(article.provider, (persistedByProvider.get(article.provider) ?? 0) + 1);
       }
@@ -268,6 +292,7 @@ const processRecord = async (
       providersFailed += failedProviders;
       itemsRaw += merged.length;
       itemsDeduped += deduped.length;
+      itemsTrimmedByLimit += trimmedByLimit;
       itemsPersisted += persistedCount;
 
       termSummaries.push({
@@ -278,6 +303,8 @@ const processRecord = async (
         providers_failed: failedProviders,
         items_raw: merged.length,
         items_deduped: deduped.length,
+        items_trimmed_by_limit: trimmedByLimit,
+        items_after_limit: limited.length,
         items_persisted: persistedCount
       });
     }
@@ -293,8 +320,11 @@ const processRecord = async (
           providers_failed: providersFailed,
           items_raw: itemsRaw,
           items_deduped: itemsDeduped,
+          items_trimmed_by_limit: itemsTrimmedByLimit,
           items_persisted: itemsPersisted,
           terms_count: terms.length,
+          requested_max_articles_per_term: requestedMaxArticlesPerTerm,
+          effective_max_articles_per_term: effectiveMaxArticlesPerTerm,
           term_summaries: termSummaries
         }
       });
@@ -309,7 +339,10 @@ const processRecord = async (
       providers_failed: providersFailed,
       items_raw: itemsRaw,
       items_deduped: itemsDeduped,
+      items_trimmed_by_limit: itemsTrimmedByLimit,
       items_persisted: itemsPersisted,
+      requested_max_articles_per_term: requestedMaxArticlesPerTerm,
+      effective_max_articles_per_term: effectiveMaxArticlesPerTerm,
       term_summaries: termSummaries
     };
   } catch (error) {
@@ -328,9 +361,12 @@ const processRecord = async (
             providers_failed: providersFailed,
             items_raw: itemsRaw,
             items_deduped: itemsDeduped,
+            items_trimmed_by_limit: itemsTrimmedByLimit,
             items_persisted: itemsPersisted,
             terms_count: terms.length,
             terms_completed: termSummaries.length,
+            requested_max_articles_per_term: requestedMaxArticlesPerTerm,
+            effective_max_articles_per_term: effectiveMaxArticlesPerTerm,
             term_summaries: termSummaries
           }
         });

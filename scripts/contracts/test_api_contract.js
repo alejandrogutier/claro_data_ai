@@ -93,7 +93,32 @@ const ensureTokens = () => {
   };
 };
 
-const ensureContentItem = async (apiBase, analystToken, viewerToken) => {
+const ensureTerm = async (apiBase, adminToken) => {
+  const termName = "claro-feed-contract";
+  const createResponse = await request({
+    method: "POST",
+    url: `${apiBase}/v1/terms`,
+    token: adminToken,
+    body: {
+      name: termName,
+      language: "es",
+      max_articles_per_run: 2
+    }
+  });
+  assertCondition(createResponse.status === 201 || createResponse.status === 409, `POST /v1/terms expected 201/409, got ${createResponse.status}`);
+
+  const listResponse = await request({
+    method: "GET",
+    url: `${apiBase}/v1/terms?limit=100`,
+    token: adminToken
+  });
+  assertStatus(listResponse.status, 200, "GET /v1/terms");
+  const term = (listResponse.json?.items || []).find((item) => item.name === termName);
+  assertCondition(term && typeof term.id === "string" && UUID_REGEX.test(term.id), "term not found after create/list");
+  return term;
+};
+
+const ensureContentItem = async (apiBase, analystToken, viewerToken, term) => {
   const ingestionRunId = randomUUID();
   const ingestionResponse = await request({
     method: "POST",
@@ -101,9 +126,10 @@ const ensureContentItem = async (apiBase, analystToken, viewerToken) => {
     token: analystToken,
     body: {
       run_id: ingestionRunId,
-      terms: ["claro"],
+      term_ids: [term.id],
+      terms: [term.name],
       language: "es",
-      max_articles_per_term: 10
+      max_articles_per_term: 50
     }
   });
 
@@ -113,7 +139,7 @@ const ensureContentItem = async (apiBase, analystToken, viewerToken) => {
   for (let attempt = 1; attempt <= 30; attempt += 1) {
     const contentResponse = await request({
       method: "GET",
-      url: `${apiBase}/v1/content?limit=1`,
+      url: `${apiBase}/v1/content?limit=1&term_id=${term.id}&source_type=news`,
       token: viewerToken
     });
 
@@ -133,6 +159,34 @@ const ensureContentItem = async (apiBase, analystToken, viewerToken) => {
   }
 
   throw new Error("unreachable");
+};
+
+const waitNewsFeed = async (apiBase, viewerToken, termId) => {
+  for (let attempt = 1; attempt <= 30; attempt += 1) {
+    const feedResponse = await request({
+      method: "GET",
+      url: `${apiBase}/v1/feed/news?term_id=${termId}`,
+      token: viewerToken
+    });
+    assertStatus(feedResponse.status, 200, "GET /v1/feed/news");
+    assertCondition(Array.isArray(feedResponse.json?.items), "feed.items must be an array");
+    assertCondition(feedResponse.json.items.length <= 2, "feed must return at most 2 items");
+
+    if (feedResponse.json.items.length > 0) {
+      const rank = feedResponse.json.items.map((item) => {
+        const ts = item.published_at || item.created_at;
+        return Number.isFinite(Date.parse(ts)) ? Date.parse(ts) : 0;
+      });
+      for (let i = 1; i < rank.length; i += 1) {
+        assertCondition(rank[i - 1] >= rank[i], "feed items must be ordered by recency desc");
+      }
+      return feedResponse.json.items;
+    }
+
+    await sleep(5000);
+  }
+
+  throw new Error("No feed items available after waiting for ingestion");
 };
 
 const pickDifferentState = (state) => {
@@ -210,11 +264,14 @@ const main = async () => {
   const metaUnauthorized = await request({ method: "GET", url: `${apiBase}/v1/meta` });
   assertStatus(metaUnauthorized.status, 401, "GET /v1/meta without token");
 
+  const term = await ensureTerm(apiBase, adminToken);
+
   const metaViewer = await request({ method: "GET", url: `${apiBase}/v1/meta`, token: viewerToken });
   assertStatus(metaViewer.status, 200, "GET /v1/meta viewer");
   assertCondition(Array.isArray(metaViewer.json?.providers), "meta.providers must be array");
 
-  const contentItem = await ensureContentItem(apiBase, analystToken, viewerToken);
+  const contentItem = await ensureContentItem(apiBase, analystToken, viewerToken, term);
+  await waitNewsFeed(apiBase, viewerToken, term.id);
 
   const newState = await ensureStateChange(apiBase, analystToken, contentItem.id, contentItem.state);
 

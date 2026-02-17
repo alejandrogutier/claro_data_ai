@@ -57,12 +57,11 @@ Este contrato se usa junto a `UX_PLANNING.md` secciones `2.3`, `7.4`, `21`, `26`
 | CLARO-042 | checklist transversal | CLARO-037, CLARO-038, CLARO-035 | gate go-live completo y aprobado |
 
 ## Now
-- CLARO-029 | doing | P1 | Paridad contrato API + cliente tipado frontend | alinear OpenAPI con runtime real (`ingestion/content/meta`) y definir pipeline `openapi-typescript + wrapper fetch`
-- CLARO-031 | doing | P1 | Configuracion V1 social/news (8 pantallas) | conectores, cuentas, competidores, queries versionadas, taxonomias, alertas, plantillas y auditoria. UX_REF: 8, 21.1
-- CLARO-032 | doing | P1 | Monitoreo V1 (overview + feed Claro + feed competencia) | unificar social/news con KPIs de marca y separar competencia en feed dedicado. UX_REF: 9, 21.2
+- CLARO-031 | doing | P1 | Configuracion V1 social/news (8 pantallas) | MVP inicial listo: pantalla `Queries/Terminos` conectada a `TrackedTerm` con CRUD base; faltan 7 pantallas del modulo. UX_REF: 8, 21.1
+- CLARO-032 | doing | P1 | Monitoreo V1 (overview + feed Claro + feed competencia) | MVP inicial listo: `/app/feed` + `GET /v1/feed/news` con limite 2 por query; faltan overview y feed competencia. UX_REF: 9, 21.2
+- CLARO-044 | doing | P1 | CI/CD frontend en AWS Amplify via GitHub Actions | workflow de deploy en `main`, validacion de URL publicada y smoke post-deploy
 
 ## Next
-- CLARO-022 | todo | P1 | Frontend base React/Vite + auth Cognito Hosted UI | app shell, routing por flujo, guards RBAC (`Admin|Analyst|Viewer`), desktop-first responsive. UX_REF: 6, 7, 20, 26
 - CLARO-023 | todo | P1 | Dashboard Overview Salud de Marca | KPIs fijos (`BHS`, `SOV`, `sentimiento neto`, `riesgo activo`) y tendencia 7d. UX_REF: 9.1, 12, 21.2
 - CLARO-033 | todo | P1 | Motor de KPIs BHS/SOV severidad | `BHS=50/25/25`, SOV ponderado `calidad 60 + alcance 40`, severidad `SEV1>=80`, `SEV2>=60`. UX_REF: 12, 21.2
 - CLARO-034 | todo | P1 | Modulo Analisis (3 paginas) | overview marca, deep-dive por canal y benchmark competencia. UX_REF: 10, 21.3
@@ -118,6 +117,8 @@ Antes de mover `doing` -> `done`:
 - CLARO-006 | done | P1 | Adaptadores de proveedores de noticias de APIS.md | taxonomia de errores (`rate_limit|auth|timeout|upstream_5xx|schema|unknown`), truncado seguro de campos y metricas unificadas por proveedor
 - CLARO-007 | done | P1 | Dedupe por URL canonica + persistencia unificada | tabla `IngestionRunContentLink` + replay gate por `run_id` + verificacion de no-duplicado en replay sobre corrida `completed`
 - CLARO-021 | done | P1 | Blueprint UX/UI Analyst-first inicial | documento base creado y luego extendido a vision social+competencia+reportes
+- CLARO-022 | done | P1 | Frontend base React/Vite + auth Cognito Hosted UI | creado frontend en `frontend/` con shell, login Cognito PKCE, routing y guardas RBAC base (`Admin|Analyst|Viewer`)
+- CLARO-029 | done | P1 | Paridad contrato API + cliente tipado frontend | OpenAPI alineado con `/v1/feed/news`, script `openapi:types` y cliente FE tipado generado desde contrato
 - CLARO-009 | done | P2 | Overrides manuales de clasificacion | endpoint `PATCH /v1/content/{id}/classification` operativo con `manual-override-v1`, auditoria `before/after` y actor auto-upsert desde JWT
 - CLARO-010 | done | P1 | Maquina de estados active/archived/hidden + acciones bulk | endpoints single/bulk operativos con transiciones auditadas (`ContentStateEvent` + `AuditLog`) y manejo deterministico de errores (`404/409/422`)
 - CLARO-015 | done | P2 | Exportacion CSV controlada | flujo async real (`POST /v1/exports/csv` + `GET /v1/exports/{id}`), worker SQS, persistencia `ExportJob` y URL firmada en `completed`

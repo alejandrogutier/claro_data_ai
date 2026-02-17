@@ -10,3 +10,6 @@ provider_keys_secret_name = "claro-data-prod/provider-api-keys"
 app_config_secret_name    = "claro-data-prod/app-config"
 aws_credentials_secret_name = "claro-data-prod/aws-credentials"
 database_secret_name        = "claro-data-prod/database"
+cognito_additional_callback_urls = ["http://localhost:5173/auth/callback"]
+cognito_additional_logout_urls   = ["http://localhost:5173"]
+api_additional_allowed_origins   = ["http://localhost:5173"]

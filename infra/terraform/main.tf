@@ -175,8 +175,22 @@ resource "aws_cognito_user_pool_client" "web" {
     "ALLOW_ADMIN_USER_PASSWORD_AUTH"
   ]
   supported_identity_providers = ["COGNITO"]
-  callback_urls                = ["https://${aws_cloudfront_distribution.frontend.domain_name}"]
-  logout_urls                  = ["https://${aws_cloudfront_distribution.frontend.domain_name}"]
+  callback_urls = distinct(concat(
+    [
+      "https://${aws_cloudfront_distribution.frontend.domain_name}",
+      "https://${aws_cloudfront_distribution.frontend.domain_name}/auth/callback"
+    ],
+    var.cognito_additional_callback_urls
+  ))
+  logout_urls = distinct(concat(
+    ["https://${aws_cloudfront_distribution.frontend.domain_name}"],
+    var.cognito_additional_logout_urls
+  ))
+}
+
+resource "aws_cognito_user_pool_domain" "hosted_ui" {
+  domain       = local.cognito_domain_prefix
+  user_pool_id = aws_cognito_user_pool.main.id
 }
 
 resource "aws_cognito_user_group" "admin" {
@@ -419,6 +433,17 @@ resource "aws_lambda_function" "db_migration_runner" {
 resource "aws_apigatewayv2_api" "http" {
   name          = "${local.name_prefix}-http-api"
   protocol_type = "HTTP"
+
+  cors_configuration {
+    allow_headers = ["authorization", "content-type", "x-requested-with"]
+    allow_methods = ["GET", "POST", "PATCH", "OPTIONS"]
+    allow_origins = distinct(concat(
+      ["https://${aws_cloudfront_distribution.frontend.domain_name}"],
+      var.api_additional_allowed_origins
+    ))
+    expose_headers = ["content-type"]
+    max_age        = 3600
+  }
 }
 
 resource "aws_apigatewayv2_integration" "lambda" {
@@ -463,6 +488,7 @@ resource "aws_apigatewayv2_route" "private_routes" {
     "GET /v1/analysis/history",
     "POST /v1/exports/csv",
     "GET /v1/exports/{id}",
+    "GET /v1/feed/news",
     "GET /v1/meta"
   ])
 
@@ -614,7 +640,7 @@ resource "aws_cloudwatch_event_target" "ingestion_schedule" {
     requestedAt        = "eventbridge"
     terms              = []
     language           = "es"
-    maxArticlesPerTerm = 100
+    maxArticlesPerTerm = 2
   })
 }
 

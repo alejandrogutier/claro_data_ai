@@ -8,6 +8,7 @@ Provisionar la base AWS de `claro_data` para V1 en una sola region (`us-east-1`)
 - S3 frontend/raw/exports
 - CloudFront para SPA
 - Cognito (User Pool + Client + grupos)
+- Cognito Hosted UI domain
 - API Gateway HTTP + Lambda base
 - SQS + DLQ
 - Step Functions + EventBridge (15 min)
@@ -32,6 +33,7 @@ terraform apply -var-file=terraform.tfvars
 
 ## Notas
 - Baseline de arranque. Ajustar networking (CIDR/SG), dominios y politicas IAM por entorno real.
+- Desarrollo local frontend: callbacks/logout de `http://localhost:5173` habilitados por defecto en Cognito.
 - Secretos runtime en Secrets Manager (nombres configurables):
   - `claro-data-prod/provider-api-keys`
   - `claro-data-prod/app-config`

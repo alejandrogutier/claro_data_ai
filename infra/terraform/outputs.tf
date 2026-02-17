@@ -14,6 +14,10 @@ output "cognito_client_id" {
   value = aws_cognito_user_pool_client.web.id
 }
 
+output "cognito_hosted_ui_domain" {
+  value = "https://${aws_cognito_user_pool_domain.hosted_ui.domain}.auth.${var.aws_region}.amazoncognito.com"
+}
+
 output "aurora_endpoint" {
   value = aws_rds_cluster.aurora.endpoint
 }

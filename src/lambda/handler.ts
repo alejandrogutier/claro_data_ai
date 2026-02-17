@@ -13,6 +13,7 @@ import {
 import { createAnalysisRun, listAnalysisHistory } from "../routes/v1/analysis";
 import { createCsvExport, getCsvExport } from "../routes/v1/exports";
 import { getMeta } from "../routes/v1/meta";
+import { getNewsFeed } from "../routes/v1/feed";
 
 type RoleRule = {
   pattern: RegExp;
@@ -32,6 +33,7 @@ const roleRules: RoleRule[] = [
   { pattern: /^GET \/v1\/analysis\/history$/, requiredRole: "Viewer" },
   { pattern: /^POST \/v1\/exports\/csv$/, requiredRole: "Analyst" },
   { pattern: /^GET \/v1\/exports\/[^/]+$/, requiredRole: "Analyst" },
+  { pattern: /^GET \/v1\/feed\/news$/, requiredRole: "Viewer" },
   { pattern: /^GET \/v1\/meta$/, requiredRole: "Viewer" }
 ];
 
@@ -94,6 +96,7 @@ export const main = async (event: APIGatewayProxyEventV2) => {
 
   if (key === "POST /v1/exports/csv") return createCsvExport(event);
   if (key.match(/^GET \/v1\/exports\/[^/]+$/)) return getCsvExport(event);
+  if (key === "GET /v1/feed/news") return getNewsFeed(event);
   if (key === "GET /v1/meta") return getMeta();
 
   return json(404, {

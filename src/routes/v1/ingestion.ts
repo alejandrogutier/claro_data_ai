@@ -7,6 +7,7 @@ import { json, parseBody } from "../../core/http";
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const RUN_DUPLICATE_WINDOW_MS = 10 * 60 * 1000;
+const NEWS_MAX_ARTICLES_PER_TERM = 2;
 
 type IngestionRunBody = {
   run_id?: string;
@@ -109,7 +110,8 @@ export const createIngestionRun = async (event: APIGatewayProxyEventV2) => {
 
   const runId = runIdFromBody || randomUUID();
   const language = coerceLanguage(body.language);
-  const maxArticlesPerTerm = coerceLimit(body.max_articles_per_term);
+  const requestedMaxArticlesPerTerm = coerceLimit(body.max_articles_per_term);
+  const effectiveMaxArticlesPerTerm = Math.min(NEWS_MAX_ARTICLES_PER_TERM, requestedMaxArticlesPerTerm);
 
   let resolvedTermsFromIds: string[] = [];
   let activeTerms: string[] = [];
@@ -133,7 +135,8 @@ export const createIngestionRun = async (event: APIGatewayProxyEventV2) => {
           termIds: termIdsPayload.ids,
           terms: manualTerms,
           language,
-          maxArticlesPerTerm
+          maxArticlesPerTerm: effectiveMaxArticlesPerTerm,
+          requestedMaxArticlesPerTerm
         }
       });
     }
@@ -157,7 +160,8 @@ export const createIngestionRun = async (event: APIGatewayProxyEventV2) => {
           termIds: termIdsPayload.ids,
           terms: manualTerms,
           language,
-          maxArticlesPerTerm
+          maxArticlesPerTerm: effectiveMaxArticlesPerTerm,
+          requestedMaxArticlesPerTerm
         }
       });
     }
@@ -213,7 +217,8 @@ export const createIngestionRun = async (event: APIGatewayProxyEventV2) => {
     termIds: termIdsPayload.ids,
     terms,
     language,
-    maxArticlesPerTerm
+    maxArticlesPerTerm: effectiveMaxArticlesPerTerm,
+    requestedMaxArticlesPerTerm
   };
 
   try {

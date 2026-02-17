@@ -13,7 +13,7 @@ variable "environment" {
 variable "aws_region" {
   type        = string
   description = "Region AWS"
-  default     = "us-west-2"
+  default     = "us-east-1"
 }
 
 variable "owner" {
@@ -106,4 +106,28 @@ variable "ingestion_default_terms" {
   type        = string
   description = "Terminos por defecto para corridas programadas, separados por coma"
   default     = ""
+}
+
+variable "cognito_domain_prefix" {
+  type        = string
+  description = "Prefijo de dominio Cognito Hosted UI (debe ser unico globalmente). Si es null, se construye automaticamente."
+  default     = null
+}
+
+variable "cognito_additional_callback_urls" {
+  type        = list(string)
+  description = "URLs adicionales de callback para Cognito (incluye localhost para desarrollo)."
+  default     = ["http://localhost:5173/auth/callback"]
+}
+
+variable "cognito_additional_logout_urls" {
+  type        = list(string)
+  description = "URLs adicionales de logout para Cognito (incluye localhost para desarrollo)."
+  default     = ["http://localhost:5173"]
+}
+
+variable "api_additional_allowed_origins" {
+  type        = list(string)
+  description = "Origens adicionales permitidos por CORS en API Gateway."
+  default     = ["http://localhost:5173"]
 }

@@ -16,6 +16,7 @@ import {
 } from "./rdsData";
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const NEWS_FEED_LIMIT = 2;
 
 type CursorPayload = {
   created_at: string;
@@ -230,6 +231,60 @@ const parseJsonArrayString = (value: string | null): string[] | null => {
   } catch {
     return null;
   }
+};
+
+const parseContentRow = (row: SqlRow): ContentRecord | null => {
+  const id = fieldString(row, 0);
+  const sourceType = fieldString(row, 1) as "news" | "social" | null;
+  const termId = fieldString(row, 2);
+  const provider = fieldString(row, 3);
+  const sourceName = fieldString(row, 4);
+  const sourceId = fieldString(row, 5);
+  const state = fieldString(row, 6) as "active" | "archived" | "hidden" | null;
+  const title = fieldString(row, 7);
+  const summary = fieldString(row, 8);
+  const content = fieldString(row, 9);
+  const canonicalUrl = fieldString(row, 10);
+  const imageUrl = fieldString(row, 11);
+  const language = fieldString(row, 12);
+  const category = fieldString(row, 13);
+  const publishedAt = fieldDate(row, 14);
+  const sourceScoreRaw = fieldString(row, 15) ?? "0.5";
+  const rawPayloadS3Key = fieldString(row, 16);
+  const createdAt = fieldDate(row, 17);
+  const updatedAt = fieldDate(row, 18);
+  const categoria = fieldString(row, 19);
+  const sentimiento = fieldString(row, 20);
+
+  const sourceScore = Number.parseFloat(sourceScoreRaw);
+
+  if (!id || !sourceType || !provider || !state || !title || !canonicalUrl || !createdAt || !updatedAt) {
+    return null;
+  }
+
+  return {
+    id,
+    sourceType,
+    termId,
+    provider,
+    sourceName,
+    sourceId,
+    state,
+    title,
+    summary,
+    content,
+    canonicalUrl,
+    imageUrl,
+    language,
+    category,
+    publishedAt,
+    sourceScore: Number.isFinite(sourceScore) ? sourceScore : 0.5,
+    rawPayloadS3Key,
+    categoria,
+    sentimiento,
+    createdAt,
+    updatedAt
+  };
 };
 
 const toUserRole = (role: UserRole): UserRole => {
@@ -632,61 +687,7 @@ class AppStore {
     const hasNext = rows.length > safeLimit;
     const sliced = hasNext ? rows.slice(0, safeLimit) : rows;
 
-    const items = sliced
-      .map((row) => {
-        const id = fieldString(row, 0);
-        const sourceType = fieldString(row, 1) as "news" | "social" | null;
-        const termId = fieldString(row, 2);
-        const provider = fieldString(row, 3);
-        const sourceName = fieldString(row, 4);
-        const sourceId = fieldString(row, 5);
-        const state = fieldString(row, 6) as "active" | "archived" | "hidden" | null;
-        const title = fieldString(row, 7);
-        const summary = fieldString(row, 8);
-        const content = fieldString(row, 9);
-        const canonicalUrl = fieldString(row, 10);
-        const imageUrl = fieldString(row, 11);
-        const language = fieldString(row, 12);
-        const category = fieldString(row, 13);
-        const publishedAt = fieldDate(row, 14);
-        const sourceScoreRaw = fieldString(row, 15) ?? "0.5";
-        const rawPayloadS3Key = fieldString(row, 16);
-        const createdAt = fieldDate(row, 17);
-        const updatedAt = fieldDate(row, 18);
-        const categoria = fieldString(row, 19);
-        const sentimiento = fieldString(row, 20);
-
-        const sourceScore = Number.parseFloat(sourceScoreRaw);
-
-        if (!id || !sourceType || !provider || !state || !title || !canonicalUrl || !createdAt || !updatedAt) {
-          return null;
-        }
-
-        return {
-          id,
-          sourceType,
-          termId,
-          provider,
-          sourceName,
-          sourceId,
-          state,
-          title,
-          summary,
-          content,
-          canonicalUrl,
-          imageUrl,
-          language,
-          category,
-          publishedAt,
-          sourceScore: Number.isFinite(sourceScore) ? sourceScore : 0.5,
-          rawPayloadS3Key,
-          categoria,
-          sentimiento,
-          createdAt,
-          updatedAt
-        };
-      })
-      .filter((item): item is ContentRecord => item !== null);
+    const items = sliced.map(parseContentRow).filter((item): item is ContentRecord => item !== null);
 
     const last = items[items.length - 1];
     const nextCursor = hasNext && last ? encodeCursor({ created_at: last.createdAt.toISOString(), id: last.id }) : null;
@@ -696,6 +697,73 @@ class AppStore {
       nextCursor,
       hasNext
     };
+  }
+
+  async listNewsFeed(termId: string): Promise<ContentRecord[]> {
+    if (!isUuid(termId)) {
+      throw new AppStoreError("validation", "term_id must be a valid UUID");
+    }
+
+    const termResponse = await this.rds.execute(
+      `
+        SELECT "id"::text
+        FROM "public"."TrackedTerm"
+        WHERE "id" = CAST(:term_id AS UUID)
+        LIMIT 1
+      `,
+      [sqlUuid("term_id", termId)]
+    );
+
+    if (!fieldString(termResponse.records?.[0], 0)) {
+      throw new AppStoreError("not_found", "Tracked term not found");
+    }
+
+    const response = await this.rds.execute(
+      `
+        SELECT
+          ci."id"::text,
+          ci."sourceType"::text,
+          ci."termId"::text,
+          ci."provider",
+          ci."sourceName",
+          ci."sourceId",
+          ci."state"::text,
+          ci."title",
+          ci."summary",
+          ci."content",
+          ci."canonicalUrl",
+          ci."imageUrl",
+          ci."language",
+          ci."category",
+          ci."publishedAt",
+          ci."sourceScore"::text,
+          ci."rawPayloadS3Key",
+          ci."createdAt",
+          ci."updatedAt",
+          cls."categoria",
+          cls."sentimiento"
+        FROM "public"."ContentItem" ci
+        LEFT JOIN LATERAL (
+          SELECT c."categoria", c."sentimiento"
+          FROM "public"."Classification" c
+          WHERE c."contentItemId" = ci."id"
+          ORDER BY c."createdAt" DESC
+          LIMIT 1
+        ) cls ON TRUE
+        WHERE
+          ci."sourceType" = CAST('news' AS "public"."SourceType")
+          AND ci."termId" = CAST(:term_id AS UUID)
+          AND ci."state" = CAST('active' AS "public"."ContentState")
+        ORDER BY
+          COALESCE(ci."publishedAt", ci."createdAt") DESC,
+          ci."createdAt" DESC,
+          ci."id" DESC
+        LIMIT :limit
+      `,
+      [sqlUuid("term_id", termId), sqlLong("limit", NEWS_FEED_LIMIT)]
+    );
+
+    return (response.records ?? []).map(parseContentRow).filter((item): item is ContentRecord => item !== null);
   }
 
   async upsertUserFromPrincipal(principal: AuthPrincipal): Promise<string> {

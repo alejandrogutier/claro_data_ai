@@ -1,0 +1,46 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [developer, main]
+  push:
+    branches: [developer]
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install root dependencies
+        run: npm ci
+
+      - name: OpenAPI validate
+        run: npm run openapi:validate
+
+      - name: Generate API types
+        run: npm run openapi:types
+
+      - name: Backend type-check
+        run: npm run check
+
+      - name: Setup frontend deps
+        run: npm --prefix frontend ci
+
+      - name: Frontend type-check
+        run: npm run frontend:check
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+
+      - name: Terraform validate
+        run: |
+          terraform -chdir=infra/terraform init -backend=false
+          terraform -chdir=infra/terraform validate

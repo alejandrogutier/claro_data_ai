@@ -178,12 +178,25 @@ CODE="$(curl -s -o /tmp/claro-terms-create-viewer.json -w "%{http_code}" -X POST
 assert_code "$CODE" "403" "POST /v1/terms viewer denied"
 
 echo "[2] Terms create and list"
-CODE="$(curl -s -o /tmp/claro-terms-create-admin.json -w "%{http_code}" -X POST -H "Authorization: Bearer $ADMIN_TOKEN" -H "Content-Type: application/json" -d '{"name":"claro-smoke-term","language":"es","max_articles_per_run":50}' "$API_BASE/v1/terms")"
+SMOKE_TERM_NAME="claro-feed-smoke"
+CODE="$(curl -s -o /tmp/claro-terms-create-admin.json -w "%{http_code}" -X POST -H "Authorization: Bearer $ADMIN_TOKEN" -H "Content-Type: application/json" -d "{\"name\":\"$SMOKE_TERM_NAME\",\"language\":\"es\",\"max_articles_per_run\":2}" "$API_BASE/v1/terms")"
 assert_code_in "$CODE" "201" "409" "POST /v1/terms admin"
+
+SMOKE_TERM_ID="$(jq -r '.id // empty' /tmp/claro-terms-create-admin.json)"
+if [[ -z "$SMOKE_TERM_ID" || "$SMOKE_TERM_ID" == "null" ]]; then
+  CODE="$(curl -s -o /tmp/claro-terms-list-admin.json -w "%{http_code}" -H "Authorization: Bearer $ADMIN_TOKEN" "$API_BASE/v1/terms?limit=200")"
+  assert_code "$CODE" "200" "GET /v1/terms admin"
+  SMOKE_TERM_ID="$(jq -r --arg NAME "$SMOKE_TERM_NAME" '.items[] | select(.name==$NAME) | .id' /tmp/claro-terms-list-admin.json | head -n 1)"
+fi
+
+if [[ -z "$SMOKE_TERM_ID" ]]; then
+  echo "[FAIL] no term id available for smoke feed checks"
+  exit 1
+fi
 
 echo "[3] Ingestion replay idempotency"
 RUN_ID="$(node -e 'console.log(require("crypto").randomUUID())')"
-BODY="{\"run_id\":\"$RUN_ID\",\"terms\":[\"claro\"],\"language\":\"es\",\"max_articles_per_term\":20}"
+BODY="{\"run_id\":\"$RUN_ID\",\"term_ids\":[\"$SMOKE_TERM_ID\"],\"terms\":[\"$SMOKE_TERM_NAME\"],\"language\":\"es\",\"max_articles_per_term\":20}"
 
 RESP_1="$(curl -s -X POST "$API_BASE/v1/ingestion/runs" -H "Authorization: Bearer $ANALYST_TOKEN" -H "Content-Type: application/json" -d "$BODY")"
 echo "$RESP_1" >/tmp/claro-ingestion-replay-1.json
@@ -269,16 +282,42 @@ fi
 
 echo "[OK] replay on completed run did not duplicate run-content links"
 
+echo "[3.1] News feed limit and order"
+CODE="$(curl -s -o /tmp/claro-feed-news.json -w "%{http_code}" -H "Authorization: Bearer $VIEWER_TOKEN" "$API_BASE/v1/feed/news?term_id=$SMOKE_TERM_ID")"
+assert_code "$CODE" "200" "GET /v1/feed/news viewer"
+
+FEED_COUNT="$(jq -r '.items | length' /tmp/claro-feed-news.json)"
+if [[ "$FEED_COUNT" -gt 2 ]]; then
+  echo "[FAIL] /v1/feed/news returned more than 2 items: $FEED_COUNT"
+  cat /tmp/claro-feed-news.json
+  exit 1
+fi
+
+if [[ "$FEED_COUNT" -ge 2 ]]; then
+  FEED_ORDER_OK="$(jq -r '((.items[0].published_at // .items[0].created_at) >= (.items[1].published_at // .items[1].created_at)) | tostring' /tmp/claro-feed-news.json)"
+  if [[ "$FEED_ORDER_OK" != "true" ]]; then
+    echo "[FAIL] /v1/feed/news not ordered by recency desc"
+    cat /tmp/claro-feed-news.json
+    exit 1
+  fi
+fi
+
 echo "[4] Editorial operations (state, bulk, classification)"
-CODE="$(curl -s -o /tmp/claro-content-for-state.json -w "%{http_code}" -H "Authorization: Bearer $VIEWER_TOKEN" "$API_BASE/v1/content?limit=1")"
+CODE="$(curl -s -o /tmp/claro-content-for-state.json -w "%{http_code}" -H "Authorization: Bearer $VIEWER_TOKEN" "$API_BASE/v1/content?limit=1&term_id=$SMOKE_TERM_ID&source_type=news")"
 assert_code "$CODE" "200" "GET /v1/content for editorial tests"
 
 CONTENT_ID="$(jq -r '.items[0].id // empty' /tmp/claro-content-for-state.json)"
 CURRENT_STATE="$(jq -r '.items[0].state // empty' /tmp/claro-content-for-state.json)"
 if [[ -z "$CONTENT_ID" || -z "$CURRENT_STATE" ]]; then
-  echo "[FAIL] no content available for editorial tests"
-  cat /tmp/claro-content-for-state.json
-  exit 1
+  CODE="$(curl -s -o /tmp/claro-content-for-state.json -w "%{http_code}" -H "Authorization: Bearer $VIEWER_TOKEN" "$API_BASE/v1/content?limit=1")"
+  assert_code "$CODE" "200" "GET /v1/content fallback for editorial tests"
+  CONTENT_ID="$(jq -r '.items[0].id // empty' /tmp/claro-content-for-state.json)"
+  CURRENT_STATE="$(jq -r '.items[0].state // empty' /tmp/claro-content-for-state.json)"
+  if [[ -z "$CONTENT_ID" || -z "$CURRENT_STATE" ]]; then
+    echo "[FAIL] no content available for editorial tests"
+    cat /tmp/claro-content-for-state.json
+    exit 1
+  fi
 fi
 
 TARGET_STATE="active"
