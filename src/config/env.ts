@@ -15,6 +15,10 @@ export type AppEnv = {
   exportSignedUrlSeconds?: number;
   ingestionDefaultTerms?: string;
   incidentQueueUrl?: string;
+  reportQueueUrl?: string;
+  reportConfidenceThreshold?: number;
+  reportDefaultTimezone?: string;
+  reportEmailSender?: string;
   alertEmailRecipients?: string;
   alertCooldownMinutes?: number;
   alertSignalVersion?: string;
@@ -40,6 +44,12 @@ export const env: AppEnv = {
     : 900,
   ingestionDefaultTerms: process.env.INGESTION_DEFAULT_TERMS,
   incidentQueueUrl: process.env.INCIDENT_QUEUE_URL,
+  reportQueueUrl: process.env.REPORT_QUEUE_URL,
+  reportConfidenceThreshold: process.env.REPORT_CONFIDENCE_THRESHOLD
+    ? Number.parseFloat(process.env.REPORT_CONFIDENCE_THRESHOLD)
+    : 0.65,
+  reportDefaultTimezone: process.env.REPORT_DEFAULT_TIMEZONE ?? "America/Bogota",
+  reportEmailSender: process.env.REPORT_EMAIL_SENDER ?? process.env.ALERT_EMAIL_SENDER ?? process.env.SES_SENDER_EMAIL,
   alertEmailRecipients: process.env.ALERT_EMAIL_RECIPIENTS,
   alertCooldownMinutes: process.env.ALERT_COOLDOWN_MINUTES
     ? Number.parseInt(process.env.ALERT_COOLDOWN_MINUTES, 10)

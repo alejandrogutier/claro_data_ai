@@ -41,6 +41,22 @@ export type AuditItem = components["schemas"]["AuditItem"];
 export type AuditListResponse = components["schemas"]["AuditListResponse"];
 export type CreateAuditExportRequest = components["schemas"]["CreateAuditExportRequest"];
 export type AuditExportResponse = components["schemas"]["AuditExportResponse"];
+export type ReportRunStatus = components["schemas"]["ReportRunStatus"];
+export type ReportScheduleFrequency = components["schemas"]["ReportScheduleFrequency"];
+export type ReportRun = components["schemas"]["ReportRun"];
+export type ReportRunListResponse = components["schemas"]["ReportRunListResponse"];
+export type ReportRunDetailResponse = components["schemas"]["ReportRunDetailResponse"];
+export type CreateReportRunRequest = components["schemas"]["CreateReportRunRequest"];
+export type ReportRunAccepted = components["schemas"]["ReportRunAccepted"];
+export type ReportScheduleRunAccepted = components["schemas"]["ReportScheduleRunAccepted"];
+export type ReportTemplate = components["schemas"]["ReportTemplate"];
+export type ReportTemplatesResponse = components["schemas"]["ReportTemplatesResponse"];
+export type CreateReportTemplateRequest = components["schemas"]["CreateReportTemplateRequest"];
+export type UpdateReportTemplateRequest = components["schemas"]["UpdateReportTemplateRequest"];
+export type ReportSchedule = components["schemas"]["ReportSchedule"];
+export type ReportSchedulesResponse = components["schemas"]["ReportSchedulesResponse"];
+export type CreateReportScheduleRequest = components["schemas"]["CreateReportScheduleRequest"];
+export type UpdateReportScheduleRequest = components["schemas"]["UpdateReportScheduleRequest"];
 
 type HttpMethod = "GET" | "POST" | "PATCH";
 
@@ -198,6 +214,75 @@ export class ApiClient {
 
   evaluateMonitorIncidents(): Promise<IncidentEvaluationAccepted> {
     return this.request<IncidentEvaluationAccepted>("/v1/monitor/incidents/evaluate", {
+      method: "POST",
+      body: {}
+    });
+  }
+
+  listReportsCenter(query: {
+    limit?: number;
+    cursor?: string;
+    status?: ReportRunStatus;
+    template_id?: string;
+    from?: string;
+    to?: string;
+  }): Promise<ReportRunListResponse> {
+    return this.request<ReportRunListResponse>("/v1/reports/center", { query });
+  }
+
+  getReportRun(id: string): Promise<ReportRunDetailResponse> {
+    return this.request<ReportRunDetailResponse>(`/v1/reports/runs/${id}`);
+  }
+
+  createReportRun(payload: CreateReportRunRequest): Promise<ReportRunAccepted> {
+    return this.request<ReportRunAccepted>("/v1/reports/runs", {
+      method: "POST",
+      body: payload
+    });
+  }
+
+  listReportTemplates(limit = 100): Promise<ReportTemplatesResponse> {
+    return this.request<ReportTemplatesResponse>("/v1/reports/templates", {
+      query: { limit }
+    });
+  }
+
+  createReportTemplate(payload: CreateReportTemplateRequest): Promise<ReportTemplate> {
+    return this.request<ReportTemplate>("/v1/reports/templates", {
+      method: "POST",
+      body: payload
+    });
+  }
+
+  patchReportTemplate(id: string, payload: UpdateReportTemplateRequest): Promise<ReportTemplate> {
+    return this.request<ReportTemplate>(`/v1/reports/templates/${id}`, {
+      method: "PATCH",
+      body: payload
+    });
+  }
+
+  listReportSchedules(limit = 100): Promise<ReportSchedulesResponse> {
+    return this.request<ReportSchedulesResponse>("/v1/reports/schedules", {
+      query: { limit }
+    });
+  }
+
+  createReportSchedule(payload: CreateReportScheduleRequest): Promise<ReportSchedule> {
+    return this.request<ReportSchedule>("/v1/reports/schedules", {
+      method: "POST",
+      body: payload
+    });
+  }
+
+  patchReportSchedule(id: string, payload: UpdateReportScheduleRequest): Promise<ReportSchedule> {
+    return this.request<ReportSchedule>(`/v1/reports/schedules/${id}`, {
+      method: "PATCH",
+      body: payload
+    });
+  }
+
+  triggerReportScheduleRun(id: string): Promise<ReportScheduleRunAccepted> {
+    return this.request<ReportScheduleRunAccepted>(`/v1/reports/schedules/${id}/run`, {
       method: "POST",
       body: {}
     });

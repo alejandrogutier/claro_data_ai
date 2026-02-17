@@ -391,6 +391,160 @@ const ensureConfigSurface = async (apiBase, viewerToken, analystToken, adminToke
   );
 };
 
+const waitReportRunTerminal = async (apiBase, viewerToken, reportRunId) => {
+  for (let attempt = 1; attempt <= 60; attempt += 1) {
+    const response = await request({
+      method: "GET",
+      url: `${apiBase}/v1/reports/runs/${reportRunId}`,
+      token: viewerToken
+    });
+    assertStatus(response.status, 200, "GET /v1/reports/runs/{id}");
+
+    const status = response.json?.run?.status;
+    if (status === "completed" || status === "pending_review") {
+      return response.json;
+    }
+    if (status === "failed") {
+      throw new Error(`report run failed id=${reportRunId}`);
+    }
+
+    await sleep(5000);
+  }
+
+  throw new Error(`report run timeout id=${reportRunId}`);
+};
+
+const ensureReportsSurface = async (apiBase, viewerToken, analystToken, adminToken) => {
+  const viewerCreateTemplateDenied = await request({
+    method: "POST",
+    url: `${apiBase}/v1/reports/templates`,
+    token: viewerToken,
+    body: {
+      name: "viewer-denied-template"
+    }
+  });
+  assertStatus(viewerCreateTemplateDenied.status, 403, "POST /v1/reports/templates viewer denied");
+
+  const templateName = `report-template-contract-${Date.now()}`;
+  const createTemplate = await request({
+    method: "POST",
+    url: `${apiBase}/v1/reports/templates`,
+    token: adminToken,
+    body: {
+      name: templateName,
+      description: "Contract generated template",
+      is_active: true,
+      confidence_threshold: 0.65,
+      sections: {
+        blocks: ["kpi", "incidents", "top_content"]
+      },
+      filters: {}
+    }
+  });
+  assertStatus(createTemplate.status, 201, "POST /v1/reports/templates admin");
+  const templateId = createTemplate.json?.id;
+  assertCondition(typeof templateId === "string" && UUID_REGEX.test(templateId), "report template id invalid");
+
+  const listTemplates = await request({
+    method: "GET",
+    url: `${apiBase}/v1/reports/templates?limit=50`,
+    token: viewerToken
+  });
+  assertStatus(listTemplates.status, 200, "GET /v1/reports/templates viewer");
+  assertCondition(Array.isArray(listTemplates.json?.items), "report templates items must be array");
+
+  const patchTemplate = await request({
+    method: "PATCH",
+    url: `${apiBase}/v1/reports/templates/${templateId}`,
+    token: adminToken,
+    body: {
+      description: "Contract updated template",
+      confidence_threshold: 0.67
+    }
+  });
+  assertStatus(patchTemplate.status, 200, "PATCH /v1/reports/templates/{id} admin");
+
+  const createSchedule = await request({
+    method: "POST",
+    url: `${apiBase}/v1/reports/schedules`,
+    token: analystToken,
+    body: {
+      template_id: templateId,
+      name: `contract-schedule-${Date.now()}`,
+      enabled: true,
+      frequency: "daily",
+      day_of_week: null,
+      time_local: "08:00",
+      timezone: "America/Bogota",
+      recipients: []
+    }
+  });
+  assertStatus(createSchedule.status, 201, "POST /v1/reports/schedules analyst");
+  const scheduleId = createSchedule.json?.id;
+  assertCondition(typeof scheduleId === "string" && UUID_REGEX.test(scheduleId), "report schedule id invalid");
+
+  const listSchedules = await request({
+    method: "GET",
+    url: `${apiBase}/v1/reports/schedules?limit=50`,
+    token: viewerToken
+  });
+  assertStatus(listSchedules.status, 200, "GET /v1/reports/schedules viewer");
+  assertCondition(Array.isArray(listSchedules.json?.items), "report schedules items must be array");
+
+  const patchSchedule = await request({
+    method: "PATCH",
+    url: `${apiBase}/v1/reports/schedules/${scheduleId}`,
+    token: analystToken,
+    body: {
+      enabled: true,
+      frequency: "weekly",
+      day_of_week: 1,
+      time_local: "09:30"
+    }
+  });
+  assertStatus(patchSchedule.status, 200, "PATCH /v1/reports/schedules/{id} analyst");
+
+  const createRun = await request({
+    method: "POST",
+    url: `${apiBase}/v1/reports/runs`,
+    token: analystToken,
+    body: {
+      template_id: templateId
+    }
+  });
+  assertStatus(createRun.status, 202, "POST /v1/reports/runs analyst");
+  const reportRunId = createRun.json?.report_run_id;
+  assertCondition(typeof reportRunId === "string" && UUID_REGEX.test(reportRunId), "report_run_id invalid");
+
+  const triggerScheduleRun = await request({
+    method: "POST",
+    url: `${apiBase}/v1/reports/schedules/${scheduleId}/run`,
+    token: analystToken,
+    body: {}
+  });
+  assertStatus(triggerScheduleRun.status, 202, "POST /v1/reports/schedules/{id}/run analyst");
+  const scheduledRunId = triggerScheduleRun.json?.report_run_id;
+  assertCondition(typeof scheduledRunId === "string" && UUID_REGEX.test(scheduledRunId), "scheduled report_run_id invalid");
+
+  const center = await request({
+    method: "GET",
+    url: `${apiBase}/v1/reports/center?limit=30`,
+    token: viewerToken
+  });
+  assertStatus(center.status, 200, "GET /v1/reports/center viewer");
+  assertCondition(Array.isArray(center.json?.items), "reports center items must be array");
+
+  const terminal = await waitReportRunTerminal(apiBase, viewerToken, reportRunId);
+  assertCondition(
+    terminal?.run?.status === "completed" || terminal?.run?.status === "pending_review",
+    "report run terminal status invalid"
+  );
+
+  if (terminal?.run?.export_job_id) {
+    await waitExportCompleted(apiBase, analystToken, terminal.run.export_job_id);
+  }
+};
+
 const ensureMonitorOverview = async (apiBase, viewerToken) => {
   const unauthorized = await request({
     method: "GET",
@@ -616,6 +770,7 @@ const main = async () => {
   await ensureMonitorOverview(apiBase, viewerToken);
   await ensureAnalyzeSurface(apiBase, viewerToken);
   await ensureIncidentFlow(apiBase, viewerToken, analystToken);
+  await ensureReportsSurface(apiBase, viewerToken, analystToken, adminToken);
 
   await ensureConfigSurface(apiBase, viewerToken, analystToken, adminToken);
 

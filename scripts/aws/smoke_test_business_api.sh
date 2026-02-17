@@ -158,6 +158,41 @@ wait_export_completed() {
   exit 1
 }
 
+wait_report_run_terminal() {
+  local report_run_id="$1"
+  local token="$2"
+
+  for i in {1..60}; do
+    local code
+    code="$(curl -s -o /tmp/claro-report-run-status.json -w "%{http_code}" -H "Authorization: Bearer $token" "$API_BASE/v1/reports/runs/$report_run_id")"
+    if [[ "$code" != "200" ]]; then
+      echo "[FAIL] GET /v1/reports/runs/$report_run_id expected 200 got=$code"
+      cat /tmp/claro-report-run-status.json
+      exit 1
+    fi
+
+    local status
+    status="$(jq -r '.run.status // empty' /tmp/claro-report-run-status.json)"
+    local export_job_id
+    export_job_id="$(jq -r '.run.export_job_id // empty' /tmp/claro-report-run-status.json)"
+    if [[ "$status" == "completed" || "$status" == "pending_review" ]]; then
+      echo "$status|$export_job_id"
+      return 0
+    fi
+
+    if [[ "$status" == "failed" ]]; then
+      echo "[FAIL] report run failed id=$report_run_id"
+      cat /tmp/claro-report-run-status.json
+      exit 1
+    fi
+
+    sleep 5
+  done
+
+  echo "[FAIL] report run timeout report_run_id=$report_run_id"
+  exit 1
+}
+
 echo "[1] Health and auth checks"
 CODE="$(curl -s -o /tmp/claro-health.json -w "%{http_code}" "$API_BASE/v1/health")"
 assert_code "$CODE" "200" "GET /v1/health"
@@ -436,6 +471,68 @@ if [[ -z "$AUDIT_DOWNLOAD_URL" || "$AUDIT_DOWNLOAD_URL" == "null" ]]; then
   echo "[FAIL] audit export missing download_url"
   cat /tmp/claro-config-audit-export.json
   exit 1
+fi
+
+echo "[3.3] Reports V1 backend surface"
+TEMPLATE_NAME="smoke-report-template-$(date +%s)"
+CODE="$(curl -s -o /tmp/claro-report-template-create-viewer.json -w "%{http_code}" -X POST -H "Authorization: Bearer $VIEWER_TOKEN" -H "Content-Type: application/json" -d "{\"name\":\"$TEMPLATE_NAME\"}" "$API_BASE/v1/reports/templates")"
+assert_code "$CODE" "403" "POST /v1/reports/templates viewer denied"
+
+CODE="$(curl -s -o /tmp/claro-report-template-create-admin.json -w "%{http_code}" -X POST -H "Authorization: Bearer $ADMIN_TOKEN" -H "Content-Type: application/json" -d "{\"name\":\"$TEMPLATE_NAME\",\"description\":\"Smoke template\",\"is_active\":true,\"confidence_threshold\":0.65,\"sections\":{\"blocks\":[\"kpi\",\"incidents\"]},\"filters\":{}}" "$API_BASE/v1/reports/templates")"
+assert_code "$CODE" "201" "POST /v1/reports/templates admin"
+
+REPORT_TEMPLATE_ID="$(jq -r '.id // empty' /tmp/claro-report-template-create-admin.json)"
+if [[ -z "$REPORT_TEMPLATE_ID" ]]; then
+  echo "[FAIL] report template id missing"
+  cat /tmp/claro-report-template-create-admin.json
+  exit 1
+fi
+
+CODE="$(curl -s -o /tmp/claro-report-templates-list-viewer.json -w "%{http_code}" -H "Authorization: Bearer $VIEWER_TOKEN" "$API_BASE/v1/reports/templates?limit=30")"
+assert_code "$CODE" "200" "GET /v1/reports/templates viewer"
+
+CODE="$(curl -s -o /tmp/claro-report-template-patch-admin.json -w "%{http_code}" -X PATCH -H "Authorization: Bearer $ADMIN_TOKEN" -H "Content-Type: application/json" -d '{"description":"Smoke template updated","confidence_threshold":0.67}' "$API_BASE/v1/reports/templates/$REPORT_TEMPLATE_ID")"
+assert_code "$CODE" "200" "PATCH /v1/reports/templates/{id} admin"
+
+SCHEDULE_NAME="smoke-report-schedule-$(date +%s)"
+CODE="$(curl -s -o /tmp/claro-report-schedule-create-analyst.json -w "%{http_code}" -X POST -H "Authorization: Bearer $ANALYST_TOKEN" -H "Content-Type: application/json" -d "{\"template_id\":\"$REPORT_TEMPLATE_ID\",\"name\":\"$SCHEDULE_NAME\",\"enabled\":true,\"frequency\":\"daily\",\"day_of_week\":null,\"time_local\":\"08:00\",\"timezone\":\"America/Bogota\",\"recipients\":[]}" "$API_BASE/v1/reports/schedules")"
+assert_code "$CODE" "201" "POST /v1/reports/schedules analyst"
+
+REPORT_SCHEDULE_ID="$(jq -r '.id // empty' /tmp/claro-report-schedule-create-analyst.json)"
+if [[ -z "$REPORT_SCHEDULE_ID" ]]; then
+  echo "[FAIL] report schedule id missing"
+  cat /tmp/claro-report-schedule-create-analyst.json
+  exit 1
+fi
+
+CODE="$(curl -s -o /tmp/claro-report-schedules-list-viewer.json -w "%{http_code}" -H "Authorization: Bearer $VIEWER_TOKEN" "$API_BASE/v1/reports/schedules?limit=30")"
+assert_code "$CODE" "200" "GET /v1/reports/schedules viewer"
+
+CODE="$(curl -s -o /tmp/claro-report-schedule-patch-analyst.json -w "%{http_code}" -X PATCH -H "Authorization: Bearer $ANALYST_TOKEN" -H "Content-Type: application/json" -d '{"frequency":"weekly","day_of_week":1,"time_local":"09:30"}' "$API_BASE/v1/reports/schedules/$REPORT_SCHEDULE_ID")"
+assert_code "$CODE" "200" "PATCH /v1/reports/schedules/{id} analyst"
+
+CODE="$(curl -s -o /tmp/claro-report-run-create-analyst.json -w "%{http_code}" -X POST -H "Authorization: Bearer $ANALYST_TOKEN" -H "Content-Type: application/json" -d "{\"template_id\":\"$REPORT_TEMPLATE_ID\"}" "$API_BASE/v1/reports/runs")"
+assert_code "$CODE" "202" "POST /v1/reports/runs analyst"
+
+REPORT_RUN_ID="$(jq -r '.report_run_id // empty' /tmp/claro-report-run-create-analyst.json)"
+if [[ -z "$REPORT_RUN_ID" ]]; then
+  echo "[FAIL] report_run_id missing for manual run"
+  cat /tmp/claro-report-run-create-analyst.json
+  exit 1
+fi
+
+CODE="$(curl -s -o /tmp/claro-report-schedule-run-analyst.json -w "%{http_code}" -X POST -H "Authorization: Bearer $ANALYST_TOKEN" "$API_BASE/v1/reports/schedules/$REPORT_SCHEDULE_ID/run")"
+assert_code "$CODE" "202" "POST /v1/reports/schedules/{id}/run analyst"
+
+CODE="$(curl -s -o /tmp/claro-report-center-viewer.json -w "%{http_code}" -H "Authorization: Bearer $VIEWER_TOKEN" "$API_BASE/v1/reports/center?limit=30")"
+assert_code "$CODE" "200" "GET /v1/reports/center viewer"
+
+REPORT_TERMINAL="$(wait_report_run_terminal "$REPORT_RUN_ID" "$VIEWER_TOKEN")"
+REPORT_STATUS="${REPORT_TERMINAL%%|*}"
+REPORT_EXPORT_ID="${REPORT_TERMINAL#*|}"
+echo "[INFO] report run terminal status: $REPORT_STATUS"
+if [[ -n "$REPORT_EXPORT_ID" && "$REPORT_EXPORT_ID" != "null" ]]; then
+  wait_export_completed "$REPORT_EXPORT_ID" "$ANALYST_TOKEN"
 fi
 
 echo "[4] Editorial operations (state, bulk, classification)"

@@ -3,7 +3,7 @@
 ## Estado General
 - Proyecto: `Inception`
 - Avance global: `99%`
-- Historias en curso: `CLARO-035`
+- Historias en curso: `CLARO-012`
 - Ambiente objetivo inicial: `prod` unico en `us-east-1`
 - Ultima actualizacion: `2026-02-17`
 
@@ -38,7 +38,7 @@
 | CLARO-032 | done | 100% | Ninguno | Monitoreo V1 completo con rutas separadas (`/app/monitor/overview`, `/app/monitor/feed-claro`, `/app/monitor/feed-competencia`) y consumo de feed limitado a 2 noticias por query |
 | CLARO-033 | done | 100% | Ninguno | Motor KPI `kpi-v1` operativo (BHS 50/25/25, SOV calidad 60 + volumen 40, severidad `SEV1..SEV4`) con contract/smoke en verde |
 | CLARO-034 | done | 100% | Ninguno | Modulo de analisis desplegado con `/v1/analyze/overview|channel|competitors`, rutas `/app/analyze/*`, comparativo de ventana 7d y benchmark competencia validados en `contract:test` + smoke |
-| CLARO-035 | doing | 5% | Ninguno | Arranque del modulo reportes sobre base existente de export async (`/v1/exports/*`) y gobernanza/auditoria (`CLARO-039`) |
+| CLARO-035 | done | 100% | Ninguno | Modulo reportes V1 cerrado y desplegado: `/v1/reports/*` (templates/schedules/runs/center), worker+scheduler (SQS/EventBridge/Lambda), estado `pending_review` por confianza, pages `/app/reports/*` y validacion `contract:test` + smoke en AWS |
 | CLARO-036 | done | 100% | Ninguno | End-to-end desplegado: API `/v1/monitor/incidents*`, scheduler 15m (EventBridge->SQS->Lambda), triage con notas/auditoria/SLA y UI real en `/app/monitor/incidents` con redirect desde `/app/config/alerts` |
 | CLARO-037 | done | 100% | Ninguno | Superficie `/v1/connectors*` desplegada en runtime (`GET/PATCH/sync/runs`) y validada en `contract:test` + smoke business |
 | CLARO-038 | done | 100% | Ninguno | CRUD de cuentas, competidores y taxonomias desplegado y validado (`/v1/config/accounts|competitors|taxonomies/*`, respuestas `201/409`) |
@@ -74,6 +74,6 @@
 - Zona horaria operativa: `America/Bogota`.
 
 ## Proximos Hitos
-1. Implementar CLARO-035: modulo de reportes con plantillas y programacion.
-2. Completar CLARO-012 fuera de slice (scoring global configurable con impacto en ranking).
-3. Retomar CLARO-013 (analysis async real) reutilizando patron de jobs y trazabilidad aplicado en export.
+1. Completar CLARO-012 fuera de slice (scoring global configurable con impacto en ranking).
+2. Retomar CLARO-013 (analysis async real) reutilizando patron de jobs y trazabilidad aplicado en export.
+3. Activar CLARO-014 (digest SES 08:00) sobre base de identidades de correo verificadas.

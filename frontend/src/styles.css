@@ -493,6 +493,83 @@ textarea {
   gap: 10px;
 }
 
+.report-table-wrapper {
+  overflow-x: auto;
+}
+
+.report-table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 920px;
+}
+
+.report-table th,
+.report-table td {
+  text-align: left;
+  padding: 10px;
+  border-bottom: 1px solid var(--claro-border);
+  vertical-align: top;
+}
+
+.report-table thead th {
+  font-size: 0.82rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--claro-muted);
+}
+
+.report-table tr.is-selected {
+  background: rgba(227, 6, 19, 0.06);
+}
+
+.report-status {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 4px 10px;
+  font-size: 0.82rem;
+  font-weight: 700;
+  text-transform: lowercase;
+}
+
+.report-status-queued {
+  background: #eef2ff;
+  color: #2f3f96;
+}
+
+.report-status-running {
+  background: #fef6e4;
+  color: #8d5b00;
+}
+
+.report-status-completed {
+  background: #ecfdf3;
+  color: #177a3f;
+}
+
+.report-status-pending_review {
+  background: #fff5f6;
+  color: #9d111b;
+}
+
+.report-status-failed {
+  background: #ffe8ea;
+  color: #7d121b;
+}
+
+.code-block {
+  margin: 0;
+  overflow-x: auto;
+  max-height: 360px;
+  border: 1px solid var(--claro-border);
+  border-radius: 10px;
+  background: #fff;
+  padding: 12px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  font-size: 0.82rem;
+  line-height: 1.4;
+}
+
 .login-page,
 .screen-state {
   min-height: 100vh;

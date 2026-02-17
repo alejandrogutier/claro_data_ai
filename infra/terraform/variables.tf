@@ -96,6 +96,18 @@ variable "alert_signal_version" {
   default     = "alert-v1-weighted"
 }
 
+variable "report_confidence_threshold" {
+  type        = number
+  description = "Umbral minimo de confianza para publicar reportes sin revision manual."
+  default     = 0.65
+}
+
+variable "report_default_timezone" {
+  type        = string
+  description = "Zona horaria por defecto para programacion de reportes."
+  default     = "America/Bogota"
+}
+
 variable "provider_keys_secret_name" {
   type        = string
   description = "Nombre del secreto con API keys de proveedores"

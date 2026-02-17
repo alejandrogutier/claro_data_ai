@@ -57,7 +57,7 @@ Este contrato se usa junto a `UX_PLANNING.md` secciones `2.3`, `7.4`, `21`, `26`
 | CLARO-042 | checklist transversal | CLARO-037, CLARO-038, CLARO-035 | gate go-live completo y aprobado |
 
 ## Now
-- CLARO-035 | doing | P1 | Modulo Reportes (3 paginas) | arranque posterior al cierre de CLARO-034; se reutiliza export async `/v1/exports/*` y gobernanza de CLARO-039. UX_REF: 11, 16, 21.4
+- CLARO-012 | doing | P1 | Source scoring basico configurable | slice parcial aplicado en CLARO-036 para alertas (`riesgo_ponderado` y severidad por scope); falta llevarlo al ranking global y a ranking/analisis integral
 
 ## Next
 - CLARO-040 | todo | P2 | Loop de calidad semantica | falso positivo con reason code + recalibracion mensual de reglas/umbrales. UX_REF: 13
@@ -65,7 +65,6 @@ Este contrato se usa junto a `UX_PLANNING.md` secciones `2.3`, `7.4`, `21`, `26`
 - CLARO-042 | todo | P1 | Go-live readiness social | gate con 16 cuentas activas + set final competidores + UAT 2 semanas + piloto 1 semana. UX_REF: 23, 24, 27
 - CLARO-008 | todo | P1 | Clasificacion Bedrock Haiku 4.5 | implementar runtime Bedrock y persistencia
 - CLARO-011 | todo | P1 | Filtros avanzados + busqueda FTS + cursor pagination | completar endpoint detalle y comportamiento UX con calidad operativa
-- CLARO-012 | todo | P1 | Source scoring basico configurable | slice parcial aplicado en CLARO-036 para alertas (`riesgo_ponderado` y severidad por scope); falta llevarlo al ranking global
 - CLARO-013 | todo | P2 | Analisis agregado y trazabilidad de ejecuciones | narrativa, riesgos, oportunidades e historial de runs
 - CLARO-014 | todo | P2 | Digest diario SES 08:00 | resumen operativo diario con trazabilidad de corrida
 - CLARO-016 | todo | P2 | Dashboards operativos CloudWatch/X-Ray | tableros de operacion sin alertas push externas en V1
@@ -123,3 +122,4 @@ Antes de mover `doing` -> `done`:
 - CLARO-033 | done | P1 | Motor de KPIs BHS/SOV severidad | formulas `kpi-v1` implementadas en backend (BHS 50/25/25, SOV 60/40 calidad-volumen, severidad `SEV1..SEV4`) con contract/smoke en verde
 - CLARO-036 | done | P1 | Alertas e Incidentes | backend+frontend+infra desplegados: `/v1/monitor/incidents*`, worker programado 15m (EventBridge->SQS->Lambda), ruta `/app/monitor/incidents`, redirect `/app/config/alerts`, auditoria y SLA visible
 - CLARO-034 | done | P1 | Modulo Analisis (3 paginas) | backend `GET /v1/analyze/*` + rutas `/app/analyze/overview|channel|competitors` con drill-down funcional y validacion contract/smoke en runtime AWS
+- CLARO-035 | done | P1 | Modulo Reportes (3 paginas) | backend `/v1/reports/*` desplegado (templates/schedules/runs/center), worker+scheduler (SQS/EventBridge/Lambda), estado `pending_review` por confianza, pages `/app/reports/*` operativas y flow validado en `contract:test` + smoke business

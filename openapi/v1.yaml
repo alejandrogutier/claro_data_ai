@@ -18,6 +18,7 @@ tags:
   - name: Monitor
   - name: Analysis
   - name: Exports
+  - name: Reports
   - name: Meta
   - name: Connectors
   - name: Config
@@ -604,6 +605,268 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+  /v1/reports/center:
+    get:
+      tags: [Reports]
+      summary: Centro de reportes (historial de corridas)
+      parameters:
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+        - name: status
+          in: query
+          schema:
+            $ref: '#/components/schemas/ReportRunStatus'
+        - name: template_id
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: from
+          in: query
+          schema:
+            type: string
+            format: date-time
+        - name: to
+          in: query
+          schema:
+            type: string
+            format: date-time
+      responses:
+        '200':
+          description: Lista paginada de corridas
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReportRunListResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+  /v1/reports/runs/{id}:
+    get:
+      tags: [Reports]
+      summary: Detalle de corrida de reporte
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      responses:
+        '200':
+          description: Detalle de corrida
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReportRunDetailResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+  /v1/reports/runs:
+    post:
+      tags: [Reports]
+      summary: Ejecutar corrida manual de reporte por plantilla
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateReportRunRequest'
+      responses:
+        '202':
+          description: Corrida aceptada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReportRunAccepted'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+  /v1/reports/templates:
+    get:
+      tags: [Reports]
+      summary: Listar plantillas de reportes
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Lista de plantillas
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReportTemplatesResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+    post:
+      tags: [Reports]
+      summary: Crear plantilla de reporte
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateReportTemplateRequest'
+      responses:
+        '201':
+          description: Plantilla creada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReportTemplate'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+  /v1/reports/templates/{id}:
+    patch:
+      tags: [Reports]
+      summary: Actualizar plantilla de reporte
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateReportTemplateRequest'
+      responses:
+        '200':
+          description: Plantilla actualizada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReportTemplate'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+  /v1/reports/schedules:
+    get:
+      tags: [Reports]
+      summary: Listar schedules de reportes
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 300
+            default: 100
+      responses:
+        '200':
+          description: Lista de schedules
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReportSchedulesResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+    post:
+      tags: [Reports]
+      summary: Crear schedule de reporte
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateReportScheduleRequest'
+      responses:
+        '201':
+          description: Schedule creado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReportSchedule'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+  /v1/reports/schedules/{id}:
+    patch:
+      tags: [Reports]
+      summary: Actualizar schedule de reporte
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateReportScheduleRequest'
+      responses:
+        '200':
+          description: Schedule actualizado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReportSchedule'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+  /v1/reports/schedules/{id}/run:
+    post:
+      tags: [Reports]
+      summary: Disparar corrida manual para un schedule
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      responses:
+        '202':
+          description: Corrida aceptada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReportScheduleRunAccepted'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
         '422':
           $ref: '#/components/responses/ValidationError'
   /v1/meta:
@@ -1543,6 +1806,354 @@ components:
         filters:
           type: object
           additionalProperties: true
+    ReportRunStatus:
+      type: string
+      enum: [queued, running, completed, failed, pending_review]
+    ReportScheduleFrequency:
+      type: string
+      enum: [daily, weekly]
+    ReportTemplate:
+      type: object
+      required: [id, name, is_active, confidence_threshold, created_at, updated_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        description:
+          type: string
+          nullable: true
+        is_active:
+          type: boolean
+        sections:
+          type: object
+          additionalProperties: true
+        filters:
+          type: object
+          additionalProperties: true
+        confidence_threshold:
+          type: number
+          minimum: 0
+          maximum: 1
+        created_by_user_id:
+          type: string
+          format: uuid
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    ReportSchedule:
+      type: object
+      required: [id, template_id, template_name, name, enabled, frequency, time_local, timezone, next_run_at, created_at, updated_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        template_id:
+          type: string
+          format: uuid
+        template_name:
+          type: string
+        name:
+          type: string
+        enabled:
+          type: boolean
+        frequency:
+          $ref: '#/components/schemas/ReportScheduleFrequency'
+        day_of_week:
+          type: integer
+          minimum: 0
+          maximum: 6
+          nullable: true
+        time_local:
+          type: string
+          pattern: '^\\d{2}:\\d{2}$'
+        timezone:
+          type: string
+        recipients:
+          type: array
+          items:
+            type: string
+            format: email
+        next_run_at:
+          type: string
+          format: date-time
+        last_run_at:
+          type: string
+          format: date-time
+          nullable: true
+        created_by_user_id:
+          type: string
+          format: uuid
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    ReportRun:
+      type: object
+      required: [id, template_id, template_name, status, window_start, window_end, source_type, created_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        template_id:
+          type: string
+          format: uuid
+        template_name:
+          type: string
+        schedule_id:
+          type: string
+          format: uuid
+          nullable: true
+        schedule_name:
+          type: string
+          nullable: true
+        status:
+          $ref: '#/components/schemas/ReportRunStatus'
+        window_start:
+          type: string
+          format: date-time
+        window_end:
+          type: string
+          format: date-time
+        source_type:
+          $ref: '#/components/schemas/SourceType'
+        confidence:
+          type: number
+          minimum: 0
+          maximum: 1
+          nullable: true
+        summary:
+          type: object
+          additionalProperties: true
+        recommendations:
+          type: array
+          items:
+            type: string
+        blocked_reason:
+          type: string
+          nullable: true
+        export_job_id:
+          type: string
+          format: uuid
+          nullable: true
+        export_status:
+          type: string
+          enum: [queued, running, completed, failed]
+          nullable: true
+        download_url:
+          type: string
+          format: uri
+          nullable: true
+        requested_by_user_id:
+          type: string
+          format: uuid
+          nullable: true
+        requested_by_name:
+          type: string
+          nullable: true
+        requested_by_email:
+          type: string
+          format: email
+          nullable: true
+        idempotency_key:
+          type: string
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        started_at:
+          type: string
+          format: date-time
+          nullable: true
+        completed_at:
+          type: string
+          format: date-time
+          nullable: true
+        error_message:
+          type: string
+          nullable: true
+    ReportRunListResponse:
+      type: object
+      required: [items, page_info]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ReportRun'
+        page_info:
+          $ref: '#/components/schemas/PageInfo'
+    ReportRunDetailResponse:
+      type: object
+      required: [run, template]
+      properties:
+        run:
+          $ref: '#/components/schemas/ReportRun'
+        template:
+          $ref: '#/components/schemas/ReportTemplate'
+        schedule:
+          oneOf:
+            - $ref: '#/components/schemas/ReportSchedule'
+            - type: 'null'
+    ReportTemplatesResponse:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ReportTemplate'
+    ReportSchedulesResponse:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ReportSchedule'
+    CreateReportRunRequest:
+      type: object
+      required: [template_id]
+      properties:
+        template_id:
+          type: string
+          format: uuid
+    ReportRunAccepted:
+      type: object
+      required: [report_run_id, status]
+      properties:
+        report_run_id:
+          type: string
+          format: uuid
+        status:
+          type: string
+          const: queued
+    ReportScheduleRunAccepted:
+      type: object
+      required: [report_run_id, schedule_id, status]
+      properties:
+        report_run_id:
+          type: string
+          format: uuid
+        schedule_id:
+          type: string
+          format: uuid
+        status:
+          type: string
+          const: queued
+    CreateReportTemplateRequest:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+          minLength: 3
+          maxLength: 120
+        description:
+          type: string
+          maxLength: 600
+        is_active:
+          type: boolean
+          default: true
+        sections:
+          type: object
+          additionalProperties: true
+        filters:
+          type: object
+          additionalProperties: true
+        confidence_threshold:
+          type: number
+          minimum: 0
+          maximum: 1
+          default: 0.65
+    UpdateReportTemplateRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 3
+          maxLength: 120
+        description:
+          type: string
+          maxLength: 600
+          nullable: true
+        is_active:
+          type: boolean
+        sections:
+          type: object
+          additionalProperties: true
+        filters:
+          type: object
+          additionalProperties: true
+        confidence_threshold:
+          type: number
+          minimum: 0
+          maximum: 1
+    CreateReportScheduleRequest:
+      type: object
+      required: [template_id, name, frequency, time_local]
+      properties:
+        template_id:
+          type: string
+          format: uuid
+        name:
+          type: string
+          minLength: 3
+          maxLength: 120
+        enabled:
+          type: boolean
+          default: true
+        frequency:
+          $ref: '#/components/schemas/ReportScheduleFrequency'
+        day_of_week:
+          type: integer
+          minimum: 0
+          maximum: 6
+          nullable: true
+        time_local:
+          type: string
+          pattern: '^\\d{2}:\\d{2}$'
+        timezone:
+          type: string
+          default: America/Bogota
+        recipients:
+          type: array
+          items:
+            type: string
+            format: email
+    UpdateReportScheduleRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 3
+          maxLength: 120
+        enabled:
+          type: boolean
+        frequency:
+          $ref: '#/components/schemas/ReportScheduleFrequency'
+        day_of_week:
+          type: integer
+          minimum: 0
+          maximum: 6
+          nullable: true
+        time_local:
+          type: string
+          pattern: '^\\d{2}:\\d{2}$'
+        timezone:
+          type: string
+        recipients:
+          type: array
+          items:
+            type: string
+            format: email
     MonitorSeverity:
       type: string
       enum: [SEV1, SEV2, SEV3, SEV4]

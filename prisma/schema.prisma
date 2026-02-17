@@ -56,6 +56,19 @@ enum IncidentSeverity {
   SEV4
 }
 
+enum ReportRunStatus {
+  queued
+  running
+  completed
+  failed
+  pending_review
+}
+
+enum ReportScheduleFrequency {
+  daily
+  weekly
+}
+
 model User {
   id              String               @id @default(uuid()) @db.Uuid
   email           String               @unique
@@ -71,6 +84,9 @@ model User {
   connectorSyncRuns ConnectorSyncRun[]
   ownedIncidents  Incident[]           @relation("IncidentOwner")
   incidentNotes   IncidentNote[]       @relation("IncidentNoteAuthor")
+  reportTemplates ReportTemplate[]     @relation("ReportTemplateCreator")
+  reportSchedules ReportSchedule[]     @relation("ReportScheduleCreator")
+  reportRuns      ReportRun[]          @relation("ReportRunRequester")
 
   @@index([role])
 }
@@ -291,6 +307,7 @@ model ExportJob {
   createdAt        DateTime  @default(now())
   completedAt      DateTime?
   requestedByUser  User?     @relation(fields: [requestedByUserId], references: [id], onDelete: SetNull)
+  reportRuns       ReportRun[]
 
   @@index([status, createdAt])
 }
@@ -307,6 +324,78 @@ model DigestRun {
 
   @@unique([digestDate, recipientScope])
   @@index([status, createdAt])
+}
+
+model ReportTemplate {
+  id                  String           @id @default(uuid()) @db.Uuid
+  name                String
+  description         String?
+  isActive            Boolean          @default(true)
+  sections            Json?
+  filters             Json?
+  confidenceThreshold Decimal          @default(0.650) @db.Decimal(4, 3)
+  createdByUserId     String?          @db.Uuid
+  createdAt           DateTime         @default(now())
+  updatedAt           DateTime         @updatedAt
+  createdByUser       User?            @relation("ReportTemplateCreator", fields: [createdByUserId], references: [id], onDelete: SetNull)
+  schedules           ReportSchedule[]
+  runs                ReportRun[]
+
+  @@unique([name])
+  @@index([isActive, createdAt])
+}
+
+model ReportSchedule {
+  id              String                  @id @default(uuid()) @db.Uuid
+  templateId      String                  @db.Uuid
+  name            String
+  enabled         Boolean                 @default(true)
+  frequency       ReportScheduleFrequency
+  dayOfWeek       Int?
+  timeLocal       String
+  timezone        String                  @default("America/Bogota")
+  recipients      Json?
+  nextRunAt       DateTime
+  lastRunAt       DateTime?
+  createdByUserId String?                 @db.Uuid
+  createdAt       DateTime                @default(now())
+  updatedAt       DateTime                @updatedAt
+  template        ReportTemplate          @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  createdByUser   User?                   @relation("ReportScheduleCreator", fields: [createdByUserId], references: [id], onDelete: SetNull)
+  runs            ReportRun[]
+
+  @@index([enabled, nextRunAt])
+  @@index([templateId, createdAt])
+}
+
+model ReportRun {
+  id                String          @id @default(uuid()) @db.Uuid
+  templateId        String          @db.Uuid
+  scheduleId        String?         @db.Uuid
+  status            ReportRunStatus @default(queued)
+  windowStart       DateTime
+  windowEnd         DateTime
+  sourceType        SourceType      @default(news)
+  confidence        Decimal?        @db.Decimal(4, 3)
+  summary           Json?
+  recommendations   Json?
+  blockedReason     String?
+  exportJobId       String?         @db.Uuid
+  idempotencyKey    String?
+  requestedByUserId String?         @db.Uuid
+  createdAt         DateTime        @default(now())
+  startedAt         DateTime?
+  completedAt       DateTime?
+  errorMessage      String?
+  template          ReportTemplate  @relation(fields: [templateId], references: [id], onDelete: Restrict)
+  schedule          ReportSchedule? @relation(fields: [scheduleId], references: [id], onDelete: SetNull)
+  exportJob         ExportJob?      @relation(fields: [exportJobId], references: [id], onDelete: SetNull)
+  requestedByUser   User?           @relation("ReportRunRequester", fields: [requestedByUserId], references: [id], onDelete: SetNull)
+
+  @@unique([idempotencyKey])
+  @@index([status, createdAt])
+  @@index([templateId, createdAt])
+  @@index([scheduleId, createdAt])
 }
 
 model ConnectorConfig {

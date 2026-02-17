@@ -362,6 +362,33 @@ resource "aws_iam_role_policy_attachment" "lambda_incident_sqs" {
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaSQSQueueExecutionRole"
 }
 
+resource "aws_iam_role" "lambda_report" {
+  name = "${local.name_prefix}-lambda-report-role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Action = "sts:AssumeRole"
+        Effect = "Allow"
+        Principal = {
+          Service = "lambda.amazonaws.com"
+        }
+      }
+    ]
+  })
+}
+
+resource "aws_iam_role_policy_attachment" "lambda_report_basic" {
+  role       = aws_iam_role.lambda_report.name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+}
+
+resource "aws_iam_role_policy_attachment" "lambda_report_sqs" {
+  role       = aws_iam_role.lambda_report.name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaSQSQueueExecutionRole"
+}
+
 resource "aws_iam_role" "lambda_migrations" {
   name = "${local.name_prefix}-lambda-migrations-role"
 
@@ -419,6 +446,10 @@ resource "aws_lambda_function" "api" {
       EXPORT_BUCKET_NAME          = aws_s3_bucket.exports.bucket
       EXPORT_QUEUE_URL            = aws_sqs_queue.export.url
       INCIDENT_QUEUE_URL          = aws_sqs_queue.incident_evaluation.url
+      REPORT_QUEUE_URL            = aws_sqs_queue.report_generation.url
+      REPORT_CONFIDENCE_THRESHOLD = tostring(var.report_confidence_threshold)
+      REPORT_DEFAULT_TIMEZONE     = var.report_default_timezone
+      REPORT_EMAIL_SENDER         = var.ses_sender_email
       EXPORT_SIGNED_URL_SECONDS   = "900"
       INGESTION_DEFAULT_TERMS     = var.ingestion_default_terms
     }
@@ -501,6 +532,58 @@ resource "aws_lambda_function" "incident_worker" {
       ALERT_EMAIL_RECIPIENTS  = var.alert_email_recipients
       ALERT_COOLDOWN_MINUTES  = tostring(var.alert_cooldown_minutes)
       ALERT_SIGNAL_VERSION    = var.alert_signal_version
+    }
+  }
+}
+
+resource "aws_lambda_function" "report_worker" {
+  function_name = "${local.name_prefix}-report-worker"
+  role          = aws_iam_role.lambda_report.arn
+  runtime       = "nodejs22.x"
+  handler       = "reports/worker.main"
+
+  filename         = var.lambda_package_path
+  source_code_hash = filebase64sha256(var.lambda_package_path)
+
+  timeout     = 300
+  memory_size = 1024
+
+  environment {
+    variables = {
+      APP_ENV                     = var.environment
+      DB_RESOURCE_ARN             = aws_rds_cluster.aurora.arn
+      DB_SECRET_ARN               = data.aws_secretsmanager_secret.database.arn
+      DB_NAME                     = var.db_name
+      EXPORT_QUEUE_URL            = aws_sqs_queue.export.url
+      EXPORT_BUCKET_NAME          = aws_s3_bucket.exports.bucket
+      REPORT_CONFIDENCE_THRESHOLD = tostring(var.report_confidence_threshold)
+      REPORT_DEFAULT_TIMEZONE     = var.report_default_timezone
+      REPORT_EMAIL_SENDER         = var.ses_sender_email
+      ALERT_EMAIL_SENDER          = var.ses_sender_email
+    }
+  }
+}
+
+resource "aws_lambda_function" "report_scheduler" {
+  function_name = "${local.name_prefix}-report-scheduler"
+  role          = aws_iam_role.lambda_report.arn
+  runtime       = "nodejs22.x"
+  handler       = "reports/scheduler.main"
+
+  filename         = var.lambda_package_path
+  source_code_hash = filebase64sha256(var.lambda_package_path)
+
+  timeout     = 120
+  memory_size = 512
+
+  environment {
+    variables = {
+      APP_ENV                 = var.environment
+      DB_RESOURCE_ARN         = aws_rds_cluster.aurora.arn
+      DB_SECRET_ARN           = data.aws_secretsmanager_secret.database.arn
+      DB_NAME                 = var.db_name
+      REPORT_QUEUE_URL        = aws_sqs_queue.report_generation.url
+      REPORT_DEFAULT_TIMEZONE = var.report_default_timezone
     }
   }
 }
@@ -596,6 +679,16 @@ resource "aws_apigatewayv2_route" "private_routes" {
     "GET /v1/analysis/history",
     "POST /v1/exports/csv",
     "GET /v1/exports/{id}",
+    "GET /v1/reports/center",
+    "GET /v1/reports/runs/{id}",
+    "POST /v1/reports/runs",
+    "GET /v1/reports/templates",
+    "POST /v1/reports/templates",
+    "PATCH /v1/reports/templates/{id}",
+    "GET /v1/reports/schedules",
+    "POST /v1/reports/schedules",
+    "PATCH /v1/reports/schedules/{id}",
+    "POST /v1/reports/schedules/{id}/run",
     "GET /v1/feed/news",
     "GET /v1/monitor/overview",
     "GET /v1/monitor/incidents",
@@ -734,6 +827,29 @@ resource "aws_lambda_event_source_mapping" "incident_queue_to_worker" {
   batch_size       = 1
 }
 
+resource "aws_sqs_queue" "report_generation_dlq" {
+  name                      = "${local.name_prefix}-report-generation-dlq"
+  message_retention_seconds = 1209600
+  kms_master_key_id         = aws_kms_key.app.arn
+}
+
+resource "aws_sqs_queue" "report_generation" {
+  name                       = "${local.name_prefix}-report-generation"
+  visibility_timeout_seconds = 300
+  message_retention_seconds  = 345600
+  kms_master_key_id          = aws_kms_key.app.arn
+  redrive_policy = jsonencode({
+    deadLetterTargetArn = aws_sqs_queue.report_generation_dlq.arn
+    maxReceiveCount     = 5
+  })
+}
+
+resource "aws_lambda_event_source_mapping" "report_queue_to_worker" {
+  event_source_arn = aws_sqs_queue.report_generation.arn
+  function_name    = aws_lambda_function.report_worker.arn
+  batch_size       = 1
+}
+
 resource "aws_cloudwatch_event_rule" "incident_evaluation_schedule" {
   name                = "${local.name_prefix}-incident-evaluation-every-15m"
   schedule_expression = "rate(15 minutes)"
@@ -747,6 +863,29 @@ resource "aws_cloudwatch_event_target" "incident_evaluation_schedule" {
     trigger_type = "scheduled"
     requested_at = "eventbridge"
   })
+}
+
+resource "aws_cloudwatch_event_rule" "report_schedule" {
+  name                = "${local.name_prefix}-report-scheduler-every-15m"
+  schedule_expression = "rate(15 minutes)"
+}
+
+resource "aws_cloudwatch_event_target" "report_schedule" {
+  rule      = aws_cloudwatch_event_rule.report_schedule.name
+  target_id = "report-scheduler-lambda"
+  arn       = aws_lambda_function.report_scheduler.arn
+  input = jsonencode({
+    trigger_type = "scheduled"
+    requested_at = "eventbridge"
+  })
+}
+
+resource "aws_lambda_permission" "report_scheduler_eventbridge" {
+  statement_id  = "AllowExecutionFromEventBridgeReportScheduler"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.report_scheduler.function_name
+  principal     = "events.amazonaws.com"
+  source_arn    = aws_cloudwatch_event_rule.report_schedule.arn
 }
 
 resource "aws_iam_role" "step_functions" {

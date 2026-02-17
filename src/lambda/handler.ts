@@ -13,6 +13,18 @@ import {
 import { createAnalysisRun, listAnalysisHistory } from "../routes/v1/analysis";
 import { getAnalyzeChannel, getAnalyzeCompetitors, getAnalyzeOverview } from "../routes/v1/analyze";
 import { createCsvExport, getCsvExport } from "../routes/v1/exports";
+import {
+  createReportRun,
+  createReportSchedule,
+  createReportTemplate,
+  getReportRun,
+  listReportsCenter,
+  listReportSchedules,
+  listReportTemplates,
+  patchReportSchedule,
+  patchReportTemplate,
+  triggerReportScheduleRun
+} from "../routes/v1/reports";
 import { getMeta } from "../routes/v1/meta";
 import { getNewsFeed } from "../routes/v1/feed";
 import {
@@ -62,6 +74,16 @@ const roleRules: RoleRule[] = [
   { pattern: /^GET \/v1\/analysis\/history$/, requiredRole: "Viewer" },
   { pattern: /^POST \/v1\/exports\/csv$/, requiredRole: "Analyst" },
   { pattern: /^GET \/v1\/exports\/[^/]+$/, requiredRole: "Analyst" },
+  { pattern: /^GET \/v1\/reports\/center$/, requiredRole: "Viewer" },
+  { pattern: /^GET \/v1\/reports\/runs\/[^/]+$/, requiredRole: "Viewer" },
+  { pattern: /^POST \/v1\/reports\/runs$/, requiredRole: "Analyst" },
+  { pattern: /^GET \/v1\/reports\/templates$/, requiredRole: "Viewer" },
+  { pattern: /^POST \/v1\/reports\/templates$/, requiredRole: "Admin" },
+  { pattern: /^PATCH \/v1\/reports\/templates\/[^/]+$/, requiredRole: "Admin" },
+  { pattern: /^GET \/v1\/reports\/schedules$/, requiredRole: "Viewer" },
+  { pattern: /^POST \/v1\/reports\/schedules$/, requiredRole: "Analyst" },
+  { pattern: /^PATCH \/v1\/reports\/schedules\/[^/]+$/, requiredRole: "Analyst" },
+  { pattern: /^POST \/v1\/reports\/schedules\/[^/]+\/run$/, requiredRole: "Analyst" },
   { pattern: /^GET \/v1\/feed\/news$/, requiredRole: "Viewer" },
   { pattern: /^GET \/v1\/monitor\/overview$/, requiredRole: "Viewer" },
   { pattern: /^GET \/v1\/monitor\/incidents$/, requiredRole: "Viewer" },
@@ -150,6 +172,16 @@ export const main = async (event: APIGatewayProxyEventV2) => {
 
   if (key === "POST /v1/exports/csv") return createCsvExport(event);
   if (key.match(/^GET \/v1\/exports\/[^/]+$/)) return getCsvExport(event);
+  if (key === "GET /v1/reports/center") return listReportsCenter(event);
+  if (key.match(/^GET \/v1\/reports\/runs\/[^/]+$/)) return getReportRun(event);
+  if (key === "POST /v1/reports/runs") return createReportRun(event);
+  if (key === "GET /v1/reports/templates") return listReportTemplates(event);
+  if (key === "POST /v1/reports/templates") return createReportTemplate(event);
+  if (key.match(/^PATCH \/v1\/reports\/templates\/[^/]+$/)) return patchReportTemplate(event);
+  if (key === "GET /v1/reports/schedules") return listReportSchedules(event);
+  if (key === "POST /v1/reports/schedules") return createReportSchedule(event);
+  if (key.match(/^PATCH \/v1\/reports\/schedules\/[^/]+$/)) return patchReportSchedule(event);
+  if (key.match(/^POST \/v1\/reports\/schedules\/[^/]+\/run$/)) return triggerReportScheduleRun(event);
   if (key === "GET /v1/feed/news") return getNewsFeed(event);
   if (key === "GET /v1/monitor/overview") return getMonitorOverview();
   if (key === "GET /v1/monitor/incidents") return listMonitorIncidents(event);

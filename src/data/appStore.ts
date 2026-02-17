@@ -209,7 +209,7 @@ type ClassificationRecord = {
 };
 
 type CreateExportJobInput = {
-  requestedByUserId: string;
+  requestedByUserId?: string | null;
   filters: Record<string, unknown>;
 };
 
@@ -1233,7 +1233,7 @@ class AppStore {
       `,
       [
         sqlUuid("id", randomUUID()),
-        sqlUuid("requested_by_user_id", input.requestedByUserId),
+        sqlUuid("requested_by_user_id", input.requestedByUserId ?? null),
         sqlJson("filters", input.filters)
       ]
     );

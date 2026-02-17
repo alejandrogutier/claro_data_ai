@@ -1005,6 +1005,416 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/reports/center": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Centro de reportes (historial de corridas) */
+        get: {
+            parameters: {
+                query?: {
+                    /** @description Cursor opaco para paginacion */
+                    cursor?: components["parameters"]["Cursor"];
+                    limit?: components["parameters"]["Limit"];
+                    status?: components["schemas"]["ReportRunStatus"];
+                    template_id?: string;
+                    from?: string;
+                    to?: string;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Lista paginada de corridas */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ReportRunListResponse"];
+                    };
+                };
+                401: components["responses"]["Unauthorized"];
+                403: components["responses"]["Forbidden"];
+                422: components["responses"]["ValidationError"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/reports/runs/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Detalle de corrida de reporte */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: components["parameters"]["Id"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Detalle de corrida */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ReportRunDetailResponse"];
+                    };
+                };
+                401: components["responses"]["Unauthorized"];
+                403: components["responses"]["Forbidden"];
+                404: components["responses"]["NotFound"];
+                422: components["responses"]["ValidationError"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/reports/runs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Ejecutar corrida manual de reporte por plantilla */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["CreateReportRunRequest"];
+                };
+            };
+            responses: {
+                /** @description Corrida aceptada */
+                202: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ReportRunAccepted"];
+                    };
+                };
+                401: components["responses"]["Unauthorized"];
+                403: components["responses"]["Forbidden"];
+                404: components["responses"]["NotFound"];
+                409: components["responses"]["Conflict"];
+                422: components["responses"]["ValidationError"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/reports/templates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Listar plantillas de reportes */
+        get: {
+            parameters: {
+                query?: {
+                    limit?: components["parameters"]["Limit"];
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Lista de plantillas */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ReportTemplatesResponse"];
+                    };
+                };
+                401: components["responses"]["Unauthorized"];
+                403: components["responses"]["Forbidden"];
+                422: components["responses"]["ValidationError"];
+            };
+        };
+        put?: never;
+        /** Crear plantilla de reporte */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["CreateReportTemplateRequest"];
+                };
+            };
+            responses: {
+                /** @description Plantilla creada */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ReportTemplate"];
+                    };
+                };
+                401: components["responses"]["Unauthorized"];
+                403: components["responses"]["Forbidden"];
+                409: components["responses"]["Conflict"];
+                422: components["responses"]["ValidationError"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/reports/templates/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Actualizar plantilla de reporte */
+        patch: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: components["parameters"]["Id"];
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["UpdateReportTemplateRequest"];
+                };
+            };
+            responses: {
+                /** @description Plantilla actualizada */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ReportTemplate"];
+                    };
+                };
+                401: components["responses"]["Unauthorized"];
+                403: components["responses"]["Forbidden"];
+                404: components["responses"]["NotFound"];
+                409: components["responses"]["Conflict"];
+                422: components["responses"]["ValidationError"];
+            };
+        };
+        trace?: never;
+    };
+    "/v1/reports/schedules": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Listar schedules de reportes */
+        get: {
+            parameters: {
+                query?: {
+                    limit?: number;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Lista de schedules */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ReportSchedulesResponse"];
+                    };
+                };
+                401: components["responses"]["Unauthorized"];
+                403: components["responses"]["Forbidden"];
+                422: components["responses"]["ValidationError"];
+            };
+        };
+        put?: never;
+        /** Crear schedule de reporte */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["CreateReportScheduleRequest"];
+                };
+            };
+            responses: {
+                /** @description Schedule creado */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ReportSchedule"];
+                    };
+                };
+                401: components["responses"]["Unauthorized"];
+                403: components["responses"]["Forbidden"];
+                404: components["responses"]["NotFound"];
+                409: components["responses"]["Conflict"];
+                422: components["responses"]["ValidationError"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/reports/schedules/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Actualizar schedule de reporte */
+        patch: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: components["parameters"]["Id"];
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["UpdateReportScheduleRequest"];
+                };
+            };
+            responses: {
+                /** @description Schedule actualizado */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ReportSchedule"];
+                    };
+                };
+                401: components["responses"]["Unauthorized"];
+                403: components["responses"]["Forbidden"];
+                404: components["responses"]["NotFound"];
+                409: components["responses"]["Conflict"];
+                422: components["responses"]["ValidationError"];
+            };
+        };
+        trace?: never;
+    };
+    "/v1/reports/schedules/{id}/run": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Disparar corrida manual para un schedule */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: components["parameters"]["Id"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Corrida aceptada */
+                202: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ReportScheduleRunAccepted"];
+                    };
+                };
+                401: components["responses"]["Unauthorized"];
+                403: components["responses"]["Forbidden"];
+                404: components["responses"]["NotFound"];
+                409: components["responses"]["Conflict"];
+                422: components["responses"]["ValidationError"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/meta": {
         parameters: {
             query?: never;
@@ -1903,6 +2313,176 @@ export interface components {
             filters?: {
                 [key: string]: unknown;
             };
+        };
+        /** @enum {string} */
+        ReportRunStatus: "queued" | "running" | "completed" | "failed" | "pending_review";
+        /** @enum {string} */
+        ReportScheduleFrequency: "daily" | "weekly";
+        ReportTemplate: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            description?: string | null;
+            is_active: boolean;
+            sections?: {
+                [key: string]: unknown;
+            };
+            filters?: {
+                [key: string]: unknown;
+            };
+            confidence_threshold: number;
+            /** Format: uuid */
+            created_by_user_id?: string | null;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+        };
+        ReportSchedule: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            template_id: string;
+            template_name: string;
+            name: string;
+            enabled: boolean;
+            frequency: components["schemas"]["ReportScheduleFrequency"];
+            day_of_week?: number | null;
+            time_local: string;
+            timezone: string;
+            recipients?: string[];
+            /** Format: date-time */
+            next_run_at: string;
+            /** Format: date-time */
+            last_run_at?: string | null;
+            /** Format: uuid */
+            created_by_user_id?: string | null;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+        };
+        ReportRun: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            template_id: string;
+            template_name: string;
+            /** Format: uuid */
+            schedule_id?: string | null;
+            schedule_name?: string | null;
+            status: components["schemas"]["ReportRunStatus"];
+            /** Format: date-time */
+            window_start: string;
+            /** Format: date-time */
+            window_end: string;
+            source_type: components["schemas"]["SourceType"];
+            confidence?: number | null;
+            summary?: {
+                [key: string]: unknown;
+            };
+            recommendations?: string[];
+            blocked_reason?: string | null;
+            /** Format: uuid */
+            export_job_id?: string | null;
+            /** @enum {string|null} */
+            export_status?: "queued" | "running" | "completed" | "failed" | null;
+            /** Format: uri */
+            download_url?: string | null;
+            /** Format: uuid */
+            requested_by_user_id?: string | null;
+            requested_by_name?: string | null;
+            /** Format: email */
+            requested_by_email?: string | null;
+            idempotency_key?: string | null;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            started_at?: string | null;
+            /** Format: date-time */
+            completed_at?: string | null;
+            error_message?: string | null;
+        };
+        ReportRunListResponse: {
+            items: components["schemas"]["ReportRun"][];
+            page_info: components["schemas"]["PageInfo"];
+        };
+        ReportRunDetailResponse: {
+            run: components["schemas"]["ReportRun"];
+            template: components["schemas"]["ReportTemplate"];
+            schedule?: components["schemas"]["ReportSchedule"] | null;
+        };
+        ReportTemplatesResponse: {
+            items: components["schemas"]["ReportTemplate"][];
+        };
+        ReportSchedulesResponse: {
+            items: components["schemas"]["ReportSchedule"][];
+        };
+        CreateReportRunRequest: {
+            /** Format: uuid */
+            template_id: string;
+        };
+        ReportRunAccepted: {
+            /** Format: uuid */
+            report_run_id: string;
+            /** @constant */
+            status: "queued";
+        };
+        ReportScheduleRunAccepted: {
+            /** Format: uuid */
+            report_run_id: string;
+            /** Format: uuid */
+            schedule_id: string;
+            /** @constant */
+            status: "queued";
+        };
+        CreateReportTemplateRequest: {
+            name: string;
+            description?: string;
+            /** @default true */
+            is_active: boolean;
+            sections?: {
+                [key: string]: unknown;
+            };
+            filters?: {
+                [key: string]: unknown;
+            };
+            /** @default 0.65 */
+            confidence_threshold: number;
+        };
+        UpdateReportTemplateRequest: {
+            name?: string;
+            description?: string | null;
+            is_active?: boolean;
+            sections?: {
+                [key: string]: unknown;
+            };
+            filters?: {
+                [key: string]: unknown;
+            };
+            confidence_threshold?: number;
+        };
+        CreateReportScheduleRequest: {
+            /** Format: uuid */
+            template_id: string;
+            name: string;
+            /** @default true */
+            enabled: boolean;
+            frequency: components["schemas"]["ReportScheduleFrequency"];
+            day_of_week?: number | null;
+            time_local: string;
+            /** @default America/Bogota */
+            timezone: string;
+            recipients?: string[];
+        };
+        UpdateReportScheduleRequest: {
+            name?: string;
+            enabled?: boolean;
+            frequency?: components["schemas"]["ReportScheduleFrequency"];
+            day_of_week?: number | null;
+            time_local?: string;
+            timezone?: string;
+            recipients?: string[];
         };
         /** @enum {string} */
         MonitorSeverity: "SEV1" | "SEV2" | "SEV3" | "SEV4";

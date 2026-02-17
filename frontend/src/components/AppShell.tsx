@@ -39,6 +39,17 @@ export const AppShell = () => {
             Benchmark Competencia
           </NavLink>
 
+          <p className="nav-group-title">Reportes</p>
+          <NavLink to="/app/reports/center" className="nav-link">
+            Centro de Reportes
+          </NavLink>
+          <NavLink to="/app/reports/templates" className="nav-link">
+            Plantillas
+          </NavLink>
+          <NavLink to="/app/reports/schedules" className="nav-link">
+            Programacion
+          </NavLink>
+
           <p className="nav-group-title">Configuracion</p>
           <NavLink to="/app/config/connectors" className="nav-link">
             Conectores
@@ -54,9 +65,6 @@ export const AppShell = () => {
           </NavLink>
           <NavLink to="/app/config/taxonomy" className="nav-link">
             Taxonomias
-          </NavLink>
-          <NavLink to="/app/config/report-templates" className="nav-link">
-            Reportes
           </NavLink>
           <NavLink to="/app/config/audit" className="nav-link">
             Auditoria
