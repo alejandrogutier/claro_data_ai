@@ -41,6 +41,21 @@ enum TriggerType {
   manual
 }
 
+enum IncidentStatus {
+  open
+  acknowledged
+  in_progress
+  resolved
+  dismissed
+}
+
+enum IncidentSeverity {
+  SEV1
+  SEV2
+  SEV3
+  SEV4
+}
+
 model User {
   id              String               @id @default(uuid()) @db.Uuid
   email           String               @unique
@@ -54,6 +69,8 @@ model User {
   overrides       Classification[]     @relation("ClassificationOverride")
   exportJobs      ExportJob[]
   connectorSyncRuns ConnectorSyncRun[]
+  ownedIncidents  Incident[]           @relation("IncidentOwner")
+  incidentNotes   IncidentNote[]       @relation("IncidentNoteAuthor")
 
   @@index([role])
 }
@@ -372,4 +389,54 @@ model TaxonomyEntry {
 
   @@unique([kind, key])
   @@index([kind, isActive, sortOrder])
+}
+
+model Incident {
+  id              String           @id @default(uuid()) @db.Uuid
+  scope           TermScope
+  severity        IncidentSeverity
+  status          IncidentStatus   @default(open)
+  riskScore       Decimal          @db.Decimal(5, 2)
+  classifiedItems Int              @default(0)
+  ownerUserId     String?          @db.Uuid
+  slaDueAt        DateTime
+  cooldownUntil   DateTime
+  signalVersion   String
+  payload         Json?
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  resolvedAt      DateTime?
+  ownerUser       User?            @relation("IncidentOwner", fields: [ownerUserId], references: [id], onDelete: SetNull)
+  notes           IncidentNote[]
+
+  @@index([scope, status, createdAt])
+  @@index([severity, status, createdAt])
+  @@index([ownerUserId, status])
+  @@index([cooldownUntil])
+}
+
+model IncidentNote {
+  id           String   @id @default(uuid()) @db.Uuid
+  incidentId   String   @db.Uuid
+  authorUserId String   @db.Uuid
+  note         String
+  createdAt    DateTime @default(now())
+  incident     Incident @relation(fields: [incidentId], references: [id], onDelete: Cascade)
+  authorUser   User     @relation("IncidentNoteAuthor", fields: [authorUserId], references: [id], onDelete: Restrict)
+
+  @@index([incidentId, createdAt])
+  @@index([authorUserId, createdAt])
+}
+
+model IncidentEvaluationRun {
+  id           String      @id @default(uuid()) @db.Uuid
+  triggerType  TriggerType
+  status       RunStatus   @default(queued)
+  metrics      Json?
+  errorMessage String?
+  createdAt    DateTime    @default(now())
+  finishedAt   DateTime?
+
+  @@index([status, createdAt])
+  @@index([triggerType, createdAt])
 }

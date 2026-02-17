@@ -183,6 +183,44 @@ if [[ "$OV_WINDOW_DAYS" != "7" || "$OV_SOURCE_TYPE" != "news" || "$OV_FORMULA" !
   exit 1
 fi
 
+echo "[1.1] Incident endpoints"
+CODE="$(curl -s -o /tmp/claro-incidents-no-token.json -w "%{http_code}" "$API_BASE/v1/monitor/incidents")"
+assert_code "$CODE" "401" "GET /v1/monitor/incidents without token"
+
+CODE="$(curl -s -o /tmp/claro-incidents-viewer.json -w "%{http_code}" -H "Authorization: Bearer $VIEWER_TOKEN" "$API_BASE/v1/monitor/incidents?limit=80")"
+assert_code "$CODE" "200" "GET /v1/monitor/incidents viewer"
+
+CODE="$(curl -s -o /tmp/claro-incidents-evaluate.json -w "%{http_code}" -X POST -H "Authorization: Bearer $ANALYST_TOKEN" -H "Content-Type: application/json" -d '{}' "$API_BASE/v1/monitor/incidents/evaluate")"
+assert_code "$CODE" "202" "POST /v1/monitor/incidents/evaluate analyst"
+
+sleep 3
+
+CODE="$(curl -s -o /tmp/claro-incidents-after-evaluate.json -w "%{http_code}" -H "Authorization: Bearer $VIEWER_TOKEN" "$API_BASE/v1/monitor/incidents?limit=80")"
+assert_code "$CODE" "200" "GET /v1/monitor/incidents after evaluate"
+
+INCIDENT_ID="$(jq -r '.items[0].id // empty' /tmp/claro-incidents-after-evaluate.json)"
+INCIDENT_STATUS="$(jq -r '.items[0].status // empty' /tmp/claro-incidents-after-evaluate.json)"
+if [[ -n "$INCIDENT_ID" ]]; then
+  NEXT_STATUS="open"
+  if [[ "$INCIDENT_STATUS" == "open" ]]; then
+    NEXT_STATUS="acknowledged"
+  fi
+
+  CODE="$(curl -s -o /tmp/claro-incidents-patch-viewer.json -w "%{http_code}" -X PATCH -H "Authorization: Bearer $VIEWER_TOKEN" -H "Content-Type: application/json" -d "{\"status\":\"$NEXT_STATUS\"}" "$API_BASE/v1/monitor/incidents/$INCIDENT_ID")"
+  assert_code "$CODE" "403" "PATCH /v1/monitor/incidents/{id} viewer denied"
+
+  CODE="$(curl -s -o /tmp/claro-incidents-patch-analyst.json -w "%{http_code}" -X PATCH -H "Authorization: Bearer $ANALYST_TOKEN" -H "Content-Type: application/json" -d "{\"status\":\"$NEXT_STATUS\",\"note\":\"smoke incident patch\"}" "$API_BASE/v1/monitor/incidents/$INCIDENT_ID")"
+  assert_code "$CODE" "200" "PATCH /v1/monitor/incidents/{id} analyst"
+
+  CODE="$(curl -s -o /tmp/claro-incidents-note-create.json -w "%{http_code}" -X POST -H "Authorization: Bearer $ANALYST_TOKEN" -H "Content-Type: application/json" -d '{"note":"smoke incident note"}' "$API_BASE/v1/monitor/incidents/$INCIDENT_ID/notes")"
+  assert_code "$CODE" "201" "POST /v1/monitor/incidents/{id}/notes analyst"
+
+  CODE="$(curl -s -o /tmp/claro-incidents-notes-viewer.json -w "%{http_code}" -H "Authorization: Bearer $VIEWER_TOKEN" "$API_BASE/v1/monitor/incidents/$INCIDENT_ID/notes?limit=20")"
+  assert_code "$CODE" "200" "GET /v1/monitor/incidents/{id}/notes viewer"
+else
+  echo "[WARN] No incident found after evaluate; patch/notes flow skipped"
+fi
+
 CODE="$(curl -s -o /tmp/claro-content-viewer.json -w "%{http_code}" -H "Authorization: Bearer $VIEWER_TOKEN" "$API_BASE/v1/content?limit=5")"
 assert_code "$CODE" "200" "GET /v1/content viewer"
 

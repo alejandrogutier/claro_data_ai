@@ -15,6 +15,7 @@ tags:
   - name: Ingestion
   - name: Content
   - name: Feed
+  - name: Monitor
   - name: Analysis
   - name: Exports
   - name: Meta
@@ -251,6 +252,135 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+  /v1/monitor/incidents:
+    get:
+      tags: [Monitor]
+      summary: Listado paginado de incidentes operativos
+      parameters:
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+        - name: status
+          in: query
+          schema:
+            $ref: '#/components/schemas/IncidentStatus'
+        - name: severity
+          in: query
+          schema:
+            $ref: '#/components/schemas/MonitorSeverity'
+        - name: scope
+          in: query
+          schema:
+            $ref: '#/components/schemas/TermScope'
+        - name: owner_user_id
+          in: query
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Lista de incidentes
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IncidentListResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+  /v1/monitor/incidents/evaluate:
+    post:
+      tags: [Monitor]
+      summary: Disparar evaluacion manual de incidentes
+      responses:
+        '202':
+          description: Evaluacion encolada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IncidentEvaluationAccepted'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /v1/monitor/incidents/{id}:
+    patch:
+      tags: [Monitor]
+      summary: Actualizar estado, owner y/o nota de un incidente
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchIncidentRequest'
+      responses:
+        '200':
+          description: Incidente actualizado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PatchIncidentResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+  /v1/monitor/incidents/{id}/notes:
+    get:
+      tags: [Monitor]
+      summary: Listar notas de incidente
+      parameters:
+        - $ref: '#/components/parameters/Id'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Notas del incidente
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IncidentNotesResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+    post:
+      tags: [Monitor]
+      summary: Agregar nota de incidente
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateIncidentNoteRequest'
+      responses:
+        '201':
+          description: Nota creada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IncidentNote'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationError'
   /v1/content/{id}/state:
     patch:
       tags: [Content]
@@ -1345,6 +1475,9 @@ components:
     MonitorSeverity:
       type: string
       enum: [SEV1, SEV2, SEV3, SEV4]
+    IncidentStatus:
+      type: string
+      enum: [open, acknowledged, in_progress, resolved, dismissed]
     MonitorScopeKpi:
       type: object
       required:
@@ -1430,6 +1563,169 @@ components:
               $ref: '#/components/schemas/MonitorScopeKpi'
         diagnostics:
           $ref: '#/components/schemas/MonitorDiagnostics'
+    IncidentOwner:
+      type: object
+      required: [user_id]
+      properties:
+        user_id:
+          type: string
+          format: uuid
+        name:
+          type: string
+          nullable: true
+        email:
+          type: string
+          nullable: true
+        role:
+          type: string
+          nullable: true
+    Incident:
+      type: object
+      required:
+        [
+          id,
+          scope,
+          severity,
+          status,
+          risk_score,
+          classified_items,
+          sla_due_at,
+          sla_remaining_minutes,
+          cooldown_until,
+          signal_version,
+          payload,
+          created_at,
+          updated_at
+        ]
+      properties:
+        id:
+          type: string
+          format: uuid
+        scope:
+          $ref: '#/components/schemas/TermScope'
+        severity:
+          $ref: '#/components/schemas/MonitorSeverity'
+        status:
+          $ref: '#/components/schemas/IncidentStatus'
+        risk_score:
+          type: number
+        classified_items:
+          type: integer
+        owner_user_id:
+          type: string
+          format: uuid
+          nullable: true
+        owner:
+          allOf:
+            - $ref: '#/components/schemas/IncidentOwner'
+          nullable: true
+        sla_due_at:
+          type: string
+          format: date-time
+        sla_remaining_minutes:
+          type: integer
+        cooldown_until:
+          type: string
+          format: date-time
+        signal_version:
+          type: string
+        payload:
+          type: object
+          additionalProperties: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        resolved_at:
+          type: string
+          format: date-time
+          nullable: true
+    IncidentListResponse:
+      type: object
+      required: [items, page_info]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Incident'
+        page_info:
+          $ref: '#/components/schemas/PageInfo'
+    PatchIncidentRequest:
+      type: object
+      properties:
+        status:
+          $ref: '#/components/schemas/IncidentStatus'
+        owner_user_id:
+          type: string
+          format: uuid
+          nullable: true
+        note:
+          type: string
+          minLength: 1
+          maxLength: 2000
+      additionalProperties: false
+    IncidentNote:
+      type: object
+      required: [id, incident_id, author_user_id, author, note, created_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        incident_id:
+          type: string
+          format: uuid
+        author_user_id:
+          type: string
+          format: uuid
+        author:
+          $ref: '#/components/schemas/IncidentOwner'
+        note:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+    PatchIncidentResponse:
+      type: object
+      required: [incident]
+      properties:
+        incident:
+          $ref: '#/components/schemas/Incident'
+        note:
+          allOf:
+            - $ref: '#/components/schemas/IncidentNote'
+          nullable: true
+    IncidentNotesResponse:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/IncidentNote'
+    CreateIncidentNoteRequest:
+      type: object
+      required: [note]
+      properties:
+        note:
+          type: string
+          minLength: 1
+          maxLength: 2000
+      additionalProperties: false
+    IncidentEvaluationAccepted:
+      type: object
+      required: [status, trigger_type]
+      properties:
+        status:
+          type: string
+          const: queued
+        trigger_type:
+          type: string
+          enum: [manual]
+        message_id:
+          type: string
+          nullable: true
     MetaResponse:
       type: object
       properties:

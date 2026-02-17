@@ -300,6 +300,15 @@ select {
   background: #fff;
 }
 
+textarea {
+  border: 1px solid #d7dbe2;
+  border-radius: 8px;
+  padding: 10px;
+  font: inherit;
+  background: #fff;
+  resize: vertical;
+}
+
 .inline-form {
   display: flex;
   gap: 6px;
@@ -389,6 +398,75 @@ select {
   border-color: #c5ddff;
   background: #f3f8ff;
   color: #13407b;
+}
+
+.incident-table-wrapper {
+  overflow-x: auto;
+}
+
+.incident-table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 880px;
+}
+
+.incident-table th,
+.incident-table td {
+  text-align: left;
+  padding: 10px;
+  border-bottom: 1px solid var(--claro-border);
+  vertical-align: top;
+}
+
+.incident-table thead th {
+  font-size: 0.82rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--claro-muted);
+}
+
+.incident-table tr.is-selected {
+  background: rgba(227, 6, 19, 0.06);
+}
+
+.incident-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.incident-sla {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 4px 10px;
+  font-weight: 700;
+}
+
+.incident-sla-ok {
+  background: #ecfdf3;
+  color: #177a3f;
+}
+
+.incident-sla-warning {
+  background: #fff8e7;
+  color: #8a5a00;
+}
+
+.incident-sla-critical {
+  background: #ffecec;
+  color: #9d111b;
+}
+
+.incident-sla-overdue {
+  background: #ffd8dc;
+  color: #7d121b;
+}
+
+.incident-note-composer {
+  margin-top: 14px;
+  display: grid;
+  gap: 10px;
 }
 
 .login-page,

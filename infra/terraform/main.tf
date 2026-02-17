@@ -335,6 +335,33 @@ resource "aws_iam_role_policy_attachment" "lambda_export_sqs" {
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaSQSQueueExecutionRole"
 }
 
+resource "aws_iam_role" "lambda_incident" {
+  name = "${local.name_prefix}-lambda-incident-role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Action = "sts:AssumeRole"
+        Effect = "Allow"
+        Principal = {
+          Service = "lambda.amazonaws.com"
+        }
+      }
+    ]
+  })
+}
+
+resource "aws_iam_role_policy_attachment" "lambda_incident_basic" {
+  role       = aws_iam_role.lambda_incident.name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+}
+
+resource "aws_iam_role_policy_attachment" "lambda_incident_sqs" {
+  role       = aws_iam_role.lambda_incident.name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaSQSQueueExecutionRole"
+}
+
 resource "aws_iam_role" "lambda_migrations" {
   name = "${local.name_prefix}-lambda-migrations-role"
 
@@ -391,6 +418,7 @@ resource "aws_lambda_function" "api" {
       RAW_BUCKET_NAME             = aws_s3_bucket.raw.bucket
       EXPORT_BUCKET_NAME          = aws_s3_bucket.exports.bucket
       EXPORT_QUEUE_URL            = aws_sqs_queue.export.url
+      INCIDENT_QUEUE_URL          = aws_sqs_queue.incident_evaluation.url
       EXPORT_SIGNED_URL_SECONDS   = "900"
       INGESTION_DEFAULT_TERMS     = var.ingestion_default_terms
     }
@@ -447,6 +475,32 @@ resource "aws_lambda_function" "export_worker" {
       DB_NAME                   = var.db_name
       EXPORT_BUCKET_NAME        = aws_s3_bucket.exports.bucket
       EXPORT_SIGNED_URL_SECONDS = "900"
+    }
+  }
+}
+
+resource "aws_lambda_function" "incident_worker" {
+  function_name = "${local.name_prefix}-incident-worker"
+  role          = aws_iam_role.lambda_incident.arn
+  runtime       = "nodejs22.x"
+  handler       = "incidents/worker.main"
+
+  filename         = var.lambda_package_path
+  source_code_hash = filebase64sha256(var.lambda_package_path)
+
+  timeout     = 180
+  memory_size = 512
+
+  environment {
+    variables = {
+      APP_ENV                 = var.environment
+      DB_RESOURCE_ARN         = aws_rds_cluster.aurora.arn
+      DB_SECRET_ARN           = data.aws_secretsmanager_secret.database.arn
+      DB_NAME                 = var.db_name
+      ALERT_EMAIL_SENDER      = var.ses_sender_email
+      ALERT_EMAIL_RECIPIENTS  = var.alert_email_recipients
+      ALERT_COOLDOWN_MINUTES  = tostring(var.alert_cooldown_minutes)
+      ALERT_SIGNAL_VERSION    = var.alert_signal_version
     }
   }
 }
@@ -541,6 +595,11 @@ resource "aws_apigatewayv2_route" "private_routes" {
     "GET /v1/exports/{id}",
     "GET /v1/feed/news",
     "GET /v1/monitor/overview",
+    "GET /v1/monitor/incidents",
+    "PATCH /v1/monitor/incidents/{id}",
+    "GET /v1/monitor/incidents/{id}/notes",
+    "POST /v1/monitor/incidents/{id}/notes",
+    "POST /v1/monitor/incidents/evaluate",
     "GET /v1/meta",
     "GET /v1/connectors",
     "PATCH /v1/connectors/{id}",
@@ -624,6 +683,67 @@ resource "aws_lambda_event_source_mapping" "export_queue_to_worker" {
   event_source_arn = aws_sqs_queue.export.arn
   function_name    = aws_lambda_function.export_worker.arn
   batch_size       = 1
+}
+
+resource "aws_sqs_queue" "incident_evaluation_dlq" {
+  name                      = "${local.name_prefix}-incident-evaluation-dlq"
+  message_retention_seconds = 1209600
+  kms_master_key_id         = aws_kms_key.app.arn
+}
+
+resource "aws_sqs_queue" "incident_evaluation" {
+  name                       = "${local.name_prefix}-incident-evaluation"
+  visibility_timeout_seconds = 240
+  message_retention_seconds  = 345600
+  kms_master_key_id          = aws_kms_key.app.arn
+  redrive_policy = jsonencode({
+    deadLetterTargetArn = aws_sqs_queue.incident_evaluation_dlq.arn
+    maxReceiveCount     = 5
+  })
+}
+
+resource "aws_sqs_queue_policy" "incident_evaluation_events" {
+  queue_url = aws_sqs_queue.incident_evaluation.id
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid    = "AllowEventBridgeSendMessage"
+        Effect = "Allow"
+        Principal = {
+          Service = "events.amazonaws.com"
+        }
+        Action   = "sqs:SendMessage"
+        Resource = aws_sqs_queue.incident_evaluation.arn
+        Condition = {
+          ArnEquals = {
+            "aws:SourceArn" = aws_cloudwatch_event_rule.incident_evaluation_schedule.arn
+          }
+        }
+      }
+    ]
+  })
+}
+
+resource "aws_lambda_event_source_mapping" "incident_queue_to_worker" {
+  event_source_arn = aws_sqs_queue.incident_evaluation.arn
+  function_name    = aws_lambda_function.incident_worker.arn
+  batch_size       = 1
+}
+
+resource "aws_cloudwatch_event_rule" "incident_evaluation_schedule" {
+  name                = "${local.name_prefix}-incident-evaluation-every-15m"
+  schedule_expression = "rate(15 minutes)"
+}
+
+resource "aws_cloudwatch_event_target" "incident_evaluation_schedule" {
+  rule      = aws_cloudwatch_event_rule.incident_evaluation_schedule.name
+  target_id = "incident-evaluation-queue"
+  arn       = aws_sqs_queue.incident_evaluation.arn
+  input = jsonencode({
+    trigger_type = "scheduled"
+    requested_at = "eventbridge"
+  })
 }
 
 resource "aws_iam_role" "step_functions" {

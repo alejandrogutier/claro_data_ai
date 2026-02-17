@@ -78,6 +78,24 @@ variable "ses_sender_email" {
   default     = "digest@example.com"
 }
 
+variable "alert_email_recipients" {
+  type        = string
+  description = "Lista CSV de correos para notificaciones de incidentes (SES)."
+  default     = ""
+}
+
+variable "alert_cooldown_minutes" {
+  type        = number
+  description = "Cooldown para deduplicacion de incidentes en minutos."
+  default     = 60
+}
+
+variable "alert_signal_version" {
+  type        = string
+  description = "Version de la formula de senal de alertas."
+  default     = "alert-v1-weighted"
+}
+
 variable "provider_keys_secret_name" {
   type        = string
   description = "Nombre del secreto con API keys de proveedores"

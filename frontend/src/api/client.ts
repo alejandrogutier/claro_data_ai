@@ -6,6 +6,16 @@ export type CreateTermRequest = components["schemas"]["CreateTermRequest"];
 export type UpdateTermRequest = components["schemas"]["UpdateTermRequest"];
 export type NewsFeedResponse = components["schemas"]["NewsFeedResponse"];
 export type MonitorOverviewResponse = components["schemas"]["MonitorOverviewResponse"];
+export type IncidentStatus = components["schemas"]["IncidentStatus"];
+export type IncidentSeverity = components["schemas"]["MonitorSeverity"];
+export type Incident = components["schemas"]["Incident"];
+export type IncidentListResponse = components["schemas"]["IncidentListResponse"];
+export type PatchIncidentRequest = components["schemas"]["PatchIncidentRequest"];
+export type PatchIncidentResponse = components["schemas"]["PatchIncidentResponse"];
+export type IncidentNote = components["schemas"]["IncidentNote"];
+export type IncidentNotesResponse = components["schemas"]["IncidentNotesResponse"];
+export type CreateIncidentNoteRequest = components["schemas"]["CreateIncidentNoteRequest"];
+export type IncidentEvaluationAccepted = components["schemas"]["IncidentEvaluationAccepted"];
 export type MetaResponse = components["schemas"]["MetaResponse"];
 export type Connector = components["schemas"]["Connector"];
 export type ConnectorListResponse = components["schemas"]["ConnectorListResponse"];
@@ -134,6 +144,44 @@ export class ApiClient {
 
   getMonitorOverview(): Promise<MonitorOverviewResponse> {
     return this.request<MonitorOverviewResponse>("/v1/monitor/overview");
+  }
+
+  listMonitorIncidents(query: {
+    limit?: number;
+    cursor?: string;
+    status?: IncidentStatus;
+    severity?: IncidentSeverity;
+    scope?: TermScope;
+    owner_user_id?: string;
+  }): Promise<IncidentListResponse> {
+    return this.request<IncidentListResponse>("/v1/monitor/incidents", { query });
+  }
+
+  patchMonitorIncident(id: string, payload: PatchIncidentRequest): Promise<PatchIncidentResponse> {
+    return this.request<PatchIncidentResponse>(`/v1/monitor/incidents/${id}`, {
+      method: "PATCH",
+      body: payload
+    });
+  }
+
+  listMonitorIncidentNotes(id: string, limit = 100): Promise<IncidentNotesResponse> {
+    return this.request<IncidentNotesResponse>(`/v1/monitor/incidents/${id}/notes`, {
+      query: { limit }
+    });
+  }
+
+  createMonitorIncidentNote(id: string, payload: CreateIncidentNoteRequest): Promise<IncidentNote> {
+    return this.request<IncidentNote>(`/v1/monitor/incidents/${id}/notes`, {
+      method: "POST",
+      body: payload
+    });
+  }
+
+  evaluateMonitorIncidents(): Promise<IncidentEvaluationAccepted> {
+    return this.request<IncidentEvaluationAccepted>("/v1/monitor/incidents/evaluate", {
+      method: "POST",
+      body: {}
+    });
   }
 
   getMeta(): Promise<MetaResponse> {

@@ -38,10 +38,18 @@ output "export_queue_url" {
   value = aws_sqs_queue.export.url
 }
 
+output "incident_evaluation_queue_url" {
+  value = aws_sqs_queue.incident_evaluation.url
+}
+
 output "db_migration_lambda_name" {
   value = aws_lambda_function.db_migration_runner.function_name
 }
 
 output "export_worker_lambda_name" {
   value = aws_lambda_function.export_worker.function_name
+}
+
+output "incident_worker_lambda_name" {
+  value = aws_lambda_function.incident_worker.function_name
 }

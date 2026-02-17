@@ -14,6 +14,11 @@ export type AppEnv = {
   exportQueueUrl?: string;
   exportSignedUrlSeconds?: number;
   ingestionDefaultTerms?: string;
+  incidentQueueUrl?: string;
+  alertEmailRecipients?: string;
+  alertCooldownMinutes?: number;
+  alertSignalVersion?: string;
+  alertEmailSender?: string;
 };
 
 export const env: AppEnv = {
@@ -33,5 +38,12 @@ export const env: AppEnv = {
   exportSignedUrlSeconds: process.env.EXPORT_SIGNED_URL_SECONDS
     ? Number.parseInt(process.env.EXPORT_SIGNED_URL_SECONDS, 10)
     : 900,
-  ingestionDefaultTerms: process.env.INGESTION_DEFAULT_TERMS
+  ingestionDefaultTerms: process.env.INGESTION_DEFAULT_TERMS,
+  incidentQueueUrl: process.env.INCIDENT_QUEUE_URL,
+  alertEmailRecipients: process.env.ALERT_EMAIL_RECIPIENTS,
+  alertCooldownMinutes: process.env.ALERT_COOLDOWN_MINUTES
+    ? Number.parseInt(process.env.ALERT_COOLDOWN_MINUTES, 10)
+    : 60,
+  alertSignalVersion: process.env.ALERT_SIGNAL_VERSION ?? "alert-v1-weighted",
+  alertEmailSender: process.env.ALERT_EMAIL_SENDER ?? process.env.SES_SENDER_EMAIL
 };

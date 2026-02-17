@@ -3,7 +3,7 @@
 ## Estado General
 - Proyecto: `Inception`
 - Avance global: `99%`
-- Historias en curso: `CLARO-036`
+- Historias en curso: `CLARO-034`
 - Ambiente objetivo inicial: `prod` unico en `us-east-1`
 - Ultima actualizacion: `2026-02-17`
 
@@ -21,7 +21,7 @@
 | CLARO-009 | done | 100% | Ninguno | Override manual operativo en `PATCH /v1/content/{id}/classification` con `manual-override-v1`, `model_id=manual`, actor auto-upsert y auditoria `before/after` |
 | CLARO-010 | done | 100% | Ninguno | Maquina de estados operativa en single/bulk (`PATCH /state`, `POST /bulk/state`) con transicion libre auditada y errores deterministas (`404/409/422`) |
 | CLARO-011 | todo | 0% | Ninguno | FTS + cursor pagination pendiente |
-| CLARO-012 | todo | 0% | Ninguno | Scoring de fuente pendiente |
+| CLARO-012 | doing | 20% | Ninguno | Slice aplicado para alertas en CLARO-036 (`riesgo_ponderado` por `sourceScore` y severidad por scope); pendiente extender a ranking global/KPI completo |
 | CLARO-013 | todo | 0% | Ninguno | Analisis agregado pendiente |
 | CLARO-014 | todo | 15% | SES requiere verificacion de identidad real de correo | SES identity creada (`digest@example.com`) |
 | CLARO-015 | done | 100% | Ninguno | Export async operativo (`POST /v1/exports/csv` + `GET /v1/exports/{id}`), worker SQS y URL firmada al completar |
@@ -37,7 +37,8 @@
 | CLARO-031 | done | 100% | Ninguno | 8 rutas de configuracion operativas sin stubs criticos y validadas end-to-end contra backend desplegado en AWS |
 | CLARO-032 | done | 100% | Ninguno | Monitoreo V1 completo con rutas separadas (`/app/monitor/overview`, `/app/monitor/feed-claro`, `/app/monitor/feed-competencia`) y consumo de feed limitado a 2 noticias por query |
 | CLARO-033 | done | 100% | Ninguno | Motor KPI `kpi-v1` operativo (BHS 50/25/25, SOV calidad 60 + volumen 40, severidad `SEV1..SEV4`) con contract/smoke en verde |
-| CLARO-036 | doing | 5% | Ninguno | Preparacion de alertas sobre severidad iniciada tras estabilizar KPIs y endpoint de overview |
+| CLARO-034 | doing | 5% | Ninguno | Tramo iniciado para habilitar `/app/analyze/*` y nuevos endpoints de lectura `GET /v1/analyze/*` (overview, channel, competitors) sobre fuente `news` ventana 7d |
+| CLARO-036 | done | 100% | Ninguno | End-to-end desplegado: API `/v1/monitor/incidents*`, scheduler 15m (EventBridge->SQS->Lambda), triage con notas/auditoria/SLA y UI real en `/app/monitor/incidents` con redirect desde `/app/config/alerts` |
 | CLARO-037 | done | 100% | Ninguno | Superficie `/v1/connectors*` desplegada en runtime (`GET/PATCH/sync/runs`) y validada en `contract:test` + smoke business |
 | CLARO-038 | done | 100% | Ninguno | CRUD de cuentas, competidores y taxonomias desplegado y validado (`/v1/config/accounts|competitors|taxonomies/*`, respuestas `201/409`) |
 | CLARO-039 | done | 100% | Ninguno | Gobernanza de auditoria/export cerrada con `/v1/config/audit` y `/v1/config/audit/export`, sanitizacion por rol y permisos S3/KMS aplicados |
@@ -56,6 +57,8 @@
    - Mitigacion: cargar catalogos base priorizados y marcar KPI sin base suficiente como `insufficient_data`.
 6. **Riesgo**: umbrales de severidad pueden disparar ruido en CLARO-036.
    - Mitigacion: iniciar alertas con observacion pasiva y ajustar thresholds/cooldown con datos reales de 1 semana.
+7. **Riesgo**: `ALERT_EMAIL_RECIPIENTS` vacio en runtime actual, por lo que notificacion queda solo in-app.
+   - Mitigacion: cargar lista CSV de destinatarios verificados en SES para activar correo operativo.
 
 ## Decisiones Cerradas de Arquitectura y Producto
 - AWS serverless en `us-east-1`.
@@ -70,7 +73,7 @@
 - Zona horaria operativa: `America/Bogota`.
 
 ## Proximos Hitos
-1. Implementar CLARO-036: alertas e incidentes usando severidad del motor KPI.
-2. Implementar CLARO-034: modulo de analisis (3 paginas) con drill-down por canal y competencia.
-3. Implementar CLARO-035: modulo de reportes con plantillas y programacion.
+1. Implementar CLARO-034: modulo de analisis (3 paginas) con drill-down por canal y competencia.
+2. Implementar CLARO-035: modulo de reportes con plantillas y programacion.
+3. Completar CLARO-012 fuera de slice (scoring global configurable con impacto en ranking).
 4. Retomar CLARO-013 (analysis async real) reutilizando patron de jobs y trazabilidad aplicado en export.

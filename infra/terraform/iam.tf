@@ -44,7 +44,10 @@ resource "aws_iam_role_policy" "lambda_secrets_access" {
         Action = [
           "sqs:SendMessage"
         ]
-        Resource = [aws_sqs_queue.export.arn]
+        Resource = [
+          aws_sqs_queue.export.arn,
+          aws_sqs_queue.incident_evaluation.arn
+        ]
       },
       {
         Effect = "Allow"
@@ -164,6 +167,57 @@ resource "aws_iam_role_policy" "lambda_export_access" {
           "s3:GetObject"
         ]
         Resource = ["${aws_s3_bucket.exports.arn}/*"]
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "kms:Decrypt",
+          "kms:Encrypt",
+          "kms:GenerateDataKey",
+          "kms:DescribeKey"
+        ]
+        Resource = [aws_kms_key.app.arn]
+      }
+    ]
+  })
+}
+
+resource "aws_iam_role_policy" "lambda_incident_access" {
+  name = "${local.name_prefix}-lambda-incident-access"
+  role = aws_iam_role.lambda_incident.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "secretsmanager:GetSecretValue",
+          "secretsmanager:DescribeSecret"
+        ]
+        Resource = [data.aws_secretsmanager_secret.database.arn]
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "rds-data:ExecuteStatement",
+          "rds-data:BatchExecuteStatement",
+          "rds-data:BeginTransaction",
+          "rds-data:CommitTransaction",
+          "rds-data:RollbackTransaction"
+        ]
+        Resource = [aws_rds_cluster.aurora.arn]
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "ses:SendEmail",
+          "ses:SendRawEmail",
+          "ses:GetIdentityVerificationAttributes",
+          "sesv2:GetEmailIdentity",
+          "sesv2:SendEmail"
+        ]
+        Resource = ["*"]
       },
       {
         Effect = "Allow"

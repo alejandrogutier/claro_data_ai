@@ -351,6 +351,212 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/monitor/incidents": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Listado paginado de incidentes operativos */
+        get: {
+            parameters: {
+                query?: {
+                    /** @description Cursor opaco para paginacion */
+                    cursor?: components["parameters"]["Cursor"];
+                    limit?: components["parameters"]["Limit"];
+                    status?: components["schemas"]["IncidentStatus"];
+                    severity?: components["schemas"]["MonitorSeverity"];
+                    scope?: components["schemas"]["TermScope"];
+                    owner_user_id?: string;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Lista de incidentes */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["IncidentListResponse"];
+                    };
+                };
+                401: components["responses"]["Unauthorized"];
+                403: components["responses"]["Forbidden"];
+                422: components["responses"]["ValidationError"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/monitor/incidents/evaluate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Disparar evaluacion manual de incidentes */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Evaluacion encolada */
+                202: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["IncidentEvaluationAccepted"];
+                    };
+                };
+                401: components["responses"]["Unauthorized"];
+                403: components["responses"]["Forbidden"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/monitor/incidents/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Actualizar estado, owner y/o nota de un incidente */
+        patch: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: components["parameters"]["Id"];
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["PatchIncidentRequest"];
+                };
+            };
+            responses: {
+                /** @description Incidente actualizado */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["PatchIncidentResponse"];
+                    };
+                };
+                401: components["responses"]["Unauthorized"];
+                403: components["responses"]["Forbidden"];
+                404: components["responses"]["NotFound"];
+                409: components["responses"]["Conflict"];
+                422: components["responses"]["ValidationError"];
+            };
+        };
+        trace?: never;
+    };
+    "/v1/monitor/incidents/{id}/notes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Listar notas de incidente */
+        get: {
+            parameters: {
+                query?: {
+                    limit?: components["parameters"]["Limit"];
+                };
+                header?: never;
+                path: {
+                    id: components["parameters"]["Id"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Notas del incidente */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["IncidentNotesResponse"];
+                    };
+                };
+                401: components["responses"]["Unauthorized"];
+                403: components["responses"]["Forbidden"];
+                404: components["responses"]["NotFound"];
+                422: components["responses"]["ValidationError"];
+            };
+        };
+        put?: never;
+        /** Agregar nota de incidente */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: components["parameters"]["Id"];
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["CreateIncidentNoteRequest"];
+                };
+            };
+            responses: {
+                /** @description Nota creada */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["IncidentNote"];
+                    };
+                };
+                401: components["responses"]["Unauthorized"];
+                403: components["responses"]["Forbidden"];
+                404: components["responses"]["NotFound"];
+                422: components["responses"]["ValidationError"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/content/{id}/state": {
         parameters: {
             query?: never;
@@ -1553,6 +1759,8 @@ export interface components {
         };
         /** @enum {string} */
         MonitorSeverity: "SEV1" | "SEV2" | "SEV3" | "SEV4";
+        /** @enum {string} */
+        IncidentStatus: "open" | "acknowledged" | "in_progress" | "resolved" | "dismissed";
         MonitorScopeKpi: {
             items: number;
             classified_items: number;
@@ -1596,6 +1804,79 @@ export interface components {
                 competencia: components["schemas"]["MonitorScopeKpi"];
             };
             diagnostics: components["schemas"]["MonitorDiagnostics"];
+        };
+        IncidentOwner: {
+            /** Format: uuid */
+            user_id: string;
+            name?: string | null;
+            email?: string | null;
+            role?: string | null;
+        };
+        Incident: {
+            /** Format: uuid */
+            id: string;
+            scope: components["schemas"]["TermScope"];
+            severity: components["schemas"]["MonitorSeverity"];
+            status: components["schemas"]["IncidentStatus"];
+            risk_score: number;
+            classified_items: number;
+            /** Format: uuid */
+            owner_user_id?: string | null;
+            owner?: components["schemas"]["IncidentOwner"] | null;
+            /** Format: date-time */
+            sla_due_at: string;
+            sla_remaining_minutes: number;
+            /** Format: date-time */
+            cooldown_until: string;
+            signal_version: string;
+            payload: {
+                [key: string]: unknown;
+            };
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+            /** Format: date-time */
+            resolved_at?: string | null;
+        };
+        IncidentListResponse: {
+            items: components["schemas"]["Incident"][];
+            page_info: components["schemas"]["PageInfo"];
+        };
+        PatchIncidentRequest: {
+            status?: components["schemas"]["IncidentStatus"];
+            /** Format: uuid */
+            owner_user_id?: string | null;
+            note?: string;
+        };
+        IncidentNote: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            incident_id: string;
+            /** Format: uuid */
+            author_user_id: string;
+            author: components["schemas"]["IncidentOwner"];
+            note: string;
+            /** Format: date-time */
+            created_at: string;
+        };
+        PatchIncidentResponse: {
+            incident: components["schemas"]["Incident"];
+            note?: components["schemas"]["IncidentNote"] | null;
+        };
+        IncidentNotesResponse: {
+            items: components["schemas"]["IncidentNote"][];
+        };
+        CreateIncidentNoteRequest: {
+            note: string;
+        };
+        IncidentEvaluationAccepted: {
+            /** @constant */
+            status: "queued";
+            /** @enum {string} */
+            trigger_type: "manual";
+            message_id?: string | null;
         };
         MetaResponse: {
             providers?: components["schemas"]["MetaCountItem"][];

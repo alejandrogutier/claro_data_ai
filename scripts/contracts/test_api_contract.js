@@ -79,6 +79,15 @@ const request = async ({ method, url, token, body }) => {
   };
 };
 
+const decodeJwtPayload = (token) => {
+  const [, payload] = token.split(".");
+  if (!payload) return {};
+  const normalized = payload.replace(/-/g, "+").replace(/_/g, "/");
+  const padded = normalized + "=".repeat((4 - (normalized.length % 4 || 4)) % 4);
+  const decoded = Buffer.from(padded, "base64").toString("utf8");
+  return JSON.parse(decoded);
+};
+
 const ensureTokens = () => {
   const testPassword = process.env.TEST_USER_PASSWORD || "ClaroData!2026";
   const viewerUser = process.env.TEST_VIEWER_USER || "viewer-test@claro.local";
@@ -432,6 +441,96 @@ const ensureMonitorOverview = async (apiBase, viewerToken) => {
   assertCondition(typeof diagnostics.unknown_sentiment_items === "number", "overview.diagnostics.unknown_sentiment_items must be number");
 };
 
+const pickIncidentStatus = (currentStatus) => {
+  if (currentStatus === "open") return "acknowledged";
+  return "open";
+};
+
+const ensureIncidentFlow = async (apiBase, viewerToken, analystToken) => {
+  const analystClaims = decodeJwtPayload(analystToken);
+  const analystSub = typeof analystClaims.sub === "string" && UUID_REGEX.test(analystClaims.sub) ? analystClaims.sub : null;
+
+  const unauthorized = await request({
+    method: "GET",
+    url: `${apiBase}/v1/monitor/incidents`
+  });
+  assertStatus(unauthorized.status, 401, "GET /v1/monitor/incidents without token");
+
+  const listResponse = await request({
+    method: "GET",
+    url: `${apiBase}/v1/monitor/incidents?limit=80`,
+    token: viewerToken
+  });
+  assertStatus(listResponse.status, 200, "GET /v1/monitor/incidents viewer");
+  assertCondition(Array.isArray(listResponse.json?.items), "monitor incidents must return items[]");
+
+  const evaluateResponse = await request({
+    method: "POST",
+    url: `${apiBase}/v1/monitor/incidents/evaluate`,
+    token: analystToken,
+    body: {}
+  });
+  assertStatus(evaluateResponse.status, 202, "POST /v1/monitor/incidents/evaluate analyst");
+
+  await sleep(3000);
+
+  const afterEvaluate = await request({
+    method: "GET",
+    url: `${apiBase}/v1/monitor/incidents?limit=80`,
+    token: viewerToken
+  });
+  assertStatus(afterEvaluate.status, 200, "GET /v1/monitor/incidents after evaluate");
+  assertCondition(Array.isArray(afterEvaluate.json?.items), "monitor incidents after evaluate must return items[]");
+
+  const incident = afterEvaluate.json.items[0];
+  if (!incident || !incident.id) {
+    console.log("[WARN] incident flow skipped because no incidents were generated");
+    return;
+  }
+
+  const viewerPatchDenied = await request({
+    method: "PATCH",
+    url: `${apiBase}/v1/monitor/incidents/${incident.id}`,
+    token: viewerToken,
+    body: { status: pickIncidentStatus(incident.status) }
+  });
+  assertStatus(viewerPatchDenied.status, 403, "PATCH /v1/monitor/incidents/{id} viewer denied");
+
+  const patchPayload = {
+    status: pickIncidentStatus(incident.status),
+    note: "contract incident update",
+    ...(analystSub ? { owner_user_id: analystSub } : {})
+  };
+
+  const patchResponse = await request({
+    method: "PATCH",
+    url: `${apiBase}/v1/monitor/incidents/${incident.id}`,
+    token: analystToken,
+    body: patchPayload
+  });
+
+  assertStatus(patchResponse.status, 200, "PATCH /v1/monitor/incidents/{id} analyst");
+  assertCondition(patchResponse.json?.incident?.id === incident.id, "patched incident id mismatch");
+
+  const createNoteResponse = await request({
+    method: "POST",
+    url: `${apiBase}/v1/monitor/incidents/${incident.id}/notes`,
+    token: analystToken,
+    body: {
+      note: "contract incident note"
+    }
+  });
+  assertStatus(createNoteResponse.status, 201, "POST /v1/monitor/incidents/{id}/notes analyst");
+
+  const listNotesResponse = await request({
+    method: "GET",
+    url: `${apiBase}/v1/monitor/incidents/${incident.id}/notes?limit=20`,
+    token: viewerToken
+  });
+  assertStatus(listNotesResponse.status, 200, "GET /v1/monitor/incidents/{id}/notes viewer");
+  assertCondition(Array.isArray(listNotesResponse.json?.items), "incident notes must return items[]");
+};
+
 const main = async () => {
   loadEnv();
 
@@ -455,6 +554,7 @@ const main = async () => {
   assertStatus(metaViewer.status, 200, "GET /v1/meta viewer");
   assertCondition(Array.isArray(metaViewer.json?.providers), "meta.providers must be array");
   await ensureMonitorOverview(apiBase, viewerToken);
+  await ensureIncidentFlow(apiBase, viewerToken, analystToken);
 
   await ensureConfigSurface(apiBase, viewerToken, analystToken, adminToken);
 

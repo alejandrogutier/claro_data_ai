@@ -24,6 +24,9 @@ export const AppShell = () => {
           <NavLink to="/app/monitor/feed-competencia" className="nav-link">
             Feed Competencia
           </NavLink>
+          <NavLink to="/app/monitor/incidents" className="nav-link">
+            Incidentes
+          </NavLink>
 
           <p className="nav-group-title">Configuracion</p>
           <NavLink to="/app/config/connectors" className="nav-link">
@@ -40,9 +43,6 @@ export const AppShell = () => {
           </NavLink>
           <NavLink to="/app/config/taxonomy" className="nav-link">
             Taxonomias
-          </NavLink>
-          <NavLink to="/app/config/alerts" className="nav-link">
-            Alertas
           </NavLink>
           <NavLink to="/app/config/report-templates" className="nav-link">
             Reportes
