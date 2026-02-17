@@ -46,6 +46,11 @@ paths:
       parameters:
         - $ref: '#/components/parameters/Cursor'
         - $ref: '#/components/parameters/Limit'
+        - name: scope
+          in: query
+          schema:
+            $ref: '#/components/schemas/TermScope'
+          description: Filtra terminos por alcance de monitoreo (`claro|competencia`).
       responses:
         '200':
           description: Lista de terminos
@@ -468,9 +473,12 @@ components:
     ContentState:
       type: string
       enum: [active, archived, hidden]
+    TermScope:
+      type: string
+      enum: [claro, competencia]
     Term:
       type: object
-      required: [id, name, is_active, created_at]
+      required: [id, name, scope, is_active, created_at]
       properties:
         id:
           type: string
@@ -480,6 +488,8 @@ components:
         language:
           type: string
           default: es
+        scope:
+          $ref: '#/components/schemas/TermScope'
         is_active:
           type: boolean
         schedule:
@@ -514,6 +524,9 @@ components:
         language:
           type: string
           default: es
+        scope:
+          $ref: '#/components/schemas/TermScope'
+          default: claro
         max_articles_per_run:
           type: integer
           minimum: 1
@@ -526,6 +539,8 @@ components:
           type: string
         language:
           type: string
+        scope:
+          $ref: '#/components/schemas/TermScope'
         is_active:
           type: boolean
         max_articles_per_run:

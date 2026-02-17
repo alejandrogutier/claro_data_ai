@@ -2,8 +2,8 @@
 
 ## Estado General
 - Proyecto: `Inception`
-- Avance global: `91%`
-- Historias en curso: `CLARO-031, CLARO-032, CLARO-044`
+- Avance global: `95%`
+- Historias en curso: `CLARO-031`
 - Ambiente objetivo inicial: `prod` unico en `us-east-1`
 - Ultima actualizacion: `2026-02-17`
 
@@ -33,9 +33,9 @@
 | CLARO-021 | done | 100% | Ninguno | Blueprint UX/UI inicial consolidado y extendido a vision social/news/competencia |
 | CLARO-022 | done | 100% | Ninguno | Frontend base creado en `frontend/` con React+Vite, login Cognito Hosted UI (PKCE), app shell y guardas RBAC |
 | CLARO-029 | done | 100% | Ninguno | OpenAPI alineado con `/v1/feed/news` y pipeline `openapi-typescript` operativo con cliente tipado para frontend |
-| CLARO-031 | doing | 35% | Faltan 7 pantallas del modulo | Vertical minimo de queries/terminos operativo (CRUD base sobre `TrackedTerm`) |
-| CLARO-032 | doing | 40% | Faltan overview y feed competencia | Vertical minimo de feed operativo (`/app/feed` + `/v1/feed/news` con limite 2) |
-| CLARO-044 | doing | 45% | Falta configurar secretos/repo en GitHub y ejecutar deploy real | Workflows CI + deploy Amplify creados en `.github/workflows` |
+| CLARO-031 | doing | 70% | Dependencias funcionales pendientes de `CLARO-037/038/039` | 8 rutas de configuracion ya habilitadas en frontend; `Queries` operativa con CRUD + `scope` (`claro|competencia`) y 7 pantallas en shell/stub con bloqueos visibles |
+| CLARO-032 | done | 100% | Ninguno | Monitoreo V1 completo con rutas separadas (`/app/monitor/overview`, `/app/monitor/feed-claro`, `/app/monitor/feed-competencia`) y consumo de feed limitado a 2 noticias por query |
+| CLARO-044 | done | 100% | Ninguno | Deploy automatico Amplify en `main` validado; `VITE_*` cargadas en branch, rewrite SPA en `200`, callback/logout Cognito agregados para dominio Amplify y login funcional en URL publica |
 
 ## Riesgos Activos y Mitigacion
 1. **Riesgo**: catalogos reales aun no cargados (16 cuentas + competidores finales).
@@ -62,8 +62,7 @@
 - Zona horaria operativa: `America/Bogota`.
 
 ## Proximos Hitos
-1. Ejecutar deploy real de frontend en AWS Amplify desde `main` y validar URL publicada (CLARO-044).
-2. Completar modulo de configuracion V1 restante (CLARO-031).
-3. Completar monitoreo V1 (overview + competencia) (CLARO-032).
-4. Activar motor KPI de negocio (`BHS/SOV/severidad`) y alertas (CLARO-033/036).
-5. Retomar CLARO-013 (analysis async real) reutilizando patron de jobs y trazabilidad aplicado en export.
+1. Cerrar funcionalidad de `CLARO-031` sobre las 7 pantallas en shell, destrabando dependencias de `CLARO-037/038/039`.
+2. Activar motor KPI de negocio (`BHS/SOV/severidad`) y alertas (CLARO-033/036).
+3. Retomar CLARO-013 (analysis async real) reutilizando patron de jobs y trazabilidad aplicado en export.
+4. Completar CLARO-035/039 para centro de reportes y gobernanza de exportes en frontend.

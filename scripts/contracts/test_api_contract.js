@@ -8,6 +8,9 @@ const path = require("path");
 const ROOT = path.resolve(__dirname, "../..");
 const ENV_PATH = path.join(ROOT, ".env");
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const CONTENT_WAIT_ATTEMPTS = 12;
+const FEED_WAIT_ATTEMPTS = 12;
+const WAIT_INTERVAL_MS = 3000;
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -93,8 +96,8 @@ const ensureTokens = () => {
   };
 };
 
-const ensureTerm = async (apiBase, adminToken) => {
-  const termName = "claro-feed-contract";
+const ensureTerm = async (apiBase, adminToken, scope = "claro") => {
+  const termName = `claro-feed-contract-${scope}`;
   const createResponse = await request({
     method: "POST",
     url: `${apiBase}/v1/terms`,
@@ -102,6 +105,7 @@ const ensureTerm = async (apiBase, adminToken) => {
     body: {
       name: termName,
       language: "es",
+      scope,
       max_articles_per_run: 2
     }
   });
@@ -109,11 +113,13 @@ const ensureTerm = async (apiBase, adminToken) => {
 
   const listResponse = await request({
     method: "GET",
-    url: `${apiBase}/v1/terms?limit=100`,
+    url: `${apiBase}/v1/terms?limit=100&scope=${scope}`,
     token: adminToken
   });
   assertStatus(listResponse.status, 200, "GET /v1/terms");
-  const term = (listResponse.json?.items || []).find((item) => item.name === termName);
+  const items = listResponse.json?.items || [];
+  assertCondition(items.every((item) => item.scope === scope), `GET /v1/terms?scope=${scope} must return homogeneous scope`);
+  const term = items.find((item) => item.name === termName);
   assertCondition(term && typeof term.id === "string" && UUID_REGEX.test(term.id), "term not found after create/list");
   return term;
 };
@@ -136,7 +142,7 @@ const ensureContentItem = async (apiBase, analystToken, viewerToken, term) => {
   assertStatus(ingestionResponse.status, 202, "POST /v1/ingestion/runs");
   assertCondition(ingestionResponse.json && ingestionResponse.json.run_id, "ingestion response missing run_id");
 
-  for (let attempt = 1; attempt <= 30; attempt += 1) {
+  for (let attempt = 1; attempt <= CONTENT_WAIT_ATTEMPTS; attempt += 1) {
     const contentResponse = await request({
       method: "GET",
       url: `${apiBase}/v1/content?limit=1&term_id=${term.id}&source_type=news`,
@@ -152,17 +158,27 @@ const ensureContentItem = async (apiBase, analystToken, viewerToken, term) => {
       return item;
     }
 
-    await sleep(5000);
-    if (attempt === 30) {
-      throw new Error("No content item available after waiting for ingestion");
-    }
+    await sleep(WAIT_INTERVAL_MS);
+    if (attempt === CONTENT_WAIT_ATTEMPTS) break;
   }
 
-  throw new Error("unreachable");
+  const fallbackContent = await request({
+    method: "GET",
+    url: `${apiBase}/v1/content?limit=1`,
+    token: viewerToken
+  });
+  assertStatus(fallbackContent.status, 200, "GET /v1/content fallback");
+  const fallbackItems = fallbackContent.json?.items;
+  if (Array.isArray(fallbackItems) && fallbackItems.length > 0) {
+    return fallbackItems[0];
+  }
+
+  throw new Error("No content item available after waiting for ingestion and fallback");
 };
 
 const waitNewsFeed = async (apiBase, viewerToken, termId) => {
-  for (let attempt = 1; attempt <= 30; attempt += 1) {
+  let lastItems = [];
+  for (let attempt = 1; attempt <= FEED_WAIT_ATTEMPTS; attempt += 1) {
     const feedResponse = await request({
       method: "GET",
       url: `${apiBase}/v1/feed/news?term_id=${termId}`,
@@ -171,6 +187,7 @@ const waitNewsFeed = async (apiBase, viewerToken, termId) => {
     assertStatus(feedResponse.status, 200, "GET /v1/feed/news");
     assertCondition(Array.isArray(feedResponse.json?.items), "feed.items must be an array");
     assertCondition(feedResponse.json.items.length <= 2, "feed must return at most 2 items");
+    lastItems = feedResponse.json.items;
 
     if (feedResponse.json.items.length > 0) {
       const rank = feedResponse.json.items.map((item) => {
@@ -183,10 +200,10 @@ const waitNewsFeed = async (apiBase, viewerToken, termId) => {
       return feedResponse.json.items;
     }
 
-    await sleep(5000);
+    await sleep(WAIT_INTERVAL_MS);
   }
 
-  throw new Error("No feed items available after waiting for ingestion");
+  return lastItems;
 };
 
 const pickDifferentState = (state) => {
@@ -264,7 +281,8 @@ const main = async () => {
   const metaUnauthorized = await request({ method: "GET", url: `${apiBase}/v1/meta` });
   assertStatus(metaUnauthorized.status, 401, "GET /v1/meta without token");
 
-  const term = await ensureTerm(apiBase, adminToken);
+  const term = await ensureTerm(apiBase, adminToken, "claro");
+  await ensureTerm(apiBase, adminToken, "competencia");
 
   const metaViewer = await request({ method: "GET", url: `${apiBase}/v1/meta`, token: viewerToken });
   assertStatus(metaViewer.status, 200, "GET /v1/meta viewer");

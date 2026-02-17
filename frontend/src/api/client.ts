@@ -16,6 +16,8 @@ type RequestOptions = {
   body?: unknown;
 };
 
+export type TermScope = "claro" | "competencia";
+
 export class ApiError extends Error {
   constructor(
     public readonly status: number,
@@ -75,11 +77,12 @@ export class ApiClient {
     return payload as T;
   }
 
-  listTerms(limit = 100, cursor?: string): Promise<TermListResponse> {
+  listTerms(limit = 100, cursor?: string, scope?: TermScope): Promise<TermListResponse> {
     return this.request<TermListResponse>("/v1/terms", {
       query: {
         limit,
-        cursor
+        cursor,
+        scope
       }
     });
   }

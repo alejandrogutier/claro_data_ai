@@ -60,6 +60,8 @@ export interface paths {
                     /** @description Cursor opaco para paginacion */
                     cursor?: components["parameters"]["Cursor"];
                     limit?: components["parameters"]["Limit"];
+                    /** @description Filtra terminos por alcance de monitoreo (`claro|competencia`). */
+                    scope?: components["schemas"]["TermScope"];
                 };
                 header?: never;
                 path?: never;
@@ -655,12 +657,15 @@ export interface components {
         SourceType: "news" | "social";
         /** @enum {string} */
         ContentState: "active" | "archived" | "hidden";
+        /** @enum {string} */
+        TermScope: "claro" | "competencia";
         Term: {
             /** Format: uuid */
             id: string;
             name: string;
             /** @default es */
             language: string;
+            scope: components["schemas"]["TermScope"];
             is_active: boolean;
             /** @description cron/rule de ingestion */
             schedule?: string;
@@ -679,12 +684,15 @@ export interface components {
             name: string;
             /** @default es */
             language: string;
+            /** @default claro */
+            scope: components["schemas"]["TermScope"];
             /** @default 100 */
             max_articles_per_run: number;
         };
         UpdateTermRequest: {
             name?: string;
             language?: string;
+            scope?: components["schemas"]["TermScope"];
             is_active?: boolean;
             max_articles_per_run?: number;
         };

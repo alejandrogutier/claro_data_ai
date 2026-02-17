@@ -113,10 +113,31 @@ jobs:
 
           echo "url=$WEB_URL" >> "$GITHUB_OUTPUT"
 
+      - name: Smoke frontend routes
+        run: |
+          BASE_URL="${{ steps.url.outputs.url }}"
+
+          ROOT_CODE="$(curl -s -o /tmp/amplify-root.html -w "%{http_code}" "$BASE_URL/")"
+          LOGIN_CODE="$(curl -s -o /tmp/amplify-login.html -w "%{http_code}" "$BASE_URL/login")"
+
+          echo "Root code: $ROOT_CODE"
+          echo "Login code: $LOGIN_CODE"
+
+          if [ "$ROOT_CODE" != "200" ]; then
+            echo "Expected / to return 200 but got $ROOT_CODE" >&2
+            exit 1
+          fi
+
+          if [ "$LOGIN_CODE" != "200" ]; then
+            echo "Expected /login to return 200 but got $LOGIN_CODE" >&2
+            exit 1
+          fi
+
       - name: Deployment summary
         run: |
           {
             echo "## Amplify deployment completed"
             echo "- Branch: $AMPLIFY_BRANCH"
             echo "- URL: ${{ steps.url.outputs.url }}"
+            echo "- Smoke: `/` and `/login` returned 200"
           } >> "$GITHUB_STEP_SUMMARY"

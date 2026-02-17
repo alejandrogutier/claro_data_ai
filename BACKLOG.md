@@ -57,9 +57,7 @@ Este contrato se usa junto a `UX_PLANNING.md` secciones `2.3`, `7.4`, `21`, `26`
 | CLARO-042 | checklist transversal | CLARO-037, CLARO-038, CLARO-035 | gate go-live completo y aprobado |
 
 ## Now
-- CLARO-031 | doing | P1 | Configuracion V1 social/news (8 pantallas) | MVP inicial listo: pantalla `Queries/Terminos` conectada a `TrackedTerm` con CRUD base; faltan 7 pantallas del modulo. UX_REF: 8, 21.1
-- CLARO-032 | doing | P1 | Monitoreo V1 (overview + feed Claro + feed competencia) | MVP inicial listo: `/app/feed` + `GET /v1/feed/news` con limite 2 por query; faltan overview y feed competencia. UX_REF: 9, 21.2
-- CLARO-044 | doing | P1 | CI/CD frontend en AWS Amplify via GitHub Actions | workflow de deploy en `main`, validacion de URL publicada y smoke post-deploy
+- CLARO-031 | doing | P1 | Configuracion V1 social/news (8 pantallas) | modulo ya expone 8 rutas (`/app/config/*`): `queries` operativo con CRUD + `scope` (`claro|competencia`), 7 pantallas en shell/stub con bloqueos declarados en UI para `CLARO-037/038/039`. UX_REF: 8, 21.1
 
 ## Next
 - CLARO-023 | todo | P1 | Dashboard Overview Salud de Marca | KPIs fijos (`BHS`, `SOV`, `sentimiento neto`, `riesgo activo`) y tendencia 7d. UX_REF: 9.1, 12, 21.2
@@ -123,3 +121,5 @@ Antes de mover `doing` -> `done`:
 - CLARO-010 | done | P1 | Maquina de estados active/archived/hidden + acciones bulk | endpoints single/bulk operativos con transiciones auditadas (`ContentStateEvent` + `AuditLog`) y manejo deterministico de errores (`404/409/422`)
 - CLARO-015 | done | P2 | Exportacion CSV controlada | flujo async real (`POST /v1/exports/csv` + `GET /v1/exports/{id}`), worker SQS, persistencia `ExportJob` y URL firmada en `completed`
 - CLARO-017 | done | P1 | OpenAPI 3.1 + pruebas de contrato | contrato actualizado (`/v1/exports/{id}` + errores mutables), `npm run contract:test` y smoke business extendido (`state/bulk/classification/export`)
+- CLARO-032 | done | P1 | Monitoreo V1 (overview + feed Claro + feed competencia) | rutas `/app/monitor/overview`, `/app/monitor/feed-claro` y `/app/monitor/feed-competencia` operativas con separacion por `scope` y feed limitado a 2 noticias por query
+- CLARO-044 | done | P1 | CI/CD frontend en AWS Amplify via GitHub Actions | Amplify `main` configurado con variables `VITE_*`, rewrite SPA `200`, callbacks Cognito actualizados para dominio Amplify y verificacion real de `/` + `/login` en `200`

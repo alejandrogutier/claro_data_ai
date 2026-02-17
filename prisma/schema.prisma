@@ -24,6 +24,11 @@ enum ContentState {
   hidden
 }
 
+enum TermScope {
+  claro
+  competencia
+}
+
 enum RunStatus {
   queued
   running
@@ -56,6 +61,7 @@ model TrackedTerm {
   id               String         @id @default(uuid()) @db.Uuid
   name             String
   language         String         @default("es")
+  scope            TermScope      @default(claro)
   isActive         Boolean        @default(true)
   maxArticlesPerRun Int           @default(100)
   createdAt        DateTime       @default(now())
@@ -66,6 +72,7 @@ model TrackedTerm {
 
   @@unique([name, language])
   @@index([isActive])
+  @@index([scope])
 }
 
 model IngestionRun {

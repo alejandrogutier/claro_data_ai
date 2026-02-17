@@ -179,8 +179,12 @@ assert_code "$CODE" "403" "POST /v1/terms viewer denied"
 
 echo "[2] Terms create and list"
 SMOKE_TERM_NAME="claro-feed-smoke"
-CODE="$(curl -s -o /tmp/claro-terms-create-admin.json -w "%{http_code}" -X POST -H "Authorization: Bearer $ADMIN_TOKEN" -H "Content-Type: application/json" -d "{\"name\":\"$SMOKE_TERM_NAME\",\"language\":\"es\",\"max_articles_per_run\":2}" "$API_BASE/v1/terms")"
+CODE="$(curl -s -o /tmp/claro-terms-create-admin.json -w "%{http_code}" -X POST -H "Authorization: Bearer $ADMIN_TOKEN" -H "Content-Type: application/json" -d "{\"name\":\"$SMOKE_TERM_NAME\",\"language\":\"es\",\"scope\":\"claro\",\"max_articles_per_run\":2}" "$API_BASE/v1/terms")"
 assert_code_in "$CODE" "201" "409" "POST /v1/terms admin"
+
+SMOKE_COMP_TERM_NAME="competencia-feed-smoke"
+CODE="$(curl -s -o /tmp/claro-terms-create-comp-admin.json -w "%{http_code}" -X POST -H "Authorization: Bearer $ADMIN_TOKEN" -H "Content-Type: application/json" -d "{\"name\":\"$SMOKE_COMP_TERM_NAME\",\"language\":\"es\",\"scope\":\"competencia\",\"max_articles_per_run\":2}" "$API_BASE/v1/terms")"
+assert_code_in "$CODE" "201" "409" "POST /v1/terms competencia admin"
 
 SMOKE_TERM_ID="$(jq -r '.id // empty' /tmp/claro-terms-create-admin.json)"
 if [[ -z "$SMOKE_TERM_ID" || "$SMOKE_TERM_ID" == "null" ]]; then
@@ -191,6 +195,16 @@ fi
 
 if [[ -z "$SMOKE_TERM_ID" ]]; then
   echo "[FAIL] no term id available for smoke feed checks"
+  exit 1
+fi
+
+CODE="$(curl -s -o /tmp/claro-terms-competencia-list.json -w "%{http_code}" -H "Authorization: Bearer $VIEWER_TOKEN" "$API_BASE/v1/terms?limit=100&scope=competencia")"
+assert_code "$CODE" "200" "GET /v1/terms?scope=competencia viewer"
+
+ALL_COMP_SCOPE="$(jq -r '([.items[]?.scope == "competencia"] | all) | tostring' /tmp/claro-terms-competencia-list.json)"
+if [[ "$ALL_COMP_SCOPE" != "true" ]]; then
+  echo "[FAIL] scope filter competencia returned mixed scopes"
+  cat /tmp/claro-terms-competencia-list.json
   exit 1
 fi
 

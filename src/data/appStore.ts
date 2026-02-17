@@ -17,6 +17,9 @@ import {
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const NEWS_FEED_LIMIT = 2;
+const TERM_SCOPES = ["claro", "competencia"] as const;
+
+type TermScope = (typeof TERM_SCOPES)[number];
 
 type CursorPayload = {
   created_at: string;
@@ -27,6 +30,7 @@ type TermRecord = {
   id: string;
   name: string;
   language: string;
+  scope: TermScope;
   isActive: boolean;
   maxArticlesPerRun: number;
   createdAt: Date;
@@ -42,12 +46,14 @@ type TermsPage = {
 type CreateTermInput = {
   name: string;
   language: string;
+  scope: TermScope;
   maxArticlesPerRun: number;
 };
 
 type UpdateTermInput = {
   name?: string;
   language?: string;
+  scope?: TermScope;
   isActive?: boolean;
   maxArticlesPerRun?: number;
 };
@@ -376,7 +382,7 @@ class AppStore {
       .filter((value): value is string => Boolean(value));
   }
 
-  async listTerms(limit: number, cursor?: string): Promise<TermsPage> {
+  async listTerms(limit: number, cursor?: string, scope?: TermScope): Promise<TermsPage> {
     const safeLimit = Math.min(200, Math.max(1, limit));
     const cursorPayload = decodeCursor(cursor);
     if (cursor && !cursorPayload) {
@@ -385,6 +391,11 @@ class AppStore {
 
     const conditions: string[] = [];
     const params = [sqlLong("limit_plus_one", safeLimit + 1)];
+
+    if (scope) {
+      conditions.push('t."scope" = CAST(:scope AS "public"."TermScope")');
+      params.push(sqlString("scope", scope));
+    }
 
     if (cursorPayload) {
       const cursorDate = asDateOrThrow(cursorPayload.created_at, "cursor");
@@ -402,6 +413,7 @@ class AppStore {
           t."id"::text,
           t."name",
           t."language",
+          t."scope"::text,
           t."isActive",
           t."maxArticlesPerRun",
           t."createdAt",
@@ -423,12 +435,23 @@ class AppStore {
         const id = fieldString(row, 0);
         const name = fieldString(row, 1);
         const language = fieldString(row, 2);
-        const isActive = fieldBoolean(row, 3);
-        const maxArticlesPerRun = fieldLong(row, 4);
-        const createdAt = fieldDate(row, 5);
-        const updatedAt = fieldDate(row, 6);
+        const scope = fieldString(row, 3) as TermScope | null;
+        const isActive = fieldBoolean(row, 4);
+        const maxArticlesPerRun = fieldLong(row, 5);
+        const createdAt = fieldDate(row, 6);
+        const updatedAt = fieldDate(row, 7);
 
-        if (!id || !name || !language || isActive === null || maxArticlesPerRun === null || !createdAt || !updatedAt) {
+        if (
+          !id ||
+          !name ||
+          !language ||
+          !scope ||
+          !TERM_SCOPES.includes(scope) ||
+          isActive === null ||
+          maxArticlesPerRun === null ||
+          !createdAt ||
+          !updatedAt
+        ) {
           return null;
         }
 
@@ -436,6 +459,7 @@ class AppStore {
           id,
           name,
           language,
+          scope,
           isActive,
           maxArticlesPerRun,
           createdAt,
@@ -459,13 +483,14 @@ class AppStore {
       const response = await this.rds.execute(
         `
           INSERT INTO "public"."TrackedTerm"
-            ("id", "name", "language", "isActive", "maxArticlesPerRun", "createdAt", "updatedAt")
+            ("id", "name", "language", "scope", "isActive", "maxArticlesPerRun", "createdAt", "updatedAt")
           VALUES
-            (CAST(:id AS UUID), :name, :language, TRUE, :max_articles_per_run, NOW(), NOW())
+            (CAST(:id AS UUID), :name, :language, CAST(:scope AS "public"."TermScope"), TRUE, :max_articles_per_run, NOW(), NOW())
           RETURNING
             "id"::text,
             "name",
             "language",
+            "scope"::text,
             "isActive",
             "maxArticlesPerRun",
             "createdAt",
@@ -475,6 +500,7 @@ class AppStore {
           sqlUuid("id", randomUUID()),
           sqlString("name", input.name),
           sqlString("language", input.language),
+          sqlString("scope", input.scope),
           sqlLong("max_articles_per_run", input.maxArticlesPerRun)
         ]
       );
@@ -483,12 +509,23 @@ class AppStore {
       const id = fieldString(row, 0);
       const name = fieldString(row, 1);
       const language = fieldString(row, 2);
-      const isActive = fieldBoolean(row, 3);
-      const maxArticlesPerRun = fieldLong(row, 4);
-      const createdAt = fieldDate(row, 5);
-      const updatedAt = fieldDate(row, 6);
+      const scope = fieldString(row, 3) as TermScope | null;
+      const isActive = fieldBoolean(row, 4);
+      const maxArticlesPerRun = fieldLong(row, 5);
+      const createdAt = fieldDate(row, 6);
+      const updatedAt = fieldDate(row, 7);
 
-      if (!id || !name || !language || isActive === null || maxArticlesPerRun === null || !createdAt || !updatedAt) {
+      if (
+        !id ||
+        !name ||
+        !language ||
+        !scope ||
+        !TERM_SCOPES.includes(scope) ||
+        isActive === null ||
+        maxArticlesPerRun === null ||
+        !createdAt ||
+        !updatedAt
+      ) {
         throw new Error("Failed to parse created term");
       }
 
@@ -496,6 +533,7 @@ class AppStore {
         id,
         name,
         language,
+        scope,
         isActive,
         maxArticlesPerRun,
         createdAt,
@@ -523,6 +561,11 @@ class AppStore {
       params.push(sqlString("language", input.language));
     }
 
+    if (input.scope !== undefined) {
+      setParts.push('"scope" = CAST(:scope AS "public"."TermScope")');
+      params.push(sqlString("scope", input.scope));
+    }
+
     if (input.isActive !== undefined) {
       setParts.push('"isActive" = :is_active');
       params.push(sqlBoolean("is_active", input.isActive));
@@ -543,6 +586,7 @@ class AppStore {
             "id"::text,
             "name",
             "language",
+            "scope"::text,
             "isActive",
             "maxArticlesPerRun",
             "createdAt",
@@ -558,13 +602,21 @@ class AppStore {
         id: fieldString(row, 0) ?? "",
         name: fieldString(row, 1) ?? "",
         language: fieldString(row, 2) ?? "",
-        isActive: fieldBoolean(row, 3) ?? false,
-        maxArticlesPerRun: fieldLong(row, 4) ?? 0,
-        createdAt: fieldDate(row, 5) ?? new Date(0),
-        updatedAt: fieldDate(row, 6) ?? new Date(0)
+        scope: (fieldString(row, 3) as TermScope | null) ?? "claro",
+        isActive: fieldBoolean(row, 4) ?? false,
+        maxArticlesPerRun: fieldLong(row, 5) ?? 0,
+        createdAt: fieldDate(row, 6) ?? new Date(0),
+        updatedAt: fieldDate(row, 7) ?? new Date(0)
       };
 
-      if (!term.id || !term.name || !term.language || term.maxArticlesPerRun <= 0 || Number.isNaN(term.createdAt.getTime())) {
+      if (
+        !term.id ||
+        !term.name ||
+        !term.language ||
+        !TERM_SCOPES.includes(term.scope) ||
+        term.maxArticlesPerRun <= 0 ||
+        Number.isNaN(term.createdAt.getTime())
+      ) {
         throw new Error("Failed to parse updated term");
       }
 
@@ -1322,6 +1374,7 @@ export type {
   MetaCountItem,
   MetaResponse,
   TermRecord,
+  TermScope,
   TermsPage,
   UpdateTermInput
 };
