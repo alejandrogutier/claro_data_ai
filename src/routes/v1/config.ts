@@ -482,7 +482,7 @@ export const createConfigAccount = async (event: APIGatewayProxyEventV2) => {
     return json(400, { error: "invalid_json", message: "Body JSON invalido" });
   }
 
-  const platform = normalizeString(body.platform, 2, 40);
+  const platform = normalizeString(body.platform, 1, 40);
   const handle = normalizeString(body.handle, 2, 80);
   const accountName = normalizeString(body.account_name, 2, 160);
   const businessLine = normalizeOptionalString(body.business_line, 120);
@@ -556,7 +556,7 @@ export const patchConfigAccount = async (event: APIGatewayProxyEventV2) => {
   const patch: Record<string, unknown> = {};
 
   if (body.platform !== undefined) {
-    const value = normalizeString(body.platform, 2, 40);
+    const value = normalizeString(body.platform, 1, 40);
     if (!value) return json(422, { error: "validation_error", message: "platform invalido" });
     patch.platform = value.toLowerCase();
   }

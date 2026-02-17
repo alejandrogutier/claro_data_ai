@@ -1500,7 +1500,7 @@ components:
       properties:
         platform:
           type: string
-          minLength: 2
+          minLength: 1
         handle:
           type: string
           minLength: 2
