@@ -1,9 +1,8 @@
 # Backlog
 
 ## Now
-- CLARO-005 | doing | P0 | Pipeline ingesta programada cada 15 min | pipeline funcional desplegado (EventBridge + Step Functions + SQS + worker Lambda + S3 raw); falta persistencia SQL de dominio
 - CLARO-006 | doing | P1 | Adaptadores de proveedores de noticias de APIS.md | adaptadores base implementados con retries/backoff y fail-soft; falta hardening por proveedor
-- CLARO-007 | doing | P1 | Dedupe por URL canonica + persistencia unificada | dedupe canonico implementado en worker; falta idempotencia/persistencia en `content_items`
+- CLARO-007 | doing | P1 | Dedupe por URL canonica + persistencia unificada | dedupe + upsert por `canonicalUrl` implementados; falta reforzar idempotencia cruzada para escenarios de replay extremo
 - CLARO-017 | doing | P2 | OpenAPI 3.1 + pruebas de contrato | especificacion base creada en `openapi/v1.yaml`; faltan pruebas de contrato
 
 ## Next
@@ -28,3 +27,4 @@
 - CLARO-002 | done | P0 | Terraform base de plataforma AWS | infraestructura desplegada en AWS (KMS, S3, CloudFront, Cognito, API/Lambda, SQS, EventBridge, Step Functions, Aurora, SES, Budget)
 - CLARO-003 | done | P0 | Cognito + RBAC en API Gateway | JWT authorizer + rutas privadas + enforcement de rol en Lambda validados con smoke test
 - CLARO-004 | done | P0 | Aurora PostgreSQL + Prisma + esquema inicial | migracion `20260217022500_init` aplicada en Aurora via `db-migration-runner` y secreto `claro-data-prod/database` creado
+- CLARO-005 | done | P0 | Pipeline ingesta programada cada 15 min | corrida manual y scheduler operativos con persistencia SQL en `IngestionRun`, `IngestionRunItem` y `ContentItem`

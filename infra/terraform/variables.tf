@@ -96,6 +96,12 @@ variable "aws_credentials_secret_name" {
   default     = "claro-data-prod/aws-credentials"
 }
 
+variable "database_secret_name" {
+  type        = string
+  description = "Nombre del secreto con credenciales de base de datos para runtime"
+  default     = "claro-data-prod/database"
+}
+
 variable "ingestion_default_terms" {
   type        = string
   description = "Terminos por defecto para corridas programadas, separados por coma"

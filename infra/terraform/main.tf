@@ -320,6 +320,9 @@ resource "aws_lambda_function" "ingestion_worker" {
       PROVIDER_KEYS_SECRET_NAME   = data.aws_secretsmanager_secret.provider_keys.name
       APP_CONFIG_SECRET_NAME      = data.aws_secretsmanager_secret.app_config.name
       AWS_CREDENTIALS_SECRET_NAME = data.aws_secretsmanager_secret.aws_credentials.name
+      DB_RESOURCE_ARN             = aws_rds_cluster.aurora.arn
+      DB_SECRET_ARN               = data.aws_secretsmanager_secret.database.arn
+      DB_NAME                     = var.db_name
       RAW_BUCKET_NAME             = aws_s3_bucket.raw.bucket
       INGESTION_DEFAULT_TERMS     = var.ingestion_default_terms
     }
@@ -607,6 +610,7 @@ resource "aws_rds_cluster" "aurora" {
   vpc_security_group_ids = [aws_security_group.aurora.id]
   storage_encrypted      = true
   kms_key_id             = aws_kms_key.app.arn
+  enable_http_endpoint   = true
   skip_final_snapshot    = true
 
   serverlessv2_scaling_configuration {

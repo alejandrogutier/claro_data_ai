@@ -15,3 +15,7 @@ data "aws_secretsmanager_secret" "app_config" {
 data "aws_secretsmanager_secret" "aws_credentials" {
   name = var.aws_credentials_secret_name
 }
+
+data "aws_secretsmanager_secret" "database" {
+  name = var.database_secret_name
+}

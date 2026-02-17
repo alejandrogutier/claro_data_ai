@@ -8,7 +8,7 @@ set -a
 source .env
 set +a
 
-: "${AWS_REGION:=us-west-2}"
+: "${AWS_REGION:=us-east-1}"
 
 VPC_ID="$(aws ec2 describe-vpcs --region "$AWS_REGION" --filters Name=isDefault,Values=true --query 'Vpcs[0].VpcId' --output text)"
 if [[ -z "$VPC_ID" || "$VPC_ID" == "None" ]]; then
@@ -29,6 +29,10 @@ OWNER="${OWNER:-claro-data-team}"
 COST_CENTER="${COST_CENTER:-marketing-intelligence}"
 BUDGET_EMAIL="${BUDGET_EMAIL:-ops@example.com}"
 SES_SENDER_EMAIL="${SES_SENDER_EMAIL:-digest@example.com}"
+PROVIDER_KEYS_SECRET_NAME="${PROVIDER_KEYS_SECRET_NAME:-claro-data-prod/provider-api-keys}"
+APP_CONFIG_SECRET_NAME="${APP_CONFIG_SECRET_NAME:-claro-data-prod/app-config}"
+AWS_CREDENTIALS_SECRET_NAME="${AWS_CREDENTIALS_SECRET_NAME:-claro-data-prod/aws-credentials}"
+DATABASE_SECRET_NAME="${DATABASE_SECRET_NAME:-claro-data-prod/database}"
 
 TFVARS_PATH="$ROOT_DIR/infra/terraform/terraform.tfvars"
 LAMBDA_PACKAGE_PATH="$ROOT_DIR/build/lambda-api.zip"
@@ -42,9 +46,10 @@ db_master_password   = "$DB_PASSWORD"
 budget_email         = "$BUDGET_EMAIL"
 ses_sender_email     = "$SES_SENDER_EMAIL"
 lambda_package_path  = "$LAMBDA_PACKAGE_PATH"
-provider_keys_secret_name = "claro-data-prod/provider-api-keys"
-app_config_secret_name    = "claro-data-prod/app-config"
-aws_credentials_secret_name = "claro-data-prod/aws-credentials"
+provider_keys_secret_name = "$PROVIDER_KEYS_SECRET_NAME"
+app_config_secret_name    = "$APP_CONFIG_SECRET_NAME"
+aws_credentials_secret_name = "$AWS_CREDENTIALS_SECRET_NAME"
+database_secret_name      = "$DATABASE_SECRET_NAME"
 VARS
 
 echo "Generated: $TFVARS_PATH"

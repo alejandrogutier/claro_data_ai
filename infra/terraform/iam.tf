@@ -62,8 +62,20 @@ resource "aws_iam_role_policy" "lambda_ingestion_access" {
         Resource = [
           data.aws_secretsmanager_secret.provider_keys.arn,
           data.aws_secretsmanager_secret.app_config.arn,
-          data.aws_secretsmanager_secret.aws_credentials.arn
+          data.aws_secretsmanager_secret.aws_credentials.arn,
+          data.aws_secretsmanager_secret.database.arn
         ]
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "rds-data:ExecuteStatement",
+          "rds-data:BatchExecuteStatement",
+          "rds-data:BeginTransaction",
+          "rds-data:CommitTransaction",
+          "rds-data:RollbackTransaction"
+        ]
+        Resource = [aws_rds_cluster.aurora.arn]
       },
       {
         Effect = "Allow"

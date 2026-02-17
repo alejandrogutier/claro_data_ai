@@ -2,8 +2,8 @@
 
 ## Estado General
 - Proyecto: `Inception`
-- Avance global: `53%`
-- Historias en curso: `CLARO-005, CLARO-006, CLARO-007, CLARO-017`
+- Avance global: `61%`
+- Historias en curso: `CLARO-006, CLARO-007, CLARO-017`
 - Ambiente objetivo inicial: `prod` unico en `us-east-1`
 - Ultima actualizacion: `2026-02-17`
 
@@ -14,9 +14,9 @@
 | CLARO-002 | done | 100% | Ninguno | Terraform aplicado en AWS con recursos base productivos |
 | CLARO-003 | done | 100% | Ninguno | Authorizer JWT en API Gateway + enforcement de rol por ruta en Lambda (smoke test validado) |
 | CLARO-004 | done | 100% | Ninguno | Migracion inicial aplicada en Aurora via Lambda runner en VPC, incluyendo indice FTS y registro `_prisma_migrations` |
-| CLARO-005 | doing | 72% | Falta persistencia de ingesta en tablas de dominio | Step Functions -> SQS -> worker Lambda operativo y validado con corrida manual |
+| CLARO-005 | done | 100% | Ninguno | Pipeline operativo con persistencia SQL en Aurora (`IngestionRun`, `IngestionRunItem`, `ContentItem`) validada en corrida manual |
 | CLARO-006 | doing | 45% | Falta hardening por proveedor y normalizacion avanzada | Adaptadores de APIS.md implementados con retry/backoff y manejo fail-soft |
-| CLARO-007 | doing | 35% | Falta llave de idempotencia persistida en SQL | Dedupe por URL canonica implementado en worker antes de persistencia raw |
+| CLARO-007 | doing | 68% | Falta hardening de idempotencia para replay extremo y corrida multi-termino | Dedupe por URL canonica + upsert por `canonicalUrl` + limpieza idempotente de `IngestionRunItem` por `run_id` |
 | CLARO-008 | todo | 0% | Ninguno | Integracion Bedrock runtime pendiente |
 | CLARO-009 | todo | 0% | Ninguno | Override de clasificacion pendiente |
 | CLARO-010 | todo | 0% | Ninguno | Maquina de estados de dominio pendiente |
@@ -36,8 +36,8 @@
    - Mitigacion: runtime productivo ya consume Secrets Manager; `.env` queda solo para scripts locales y bootstrap controlado.
 2. **Riesgo**: decision de no rotar llaves actualmente.
    - Mitigacion: mantener monitoreo y planear rotacion controlada en ventana futura sin detener operacion.
-3. **Riesgo**: persistencia SQL de ingesta aun no cableada en runtime de negocio.
-   - Mitigacion: siguiente sprint enfocado en `content_items`, `ingestion_runs` e idempotencia en DB.
+3. **Riesgo**: escenarios de replay extremo pueden generar sobrecosto de escrituras aunque no dupliquen funcionalmente contenido.
+   - Mitigacion: reforzar idempotencia de corrida con llave adicional por evento/term y controles de reintento en CLARO-007.
 4. **Riesgo**: almacenamiento de contenido completo y PII amplia.
    - Mitigacion: definir guardrails legales/compliance (CLARO-019/020) antes de escalar integraciones sociales.
 
@@ -52,7 +52,7 @@
 - Secretos: gestion en Secrets Manager (`claro-data-prod/*` + `claro-data-prod/database`) sin rotacion en esta fase.
 
 ## Proximos Hitos
-1. Persistir ingesta en Aurora (`ingestion_runs`, `content_items`) con idempotencia por URL canonica (CLARO-005/007).
+1. Cerrar hardening de idempotencia en ingesta para replay/retry extremo (CLARO-007).
 2. Endurecer adaptadores por proveedor y completar normalizacion de campos faltantes (CLARO-006).
 3. Integrar clasificacion en Bedrock con versionado de prompt y persistencia (CLARO-008).
 4. Publicar pruebas de contrato OpenAPI 3.1 para las rutas `/v1/*` base (CLARO-017).
