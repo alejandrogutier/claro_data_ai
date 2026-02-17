@@ -17,7 +17,7 @@
 | CLARO-005 | done | 100% | Ninguno | Pipeline operativo con persistencia SQL en Aurora |
 | CLARO-006 | done | 100% | Ninguno | Adaptadores endurecidos con taxonomia de errores y normalizacion defensiva |
 | CLARO-007 | done | 100% | Ninguno | Replay gate por `run_id` y no-duplicado validado |
-| CLARO-008 | todo | 0% | Ninguno | Integracion Bedrock runtime pendiente |
+| CLARO-008 | done | 100% | Ninguno | Clasificacion async desplegada: SQS `classification_generation` + scheduler 15m + worker Bedrock estricto; contract+smoke en verde |
 | CLARO-009 | done | 100% | Ninguno | Override manual operativo en `PATCH /v1/content/{id}/classification` con `manual-override-v1`, `model_id=manual`, actor auto-upsert y auditoria `before/after` |
 | CLARO-010 | done | 100% | Ninguno | Maquina de estados operativa en single/bulk (`PATCH /state`, `POST /bulk/state`) con transicion libre auditada y errores deterministas (`404/409/422`) |
 | CLARO-011 | todo | 0% | Ninguno | FTS + cursor pagination pendiente |

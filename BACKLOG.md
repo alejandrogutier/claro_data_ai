@@ -63,7 +63,6 @@ Este contrato se usa junto a `UX_PLANNING.md` secciones `2.3`, `7.4`, `21`, `26`
 - CLARO-040 | todo | P2 | Loop de calidad semantica | falso positivo con reason code + recalibracion mensual de reglas/umbrales. UX_REF: 13
 - CLARO-041 | todo | P2 | UX de adopcion | diccionario de KPI en app + tour guiado basico por rol. UX_REF: 18, 26, 27
 - CLARO-042 | todo | P1 | Go-live readiness social | gate con 16 cuentas activas + set final competidores + UAT 2 semanas + piloto 1 semana. UX_REF: 23, 24, 27
-- CLARO-008 | todo | P1 | Clasificacion Bedrock Haiku 4.5 | implementar runtime Bedrock y persistencia
 - CLARO-011 | todo | P1 | Filtros avanzados + busqueda FTS + cursor pagination | completar endpoint detalle y comportamiento UX con calidad operativa
 - CLARO-016 | todo | P2 | Dashboards operativos CloudWatch/X-Ray | tableros de operacion sin alertas push externas en V1
 
@@ -123,3 +122,4 @@ Antes de mover `doing` -> `done`:
 - CLARO-035 | done | P1 | Modulo Reportes (3 paginas) | backend `/v1/reports/*` desplegado (templates/schedules/runs/center), worker+scheduler (SQS/EventBridge/Lambda), estado `pending_review` por confianza, pages `/app/reports/*` operativas y flow validado en `contract:test` + smoke business
 - CLARO-012 | done | P1 | Source scoring global configurable | desplegado en AWS: CRUD `/v1/config/source-scoring/weights` con auditoria, score efectivo dinamico en monitor/analyze/incidents/feed y UI `/app/config/source-scoring`; contract+smoke en verde
 - CLARO-013 | done | P2 | Analysis async real | desplegado en AWS: `/v1/analysis/runs|history|runs/{id}`, SQS+worker Bedrock estricto (inference profile), historial/detalle + UI `/app/analyze/runs`; contract+smoke en verde
+- CLARO-008 | done | P1 | Clasificacion Bedrock Haiku 4.5 | SQS `classification_generation` + scheduler 15m + worker Bedrock estricto; overrides manuales siempre ganan en lecturas; smoke + contract en verde
