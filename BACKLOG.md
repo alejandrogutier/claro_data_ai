@@ -1,7 +1,7 @@
 # Backlog
 
 ## Now
-- CLARO-004 | doing | P0 | Aurora PostgreSQL + Prisma + esquema inicial | `prisma/schema.prisma` creado con tablas/enums core; pendiente migracion real e indices FTS SQL
+- CLARO-004 | doing | P0 | Aurora PostgreSQL + Prisma + esquema inicial | migracion inicial versionada en `prisma/migrations/20260217022500_init`; pendiente aplicarla en Aurora (runner con acceso VPC)
 - CLARO-005 | doing | P0 | Pipeline ingesta programada cada 15 min | infraestructura base (EventBridge + Step Functions + SQS + DLQ) desplegada; faltan workers de negocio
 - CLARO-017 | doing | P2 | OpenAPI 3.1 + pruebas de contrato | especificacion base creada en `openapi/v1.yaml`; faltan pruebas de contrato
 

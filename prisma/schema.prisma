@@ -135,7 +135,6 @@ model ContentItem {
   @@index([state, createdAt])
   @@index([sourceType, provider])
   @@index([category])
-  // Nota: agregar indice FTS real con migracion SQL manual sobre title/summary/content.
 }
 
 model Classification {

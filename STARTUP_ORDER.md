@@ -2,7 +2,7 @@
 
 ## 1) Seguridad y base operativa
 1. Mover secretos productivos a AWS Secrets Manager.
-2. Rotar las credenciales actualmente expuestas en `.env`.
+2. Mantener credenciales actuales sin rotacion por decision operativa (controladas como secretos seguros).
 3. Configurar KMS y politicas IAM de minimo privilegio.
 
 ## 2) Plataforma minima productiva
@@ -12,9 +12,9 @@
 4. Provisionar Aurora PostgreSQL Serverless v2.
 
 ## 3) Dominio de datos
-1. Aplicar Prisma schema inicial.
+1. Generar y versionar migracion inicial Prisma (`prisma/migrations/20260217022500_init/migration.sql`).
 2. Crear tablas core de terminos, contenido, clasificaciones, analisis, auditoria y exportes.
-3. Implementar indice FTS en PostgreSQL para `title/summary/content` via migracion SQL.
+3. Aplicar migracion en Aurora desde un runner con acceso VPC y validar indice FTS sobre `title/summary/content`.
 
 ## 4) Ingesta y procesamiento
 1. Activar EventBridge cada 15 min.

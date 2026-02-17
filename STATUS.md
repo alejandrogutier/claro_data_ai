@@ -13,7 +13,7 @@
 | CLARO-001 | done | 100% | Ninguno | Secretos cargados en Secrets Manager y lectura runtime habilitada en Lambda/API |
 | CLARO-002 | done | 100% | Ninguno | Terraform aplicado en AWS con recursos base productivos |
 | CLARO-003 | done | 100% | Ninguno | Authorizer JWT en API Gateway + enforcement de rol por ruta en Lambda (smoke test validado) |
-| CLARO-004 | doing | 60% | Falta migracion Prisma real e indice FTS SQL | Aurora Serverless v2 desplegado y endpoint disponible |
+| CLARO-004 | doing | 72% | Falta aplicar migracion en Aurora desde runner con acceso VPC | `prisma/migrations/20260217022500_init` creada con tablas core + indice FTS |
 | CLARO-005 | doing | 55% | Falta implementar workers de negocio | EventBridge + Step Functions + SQS + DLQ desplegados; pendientes handlers de fetch/normalize/persist |
 | CLARO-006 | todo | 0% | Ninguno | Adaptadores providers pendientes |
 | CLARO-007 | todo | 0% | Ninguno | Dedupe/idempotencia de dominio pendiente |
@@ -36,7 +36,9 @@
    - Mitigacion: runtime productivo ya consume Secrets Manager; `.env` queda solo para scripts locales y bootstrap controlado.
 2. **Riesgo**: decision de no rotar llaves actualmente.
    - Mitigacion: mantener monitoreo y planear rotacion controlada en ventana futura sin detener operacion.
-3. **Riesgo**: almacenamiento de contenido completo y PII amplia.
+3. **Riesgo**: aplicacion de migraciones Prisma bloqueada por conectividad a Aurora en subred privada.
+   - Mitigacion: ejecutar migraciones desde runner/Lambda con acceso VPC y luego automatizar `prisma migrate deploy` en pipeline.
+4. **Riesgo**: almacenamiento de contenido completo y PII amplia.
    - Mitigacion: definir guardrails legales/compliance (CLARO-019/020) antes de escalar integraciones sociales.
 
 ## Decisiones Cerradas de Arquitectura
