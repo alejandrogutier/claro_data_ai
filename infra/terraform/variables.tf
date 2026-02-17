@@ -13,7 +13,7 @@ variable "environment" {
 variable "aws_region" {
   type        = string
   description = "Region AWS"
-  default     = "us-west-2"
+  default     = "us-east-1"
 }
 
 variable "owner" {
@@ -36,14 +36,10 @@ variable "private_subnet_ids" {
   description = "Subnets privadas para Aurora"
 }
 
-variable "api_lambda_s3_bucket" {
+variable "lambda_package_path" {
   type        = string
-  description = "Bucket con paquete zip de Lambda API"
-}
-
-variable "api_lambda_s3_key" {
-  type        = string
-  description = "Objeto zip de Lambda API"
+  description = "Ruta local al zip de Lambda API"
+  default     = "../../build/lambda-api.zip"
 }
 
 variable "db_name" {
@@ -73,9 +69,65 @@ variable "monthly_budget_usd" {
 variable "budget_email" {
   type        = string
   description = "Email para alertas de budget"
+  default     = "ops@example.com"
 }
 
 variable "ses_sender_email" {
   type        = string
   description = "Sender verificado en SES"
+  default     = "digest@example.com"
+}
+
+variable "provider_keys_secret_name" {
+  type        = string
+  description = "Nombre del secreto con API keys de proveedores"
+  default     = "claro-data-prod/provider-api-keys"
+}
+
+variable "app_config_secret_name" {
+  type        = string
+  description = "Nombre del secreto con configuracion de app"
+  default     = "claro-data-prod/app-config"
+}
+
+variable "aws_credentials_secret_name" {
+  type        = string
+  description = "Nombre del secreto con credenciales AWS legado"
+  default     = "claro-data-prod/aws-credentials"
+}
+
+variable "database_secret_name" {
+  type        = string
+  description = "Nombre del secreto con credenciales de base de datos para runtime"
+  default     = "claro-data-prod/database"
+}
+
+variable "ingestion_default_terms" {
+  type        = string
+  description = "Terminos por defecto para corridas programadas, separados por coma"
+  default     = ""
+}
+
+variable "cognito_domain_prefix" {
+  type        = string
+  description = "Prefijo de dominio Cognito Hosted UI (debe ser unico globalmente). Si es null, se construye automaticamente."
+  default     = null
+}
+
+variable "cognito_additional_callback_urls" {
+  type        = list(string)
+  description = "URLs adicionales de callback para Cognito (incluye localhost para desarrollo)."
+  default     = ["http://localhost:5173/auth/callback"]
+}
+
+variable "cognito_additional_logout_urls" {
+  type        = list(string)
+  description = "URLs adicionales de logout para Cognito (incluye localhost para desarrollo)."
+  default     = ["http://localhost:5173"]
+}
+
+variable "api_additional_allowed_origins" {
+  type        = list(string)
+  description = "Origens adicionales permitidos por CORS en API Gateway."
+  default     = ["http://localhost:5173"]
 }

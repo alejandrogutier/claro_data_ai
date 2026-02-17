@@ -1,92 +1,102 @@
 # AGENTS
 
 ## Objetivo
-Definir el sistema de agentes operativos de `claro_data` para ingesta, clasificación, análisis y gobierno del ciclo de vida de contenido, sobre una arquitectura AWS serverless en `us-west-2`.
+Definir el sistema de agentes operativos de `claro_data` para monitorear salud de marca de Claro Colombia en una sola aplicacion, unificando:
+- cuentas sociales propias (Hootsuite),
+- menciones externas y competencia (Awario),
+- noticias (providers news),
+sobre AWS serverless en `us-east-1`.
+
+## Objetivos de Negocio V1
+- Objetivo dual:
+  - Salud de marca: 60%
+  - Share of Voice (SOV): 40%
+- Meta SOV: `+5 pp trimestral`
+- Meta Brand Health Score: `>=70 sostenido`
+- SLA respuesta SEV-1: `<=30 min`
 
 ## Principios Operativos
-- Toda ejecución debe ser trazable (request_id, run_id, actor, timestamp).
-- Toda acción crítica debe quedar auditada (`before`/`after`).
-- Todos los recursos AWS deben incluir tags obligatorios: `claro=true`, `app=claro-data`, `env=prod`, `owner`, `cost-center`, `managed-by=terraform`.
-- Idempotencia obligatoria en jobs asíncronos y reprocesos.
-- Seguridad por defecto: secretos en Secrets Manager, cifrado con KMS, least privilege en IAM.
+- Trazabilidad obligatoria por ejecucion (`request_id`, `run_id`, `actor`, `timestamp`).
+- Auditoria obligatoria de acciones criticas (`before`/`after`).
+- Idempotencia obligatoria en ingesta, reprocesos y reportes.
+- Seguridad por defecto: Secrets Manager + KMS + IAM least privilege.
+- Normalizacion y dedupe cross-source para evitar duplicidad funcional.
+- Gestion de ruido (spam/bots) obligatoria antes de KPIs oficiales.
+
+## Flujo Git y Despliegue AWS
+- Desarrollo en rama `developer`.
+- `main` conectada a produccion AWS.
+- Solo cambios validados se promueven de `developer` a `main`.
+- No desarrollar directo en `main`.
 
 ## Roles de Usuario y Permisos
-- `Admin`: administra términos, pesos de fuente, estados, usuarios e infraestructura operativa.
-- `Analyst`: clasifica, analiza, archiva/oculta/restaura, exporta, consulta dashboards.
+- `Admin`: configura conectores, cuentas, competidores, queries, taxonomias, alertas, plantillas y destinatarios.
+- `Analyst`: monitorea, analiza, gestiona incidentes, hace overrides semanticos auditados.
 - `Viewer`: solo lectura de vistas autorizadas.
 
 ## Agentes del Sistema
 
-### 1) IngestionOrchestrator
+### 1) ConnectorSyncOrchestrator
 **Responsabilidad**
-- Orquestar corridas de ingesta programadas (cada 15 minutos) y manuales por término.
+- Orquestar sincronizacion de Hootsuite, Awario y News en modo pull.
 
 **Input**
-- `run_id`, `trigger_type` (`scheduled|manual`), `tracked_term_id[]`, `language`, `max_articles_per_term`.
+- `run_id`, `trigger_type` (`scheduled|manual`), `connector`, `window`, `limit`.
 
 **Output**
-- Registro de corrida con métricas de éxito/falla por proveedor, latencia total y conteo de items persistidos.
+- Corrida registrada con metricas por conector: latencia, fetched, persisted, errores.
 
 **Dependencias AWS**
-- EventBridge, Step Functions, SQS + DLQ, CloudWatch Logs/X-Ray, Secrets Manager.
+- EventBridge, Step Functions, SQS + DLQ, CloudWatch, Secrets Manager.
 
 **Timeout y Retries**
-- Timeout por corrida: 5 minutos.
-- Retry exponencial para fallas transitorias de proveedor (`429/5xx`) con backoff y jitter.
+- Timeout por corrida: 5 min.
+- Retry exponencial para `429/5xx` con jitter.
 
 **Idempotencia**
-- Clave `idempotency_key` por `provider + term + canonical_url + published_at`.
-
-**Errores**
-- `partial_failure`: cuando uno o mas proveedores fallan y la corrida continua (`fail-soft`).
-- `hard_failure`: cuando falla la orquestacion o persistencia central.
+- `idempotency_key = connector + external_id + published_at`.
 
 **SLA**
-- Ingesta completa disponible en DB <= 5 minutos.
+- Frescura de datos objetivo: `<=15 min`.
 
 ---
 
-### 2) ProviderAdapter
+### 2) SourceNormalizerDeduper
 **Responsabilidad**
-- Conectar con cada API externa, normalizar payloads y aplicar deduplicacion.
+- Normalizar payloads heterogeneos a esquema canonico y deduplicar cross-source.
 
 **Input**
-- `provider`, `term`, `language`, `window`, `limit`.
+- `connector`, `raw_item`, `source_post_id|url|hash`.
 
 **Output**
-- `content_item[]` normalizado (`source_type=news` por V1).
+- `content_item` canonico con trazabilidad de origenes.
 
-**Dependencias AWS**
-- Lambda, Secrets Manager, S3 raw payload bucket, CloudWatch.
-
-**Timeout y Retries**
-- Timeout por proveedor: 20s.
-- Hasta 3 reintentos en errores transitorios.
-
-**Idempotencia**
-- Dedupe por URL canonica (sin query/hash).
+**Reglas**
+- ID canonico primario: `source_post_id`.
+- Fallback: URL/hash normalizado.
+- Mantener linkage de origen multiple cuando se unifica.
 
 **Errores**
-- Rate limit, auth failure, schema mismatch, timeout.
+- `schema_mismatch`, `missing_identity`, `invalid_timestamp`, `duplicate_conflict`.
 
 ---
 
 ### 3) Classifier
 **Responsabilidad**
-- Clasificar contenido con Bedrock (`Claude Haiku 4.5`) y persistir resultados.
+- Clasificar contenido con Bedrock (`Claude Haiku 4.5`) en taxonomia transversal social+news.
 
 **Input**
 - `content_item_id[]`, `prompt_version`, `model_id`, `classification_profile`.
 
 **Output**
-- `classification[]` con sentimiento, categoria, etiquetas, confianza y metadatos del modelo.
+- `classification[]` con `sentimiento`, `categoria`, `etiquetas`, `confianza`.
 
 **Dependencias AWS**
 - Bedrock Runtime, Lambda workers, SQS, Aurora PostgreSQL, CloudWatch/X-Ray.
 
 **Timeout y Retries**
-- Timeout por lote: 10 minutos (hasta 100 articulos).
-- Retry selectivo por timeout/model throttling.
+- Timeout por lote: 10 min (hasta 100 items).
+- Retry selectivo por timeout/throttling.
 
 **Idempotencia**
 - `classification_hash = content_item_id + prompt_version + model_id`.
@@ -94,17 +104,35 @@ Definir el sistema de agentes operativos de `claro_data` para ingesta, clasifica
 **Errores**
 - `model_timeout`, `throttling`, `invalid_json`, `storage_error`.
 
-**SLA**
-- Lote de 100 articulos clasificado <= 10 minutos.
+---
+
+### 4) KpiEngine
+**Responsabilidad**
+- Calcular KPIs oficiales de marca y competencia para dashboard/reportes.
+
+**KPIs oficiales V1**
+- `BHS` (Brand Health Score)
+- `SOV` (Share of Voice)
+- `sentimiento_neto`
+- `riesgo_activo`
+
+**Formulas base**
+- `BHS`: reputacion 50% + alcance 25% + riesgo 25%.
+- Peso por fuente global: social 50%, awario 30%, news 20%.
+- `SOV` ponderado por mencion: calidad 60% + alcance 40%.
+- SOV se calcula sobre Claro + set cerrado de competidores.
+
+**Severidad**
+- `SEV-1 >= 80`, `SEV-2 >= 60`, `SEV-3 < 60`.
 
 ---
 
-### 4) Analyzer
+### 5) Analyzer
 **Responsabilidad**
-- Generar analisis agregado (narrativas, riesgos, oportunidades) por termino o conjunto de insights.
+- Generar analisis agregado (narrativas, riesgos, oportunidades) por marca/canal/competencia.
 
 **Input**
-- `analysis_run_id`, `term|content_ids`, `analysis_prompt_version`, `model_id`.
+- `analysis_run_id`, `scope` (`overview|channel|competitor`), `content_ids|filters`, `prompt_version`, `model_id`.
 
 **Output**
 - Resultado agregado persistido en `analysis_runs`.
@@ -119,83 +147,112 @@ Definir el sistema de agentes operativos de `claro_data` para ingesta, clasifica
 **Idempotencia**
 - `analysis_fingerprint = sorted(content_ids) + prompt_version + model_id`.
 
-**Errores**
-- `insufficient_input`, `model_failure`, `persistence_failure`.
+---
+
+### 6) IncidentManager
+**Responsabilidad**
+- Operar alertas, triage y seguimiento basico de incidentes reputacionales.
+
+**Input**
+- `incident_id`, `severity_score`, `owner`, `state`, `notes`, `request_id`.
+
+**Output**
+- Incidente actualizado con historico auditado.
+
+**Reglas V1**
+- Notificacion por `in-app + email`.
+- Cooldown de alertas repetidas: 60 min.
+- Asignacion manual asistida por reglas.
+- Sin integracion externa de tickets en V1.
 
 ---
 
-### 5) LifecycleManager
+### 7) ReportingComposer
 **Responsabilidad**
-- Gestionar estados `active|archived|hidden`, restauraciones y acciones masivas.
+- Generar reportes ejecutivos y operativos automaticos.
+
+**Input**
+- `report_type` (`executive|operational`), `schedule`, `recipient_scope`, `filters`, `template_version`.
+
+**Output**
+- Reporte `Web + CSV` con versionado y trazabilidad.
+
+**Narrativa IA**
+- Modo automatico con disclaimer y trazabilidad de fuentes.
+- Umbral minimo de envio: `confianza >= 0.65`.
+- Si `< 0.65`, queda `pending_review`.
+
+**Schedules default**
+- Diario 08:00
+- Semanal lunes 08:00
+- Mensual dia 1 08:00
+
+---
+
+### 8) LifecycleManager
+**Responsabilidad**
+- Gestionar estado de contenido (`active|archived|hidden`) y acciones masivas.
 
 **Input**
 - `actor_user_id`, `content_item_id|content_item_ids[]`, `target_state`, `reason`.
 
 **Output**
-- Cambios de estado aplicados + eventos en `content_state_events` y `audit_logs`.
+- Cambios aplicados + `content_state_events` + `audit_logs`.
 
-**Dependencias AWS**
-- API Lambda, Aurora PostgreSQL, CloudWatch.
-
-**Timeout y Retries**
-- Timeout por operacion: 30s.
-- Reintentos solo en errores de red/conexion DB.
-
-**Idempotencia**
-- `state_transition_key = actor + target_state + item_id + request_id`.
-
-**Errores**
-- `forbidden_transition`, `rbac_denied`, `not_found`, `concurrency_conflict`.
+**Reglas V1**
+- Motivo obligatorio al pasar a `archived|hidden`.
+- Restauracion a `active` con motivo opcional.
 
 ---
 
-### 6) DigestExporter
+### 9) ConfigGovernanceManager
 **Responsabilidad**
-- Generar digest diario (08:00) y exportaciones CSV bajo permisos.
+- Administrar configuraciones maestras y su auditoria.
 
-**Input**
-- `digest_date`, `recipient_scope`, `filters`, `requester_role`.
+**Scope**
+- Conectores
+- Cuentas propias
+- Competidores
+- Queries versionadas
+- Taxonomias
+- Reglas de alerta
+- Plantillas/destinatarios de reportes
 
-**Output**
-- Digest enviado por SES y/o archivo CSV en S3 con referencia auditable.
+**Regla de acceso**
+- Edicion directa solo por `Admin`.
 
-**Dependencias AWS**
-- EventBridge Scheduler, Lambda, SES, S3 exports, Aurora PostgreSQL.
-
-**Timeout y Retries**
-- Timeout por ejecucion: 120s.
-- Retry 3x para envio SES transitorio.
-
-**Idempotencia**
-- `digest_key = digest_date + recipient_scope + env`.
-
-**Errores**
-- `email_delivery_failure`, `empty_dataset`, `export_generation_failure`.
+**Auditoria**
+- Registrar `before/after`, `actor`, `request_id`, `timestamp`.
 
 ## Runbook de Incidentes y Escalamiento
 
 ### Severidades
-- `SEV-1`: API principal fuera de servicio o perdida de datos activa.
-- `SEV-2`: Degradacion severa de ingesta/clasificacion.
-- `SEV-3`: fallo parcial con workaround operativo.
+- `SEV-1`: score >=80 o impacto reputacional critico.
+- `SEV-2`: score 60-79 con degradacion severa.
+- `SEV-3`: score <60 con workaround operativo.
 
 ### Flujo
-1. Detectar incidente en CloudWatch Dashboard/X-Ray.
-2. Identificar `request_id`/`run_id` y componente afectado.
-3. Activar mitigacion:
-   - Pausar scheduler de ingesta si hay tormenta de errores.
-   - Drenar/revisar DLQ.
-   - Reducir concurrencia de clasificacion si hay throttling/costo elevado.
-4. Comunicar estado en canal operativo.
-5. Ejecutar postmortem con causa raiz, impacto, acciones correctivas y fecha compromiso.
+1. Detectar evento en dashboard operativo o alerta.
+2. Identificar `request_id`/`run_id` y entidades afectadas.
+3. Ejecutar mitigacion:
+   - ajustar reglas/queries si hay tormenta de ruido,
+   - revisar conectores con errores,
+   - activar owner de incidente.
+4. Comunicar estado operativo.
+5. Cerrar con postmortem y acciones correctivas.
 
 ## Reglas Transversales de Seguridad y Trazabilidad
-- No usar secretos en `.env` para produccion.
+- No usar secretos productivos en `.env`.
 - No loggear payloads sensibles completos.
 - Cifrado KMS en S3, Aurora, SQS, Secrets y logs.
-- Auditoria obligatoria para cambios en:
-  - estados de contenido,
-  - overrides de clasificacion,
-  - pesos de fuente,
-  - exportaciones.
-- Mantener versionado de prompts en repositorio y referencia de version en cada resultado IA.
+- PII minimizada/enmascarada por defecto.
+- Exportes CSV sanitizados por defecto.
+- Export de PII completa: solo `Admin` y auditable.
+- Retencion activa objetivo: 24 meses.
+
+## Criterios de Go-live
+1. 16 cuentas propias activas y validadas.
+2. Set final de competidores aprobado para SOV.
+3. KPIs oficiales estables (`BHS`, `SOV`, sentimiento neto, riesgo activo).
+4. Reportes automaticos operativos (`Web + CSV`).
+5. UAT 2 semanas + piloto 1 semana completados.

@@ -83,6 +83,7 @@ model IngestionRun {
   createdAt        DateTime            @default(now())
   term             TrackedTerm?        @relation(fields: [termId], references: [id], onDelete: SetNull)
   items            IngestionRunItem[]
+  contentLinks     IngestionRunContentLink[]
 
   @@index([status, createdAt])
   @@index([triggerType, createdAt])
@@ -129,13 +130,30 @@ model ContentItem {
   classifications  Classification[]
   stateEvents      ContentStateEvent[]
   analysisLinks    AnalysisRunItem[]
+  ingestionLinks   IngestionRunContentLink[]
 
   @@unique([canonicalUrl])
   @@index([termId, publishedAt])
   @@index([state, createdAt])
   @@index([sourceType, provider])
   @@index([category])
-  // Nota: agregar indice FTS real con migracion SQL manual sobre title/summary/content.
+}
+
+model IngestionRunContentLink {
+  id             String       @id @default(uuid()) @db.Uuid
+  ingestionRunId String       @db.Uuid
+  contentItemId  String       @db.Uuid
+  canonicalUrl   String
+  provider       String
+  term           String
+  createdAt      DateTime     @default(now())
+  ingestionRun   IngestionRun @relation(fields: [ingestionRunId], references: [id], onDelete: Cascade)
+  contentItem    ContentItem  @relation(fields: [contentItemId], references: [id], onDelete: Cascade)
+
+  @@unique([ingestionRunId, canonicalUrl])
+  @@unique([ingestionRunId, contentItemId])
+  @@index([contentItemId])
+  @@index([createdAt])
 }
 
 model Classification {

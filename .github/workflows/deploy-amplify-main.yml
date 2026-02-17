@@ -1,0 +1,122 @@
+name: Deploy Frontend (AWS Amplify)
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "frontend/**"
+      - "openapi/**"
+      - "package.json"
+      - "package-lock.json"
+      - ".github/workflows/deploy-amplify-main.yml"
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    env:
+      AWS_REGION: us-east-1
+      AMPLIFY_BRANCH: main
+      AMPLIFY_APP_ID: ${{ secrets.AWS_AMPLIFY_APP_ID }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install root dependencies
+        run: npm ci
+
+      - name: Generate API types
+        run: npm run openapi:types
+
+      - name: Install frontend dependencies
+        run: npm --prefix frontend ci
+
+      - name: Build frontend
+        run: npm --prefix frontend run build
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Start Amplify deployment
+        id: start
+        run: |
+          if [ -z "$AMPLIFY_APP_ID" ]; then
+            echo "Missing AWS_AMPLIFY_APP_ID secret" >&2
+            exit 1
+          fi
+          JOB_JSON="$(aws amplify start-job \
+            --app-id "$AMPLIFY_APP_ID" \
+            --branch-name "$AMPLIFY_BRANCH" \
+            --job-type RELEASE \
+            --region "$AWS_REGION")"
+          JOB_ID="$(echo "$JOB_JSON" | jq -r '.jobSummary.jobId')"
+          if [ -z "$JOB_ID" ] || [ "$JOB_ID" = "null" ]; then
+            echo "Could not start Amplify job" >&2
+            echo "$JOB_JSON"
+            exit 1
+          fi
+          echo "job_id=$JOB_ID" >> "$GITHUB_OUTPUT"
+
+      - name: Wait for Amplify deployment
+        run: |
+          for i in $(seq 1 60); do
+            STATUS="$(aws amplify get-job \
+              --app-id "$AMPLIFY_APP_ID" \
+              --branch-name "$AMPLIFY_BRANCH" \
+              --job-id "${{ steps.start.outputs.job_id }}" \
+              --region "$AWS_REGION" \
+              --query 'job.summary.status' --output text)"
+
+            echo "Amplify job status: $STATUS"
+            if [ "$STATUS" = "SUCCEED" ]; then
+              exit 0
+            fi
+
+            if [ "$STATUS" = "FAILED" ] || [ "$STATUS" = "CANCELLED" ]; then
+              echo "Amplify job failed with status=$STATUS" >&2
+              exit 1
+            fi
+
+            sleep 20
+          done
+
+          echo "Amplify job timeout" >&2
+          exit 1
+
+      - name: Read Amplify URL
+        id: url
+        run: |
+          WEB_URL="$(aws amplify get-branch \
+            --app-id "$AMPLIFY_APP_ID" \
+            --branch-name "$AMPLIFY_BRANCH" \
+            --region "$AWS_REGION" \
+            --query 'branch.webUrl' --output text)"
+
+          if [ -z "$WEB_URL" ] || [ "$WEB_URL" = "None" ]; then
+            echo "Missing Amplify webUrl" >&2
+            exit 1
+          fi
+
+          if [[ "$WEB_URL" != http* ]]; then
+            WEB_URL="https://$WEB_URL"
+          fi
+
+          echo "url=$WEB_URL" >> "$GITHUB_OUTPUT"
+
+      - name: Deployment summary
+        run: |
+          {
+            echo "## Amplify deployment completed"
+            echo "- Branch: $AMPLIFY_BRANCH"
+            echo "- URL: ${{ steps.url.outputs.url }}"
+          } >> "$GITHUB_STEP_SUMMARY"

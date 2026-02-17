@@ -1,13 +1,14 @@
 # Terraform Base (claro_data)
 
 ## Objetivo
-Provisionar base de arquitectura AWS para V1 en una sola region (`us-west-2`).
+Provisionar la base AWS de `claro_data` para V1 en una sola region (`us-east-1`), soportando la vision de monitoreo unificado de marca (social + listening externo + news).
 
 ## Incluye
 - KMS key y cifrado por defecto
 - S3 frontend/raw/exports
 - CloudFront para SPA
 - Cognito (User Pool + Client + grupos)
+- Cognito Hosted UI domain
 - API Gateway HTTP + Lambda base
 - SQS + DLQ
 - Step Functions + EventBridge (15 min)
@@ -16,13 +17,35 @@ Provisionar base de arquitectura AWS para V1 en una sola region (`us-west-2`).
 - SES identidad remitente
 - AWS Budget mensual
 
+## Nota de alcance conectores sociales
+- La integracion con Hootsuite y Awario se implementa a nivel aplicacion (Lambdas + secretos + jobs).
+- Este modulo Terraform provee la infraestructura base para esa integracion, no recursos nativos de terceros.
+
 ## Uso
 ```bash
+./scripts/aws/build_lambda_package.sh
+./scripts/aws/load_secrets_from_env.sh
+./scripts/aws/generate_terraform_tfvars.sh
 terraform init
 terraform plan -var-file=terraform.tfvars
 terraform apply -var-file=terraform.tfvars
 ```
 
 ## Notas
-- Este modulo es un baseline de arranque. Ajustar networking (CIDR/SG), dominios y politicas IAM por entorno real.
-- El paquete Lambda se asume publicado en S3 (`api_lambda_s3_bucket`/`api_lambda_s3_key`).
+- Baseline de arranque. Ajustar networking (CIDR/SG), dominios y politicas IAM por entorno real.
+- Desarrollo local frontend: callbacks/logout de `http://localhost:5173` habilitados por defecto en Cognito.
+- Secretos runtime en Secrets Manager (nombres configurables):
+  - `claro-data-prod/provider-api-keys`
+  - `claro-data-prod/app-config`
+  - `claro-data-prod/aws-credentials`
+  - `claro-data-prod/database`
+- Artefacto Lambda local: `build/lambda-api.zip`.
+
+## Tags obligatorios
+Aplicar en todos los recursos:
+- `claro=true`
+- `app=claro-data`
+- `env=prod`
+- `owner=<equipo_responsable>`
+- `cost-center=<centro_costos>`
+- `managed-by=terraform`

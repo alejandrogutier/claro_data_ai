@@ -6,11 +6,30 @@
   "type": "commonjs",
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "check": "tsc -p tsconfig.json --noEmit"
+    "check": "tsc -p tsconfig.json --noEmit",
+    "openapi:validate": "node scripts/openapi/validate.js",
+    "openapi:types": "openapi-typescript openapi/v1.yaml -o frontend/src/api/generated/openapi-types.ts",
+    "contract:test": "node scripts/contracts/test_api_contract.js",
+    "frontend:dev": "npm --prefix frontend run dev",
+    "frontend:build": "npm --prefix frontend run build",
+    "frontend:check": "npm --prefix frontend run check",
+    "prisma:generate": "prisma generate",
+    "prisma:migrate:dev": "prisma migrate dev",
+    "prisma:migrate:deploy": "prisma migrate deploy",
+    "prisma:db:push": "prisma db push"
+  },
+  "dependencies": {
+    "aws-sdk": "^2.1692.0",
+    "pg": "^8.16.3"
   },
   "devDependencies": {
+    "@prisma/client": "^6.16.2",
+    "@apidevtools/swagger-parser": "^12.1.0",
     "@types/aws-lambda": "^8.10.145",
     "@types/node": "^22.13.10",
+    "@types/pg": "^8.16.0",
+    "openapi-typescript": "^7.10.1",
+    "prisma": "^6.16.2",
     "typescript": "^5.8.2"
   }
 }

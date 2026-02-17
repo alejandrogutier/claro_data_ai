@@ -1,7 +1,14 @@
 .env
 node_modules
 dist
+build
 .terraform
 *.tfstate
 *.tfstate.*
+*.tfvars
+*.tfplan
+infra/terraform/tfplan
+infra/terraform/tfplan*
 .DS_Store
+
+infra/terraform/state-backups/
