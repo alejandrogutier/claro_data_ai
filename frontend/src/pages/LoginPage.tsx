@@ -15,6 +15,7 @@ export const LoginPage = () => {
         <p>
           Inicia sesion con Cognito para operar queries y revisar el feed de noticias de Claro con control editorial.
         </p>
+        <p>Despliegue continuo activo en AWS Amplify.</p>
 
         {!hasFrontendConfig() ? (
           <div className="alert warning">
