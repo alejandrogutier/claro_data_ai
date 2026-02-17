@@ -168,9 +168,15 @@ resource "aws_cognito_user_pool_client" "web" {
   allowed_oauth_flows_user_pool_client = true
   allowed_oauth_flows                  = ["code"]
   allowed_oauth_scopes                 = ["openid", "email", "profile"]
-  supported_identity_providers         = ["COGNITO"]
-  callback_urls                        = ["https://${aws_cloudfront_distribution.frontend.domain_name}"]
-  logout_urls                          = ["https://${aws_cloudfront_distribution.frontend.domain_name}"]
+  explicit_auth_flows = [
+    "ALLOW_USER_PASSWORD_AUTH",
+    "ALLOW_USER_SRP_AUTH",
+    "ALLOW_REFRESH_TOKEN_AUTH",
+    "ALLOW_ADMIN_USER_PASSWORD_AUTH"
+  ]
+  supported_identity_providers = ["COGNITO"]
+  callback_urls                = ["https://${aws_cloudfront_distribution.frontend.domain_name}"]
+  logout_urls                  = ["https://${aws_cloudfront_distribution.frontend.domain_name}"]
 }
 
 resource "aws_cognito_user_group" "admin" {
@@ -248,16 +254,48 @@ resource "aws_apigatewayv2_integration" "lambda" {
   payload_format_version = "2.0"
 }
 
-resource "aws_apigatewayv2_route" "health" {
-  api_id    = aws_apigatewayv2_api.http.id
-  route_key = "GET /v1/health"
-  target    = "integrations/${aws_apigatewayv2_integration.lambda.id}"
+resource "aws_apigatewayv2_authorizer" "cognito_jwt" {
+  api_id          = aws_apigatewayv2_api.http.id
+  name            = "${local.name_prefix}-jwt-authorizer"
+  authorizer_type = "JWT"
+  identity_sources = [
+    "$request.header.Authorization"
+  ]
+
+  jwt_configuration {
+    audience = [aws_cognito_user_pool_client.web.id]
+    issuer   = "https://cognito-idp.${var.aws_region}.amazonaws.com/${aws_cognito_user_pool.main.id}"
+  }
 }
 
-resource "aws_apigatewayv2_route" "proxy" {
-  api_id    = aws_apigatewayv2_api.http.id
-  route_key = "ANY /v1/{proxy+}"
-  target    = "integrations/${aws_apigatewayv2_integration.lambda.id}"
+resource "aws_apigatewayv2_route" "health" {
+  api_id             = aws_apigatewayv2_api.http.id
+  route_key          = "GET /v1/health"
+  authorization_type = "NONE"
+  target             = "integrations/${aws_apigatewayv2_integration.lambda.id}"
+}
+
+resource "aws_apigatewayv2_route" "private_routes" {
+  for_each = toset([
+    "GET /v1/terms",
+    "POST /v1/terms",
+    "PATCH /v1/terms/{id}",
+    "POST /v1/ingestion/runs",
+    "GET /v1/content",
+    "PATCH /v1/content/{id}/state",
+    "POST /v1/content/bulk/state",
+    "PATCH /v1/content/{id}/classification",
+    "POST /v1/analysis/runs",
+    "GET /v1/analysis/history",
+    "POST /v1/exports/csv",
+    "GET /v1/meta"
+  ])
+
+  api_id             = aws_apigatewayv2_api.http.id
+  route_key          = each.value
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito_jwt.id
+  target             = "integrations/${aws_apigatewayv2_integration.lambda.id}"
 }
 
 resource "aws_apigatewayv2_stage" "prod" {

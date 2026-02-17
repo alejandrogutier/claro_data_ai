@@ -2,19 +2,19 @@
 
 ## Estado General
 - Proyecto: `Inception`
-- Avance global: `34%`
-- Historias en curso: `CLARO-001, CLARO-004, CLARO-017`
+- Avance global: `42%`
+- Historias en curso: `CLARO-004, CLARO-005, CLARO-017`
 - Ambiente objetivo inicial: `prod` unico en `us-west-2`
-- Ultima actualizacion: `2026-02-16`
+- Ultima actualizacion: `2026-02-17`
 
 ## Estado por Historia
 | Historia | Estado | Progreso | Bloqueos | Nota |
 |---|---|---:|---|---|
-| CLARO-001 | doing | 75% | Falta lectura de secretos en runtime por Lambda | Secretos cargados en Secrets Manager; decision actual: no rotacion de llaves |
+| CLARO-001 | done | 100% | Ninguno | Secretos cargados en Secrets Manager y lectura runtime habilitada en Lambda/API |
 | CLARO-002 | done | 100% | Ninguno | Terraform aplicado en AWS con recursos base productivos |
-| CLARO-003 | todo | 20% | Falta authorizer JWT en API Gateway | RBAC base en codigo, falta enforcement completo |
+| CLARO-003 | done | 100% | Ninguno | Authorizer JWT en API Gateway + enforcement de rol por ruta en Lambda (smoke test validado) |
 | CLARO-004 | doing | 60% | Falta migracion Prisma real e indice FTS SQL | Aurora Serverless v2 desplegado y endpoint disponible |
-| CLARO-005 | todo | 45% | Falta implementar workers de negocio | EventBridge + Step Functions + SQS + DLQ desplegados |
+| CLARO-005 | doing | 55% | Falta implementar workers de negocio | EventBridge + Step Functions + SQS + DLQ desplegados; pendientes handlers de fetch/normalize/persist |
 | CLARO-006 | todo | 0% | Ninguno | Adaptadores providers pendientes |
 | CLARO-007 | todo | 0% | Ninguno | Dedupe/idempotencia de dominio pendiente |
 | CLARO-008 | todo | 0% | Ninguno | Integracion Bedrock runtime pendiente |
@@ -33,7 +33,7 @@
 
 ## Riesgos Activos y Mitigacion
 1. **Riesgo**: secretos reales en `.env` local.
-   - Mitigacion: secretos ya migrados a Secrets Manager; siguiente paso mover runtime a lectura directa desde Secrets Manager y minimizar uso de `.env`.
+   - Mitigacion: runtime productivo ya consume Secrets Manager; `.env` queda solo para scripts locales y bootstrap controlado.
 2. **Riesgo**: decision de no rotar llaves actualmente.
    - Mitigacion: mantener monitoreo y planear rotacion controlada en ventana futura sin detener operacion.
 3. **Riesgo**: almacenamiento de contenido completo y PII amplia.
@@ -50,7 +50,7 @@
 - Secretos: gestion en Secrets Manager (`claro-data-prod/*`) sin rotacion en esta fase.
 
 ## Proximos Hitos
-1. Completar CLARO-001: implementar lectura real de secretos en Lambda/API.
-2. Ejecutar migracion inicial Prisma contra Aurora y crear indice FTS (CLARO-004).
-3. Activar authorizer JWT Cognito y permisos por ruta (CLARO-003).
-4. Implementar pipeline funcional de ingesta y clasificacion (CLARO-005, CLARO-006, CLARO-008).
+1. Ejecutar migracion inicial Prisma contra Aurora y crear indice FTS (CLARO-004).
+2. Implementar workers funcionales de ingesta (fetch/normalize/dedupe/persist) sobre pipeline ya desplegado (CLARO-005, CLARO-006, CLARO-007).
+3. Integrar clasificacion en Bedrock con versionado de prompt y persistencia (CLARO-008).
+4. Publicar pruebas de contrato OpenAPI 3.1 para las rutas `/v1/*` base (CLARO-017).

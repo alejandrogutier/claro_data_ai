@@ -8,4 +8,5 @@ build
 *.tfvars
 *.tfplan
 infra/terraform/tfplan
+infra/terraform/tfplan*
 .DS_Store

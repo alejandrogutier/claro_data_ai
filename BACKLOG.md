@@ -1,13 +1,11 @@
 # Backlog
 
 ## Now
-- CLARO-001 | doing | P0 | Seguridad inicial: migrar secretos a variables seguras | secretos cargados en Secrets Manager (`claro-data-prod/*`) sin rotacion por decision operativa; falta consumo runtime en Lambda
 - CLARO-004 | doing | P0 | Aurora PostgreSQL + Prisma + esquema inicial | `prisma/schema.prisma` creado con tablas/enums core; pendiente migracion real e indices FTS SQL
+- CLARO-005 | doing | P0 | Pipeline ingesta programada cada 15 min | infraestructura base (EventBridge + Step Functions + SQS + DLQ) desplegada; faltan workers de negocio
 - CLARO-017 | doing | P2 | OpenAPI 3.1 + pruebas de contrato | especificacion base creada en `openapi/v1.yaml`; faltan pruebas de contrato
 
 ## Next
-- CLARO-003 | todo | P0 | Cognito + RBAC en API Gateway | grupos Admin/Analyst/Viewer + authorizer JWT completo
-- CLARO-005 | todo | P0 | Pipeline ingesta programada cada 15 min | completar workers y flujo fetch-normalize-dedupe-persist
 - CLARO-006 | todo | P1 | Adaptadores de proveedores de noticias de APIS.md | fail-soft + retries/backoff
 - CLARO-007 | todo | P1 | Dedupe por URL canonica + persistencia unificada | control de idempotencia en capa de dominio
 - CLARO-008 | todo | P1 | Clasificacion Bedrock Haiku 4.5 | implementar runtime Bedrock y persistencia
@@ -27,4 +25,6 @@
 
 ## Done (2026-02)
 - CLARO-000 | done | P1 | Definicion inicial de arquitectura y plan base | direccion funcional y tecnica acordada
+- CLARO-001 | done | P0 | Seguridad inicial: migrar secretos a variables seguras | secretos cargados en Secrets Manager y consumidos en runtime de Lambda; no rotacion por decision operativa
 - CLARO-002 | done | P0 | Terraform base de plataforma AWS | infraestructura desplegada en AWS (KMS, S3, CloudFront, Cognito, API/Lambda, SQS, EventBridge, Step Functions, Aurora, SES, Budget)
+- CLARO-003 | done | P0 | Cognito + RBAC en API Gateway | JWT authorizer + rutas privadas + enforcement de rol en Lambda validados con smoke test
