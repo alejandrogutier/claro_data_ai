@@ -204,9 +204,12 @@ const buildEmailBody = (input: {
 };
 
 export const main = async (event: unknown): Promise<DigestWorkerResponse> => {
-  const requestId = `digest-${randomUUID()}`;
   const now = new Date();
   const payload = parseEvent(event);
+  const requestId =
+    typeof payload.request_id === "string" && payload.request_id.trim() ? payload.request_id.trim() : `digest-${randomUUID()}`;
+  const requestedAt =
+    typeof payload.requested_at === "string" && payload.requested_at.trim() ? payload.requested_at.trim() : now.toISOString();
   const triggerType: DigestTriggerType = payload.trigger_type === "manual" ? "manual" : "scheduled";
   const recipientScope = (payload.recipient_scope ?? "ops").trim().toLowerCase() || "ops";
   const timezone = env.reportDefaultTimezone ?? "America/Bogota";
@@ -244,6 +247,7 @@ export const main = async (event: unknown): Promise<DigestWorkerResponse> => {
         recipient_scope: recipientScope,
         timezone,
         trigger_type: triggerType,
+        requested_at: requestedAt,
         request_id: requestId
       })
     );
@@ -284,6 +288,8 @@ export const main = async (event: unknown): Promise<DigestWorkerResponse> => {
       timezone,
       recipient_scope: recipientScope,
       trigger_type: triggerType,
+      request_id: requestId,
+      requested_at: requestedAt,
       generated_at: now.toISOString(),
       window_start: windowStart.toISOString(),
       window_end: windowEnd.toISOString(),
@@ -374,6 +380,7 @@ export const main = async (event: unknown): Promise<DigestWorkerResponse> => {
         email_sent: emailSent,
         recipients_count: recipientsCount,
         s3_key: s3Key,
+        requested_at: requestedAt,
         request_id: requestId
       })
     );
