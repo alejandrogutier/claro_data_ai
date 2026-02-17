@@ -2,8 +2,8 @@
 
 ## Estado General
 - Proyecto: `Inception`
-- Avance global: `98%`
-- Historias en curso: `CLARO-023`
+- Avance global: `99%`
+- Historias en curso: `CLARO-036`
 - Ambiente objetivo inicial: `prod` unico en `us-east-1`
 - Ultima actualizacion: `2026-02-17`
 
@@ -32,11 +32,12 @@
 | CLARO-020 | todo | 0% | Riesgo de privacidad | Gobernanza de datos sociales pendiente |
 | CLARO-021 | done | 100% | Ninguno | Blueprint UX/UI inicial consolidado y extendido a vision social/news/competencia |
 | CLARO-022 | done | 100% | Ninguno | Frontend base creado en `frontend/` con React+Vite, login Cognito Hosted UI (PKCE), app shell y guardas RBAC |
-| CLARO-023 | doing | 5% | Ninguno | Kickoff de Overview KPI real iniciado tras cierre de configuracion (`BHS`, `SOV`, `sentimiento_neto`, `riesgo_activo`) |
+| CLARO-023 | done | 100% | Ninguno | Overview KPI real desplegado en `/v1/monitor/overview` y consumido por `/app/monitor/overview` con split claro/competencia y ventana fija 7d |
 | CLARO-029 | done | 100% | Ninguno | OpenAPI alineado con `/v1/feed/news` y pipeline `openapi-typescript` operativo con cliente tipado para frontend |
 | CLARO-031 | done | 100% | Ninguno | 8 rutas de configuracion operativas sin stubs criticos y validadas end-to-end contra backend desplegado en AWS |
 | CLARO-032 | done | 100% | Ninguno | Monitoreo V1 completo con rutas separadas (`/app/monitor/overview`, `/app/monitor/feed-claro`, `/app/monitor/feed-competencia`) y consumo de feed limitado a 2 noticias por query |
-| CLARO-033 | todo | 0% | Ninguno | Motor KPI y severidad pendiente (`BHS=50/25/25`, `SOV=calidad 60 + alcance 40`, `SEV1>=80`) |
+| CLARO-033 | done | 100% | Ninguno | Motor KPI `kpi-v1` operativo (BHS 50/25/25, SOV calidad 60 + volumen 40, severidad `SEV1..SEV4`) con contract/smoke en verde |
+| CLARO-036 | doing | 5% | Ninguno | Preparacion de alertas sobre severidad iniciada tras estabilizar KPIs y endpoint de overview |
 | CLARO-037 | done | 100% | Ninguno | Superficie `/v1/connectors*` desplegada en runtime (`GET/PATCH/sync/runs`) y validada en `contract:test` + smoke business |
 | CLARO-038 | done | 100% | Ninguno | CRUD de cuentas, competidores y taxonomias desplegado y validado (`/v1/config/accounts|competitors|taxonomies/*`, respuestas `201/409`) |
 | CLARO-039 | done | 100% | Ninguno | Gobernanza de auditoria/export cerrada con `/v1/config/audit` y `/v1/config/audit/export`, sanitizacion por rol y permisos S3/KMS aplicados |
@@ -51,10 +52,10 @@
    - Mitigacion: filtro automatico obligatorio y loop mensual de recalibracion.
 4. **Riesgo**: manejo de datos sensibles en social listening.
    - Mitigacion: minimizacion/enmascaramiento PII y export completo solo para Admin.
-5. **Riesgo**: definiciones KPI pueden quedar desalineadas entre negocio y calculo tecnico en CLARO-023/033.
-   - Mitigacion: congelar contrato de formulas (BHS/SOV/severidad) antes de implementar agregaciones y visualizacion.
-6. **Riesgo**: datos historicos de cuentas/competidores incompletos para overview inicial.
+5. **Riesgo**: datos historicos de cuentas/competidores incompletos para overview inicial.
    - Mitigacion: cargar catalogos base priorizados y marcar KPI sin base suficiente como `insufficient_data`.
+6. **Riesgo**: umbrales de severidad pueden disparar ruido en CLARO-036.
+   - Mitigacion: iniciar alertas con observacion pasiva y ajustar thresholds/cooldown con datos reales de 1 semana.
 
 ## Decisiones Cerradas de Arquitectura y Producto
 - AWS serverless en `us-east-1`.
@@ -69,7 +70,7 @@
 - Zona horaria operativa: `America/Bogota`.
 
 ## Proximos Hitos
-1. Implementar CLARO-023: Overview con KPI reales (`BHS`, `SOV`, `sentimiento_neto`, `riesgo_activo`) y tendencia 7d.
-2. Implementar CLARO-033: motor de formulas y severidad reutilizable para monitoreo y analisis.
-3. Conectar CLARO-036 para alertas de severidad sobre KPI ya calculados.
+1. Implementar CLARO-036: alertas e incidentes usando severidad del motor KPI.
+2. Implementar CLARO-034: modulo de analisis (3 paginas) con drill-down por canal y competencia.
+3. Implementar CLARO-035: modulo de reportes con plantillas y programacion.
 4. Retomar CLARO-013 (analysis async real) reutilizando patron de jobs y trazabilidad aplicado en export.

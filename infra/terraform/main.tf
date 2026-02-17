@@ -540,6 +540,7 @@ resource "aws_apigatewayv2_route" "private_routes" {
     "POST /v1/exports/csv",
     "GET /v1/exports/{id}",
     "GET /v1/feed/news",
+    "GET /v1/monitor/overview",
     "GET /v1/meta",
     "GET /v1/connectors",
     "PATCH /v1/connectors/{id}",

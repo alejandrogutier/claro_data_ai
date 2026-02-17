@@ -230,6 +230,27 @@ paths:
           $ref: '#/components/responses/NotFound'
         '422':
           $ref: '#/components/responses/ValidationError'
+  /v1/monitor/overview:
+    get:
+      tags: [Monitor]
+      summary: KPIs de overview (V1 news-only, ventana fija de 7 dias)
+      responses:
+        '200':
+          description: Resumen KPI de monitoreo
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MonitorOverviewResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          description: Error interno
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
   /v1/content/{id}/state:
     patch:
       tags: [Content]
@@ -1321,6 +1342,94 @@ components:
         filters:
           type: object
           additionalProperties: true
+    MonitorSeverity:
+      type: string
+      enum: [SEV1, SEV2, SEV3, SEV4]
+    MonitorScopeKpi:
+      type: object
+      required:
+        [items, classified_items, positivos, negativos, neutrales, sentimiento_neto, riesgo_activo, quality_score, bhs, sov, insufficient_data]
+      properties:
+        items:
+          type: integer
+        classified_items:
+          type: integer
+        positivos:
+          type: integer
+        negativos:
+          type: integer
+        neutrales:
+          type: integer
+        sentimiento_neto:
+          type: number
+        riesgo_activo:
+          type: number
+        quality_score:
+          type: number
+        bhs:
+          type: number
+        sov:
+          type: number
+        insufficient_data:
+          type: boolean
+    MonitorTotalsKpi:
+      type: object
+      required: [items, classified_items, sentimiento_neto, bhs, riesgo_activo, severidad, sov_claro, sov_competencia, insufficient_data]
+      properties:
+        items:
+          type: integer
+        classified_items:
+          type: integer
+        sentimiento_neto:
+          type: number
+        bhs:
+          type: number
+        riesgo_activo:
+          type: number
+        severidad:
+          $ref: '#/components/schemas/MonitorSeverity'
+        sov_claro:
+          type: number
+        sov_competencia:
+          type: number
+        insufficient_data:
+          type: boolean
+    MonitorDiagnostics:
+      type: object
+      required: [unscoped_items, unknown_sentiment_items]
+      properties:
+        unscoped_items:
+          type: integer
+        unknown_sentiment_items:
+          type: integer
+    MonitorOverviewResponse:
+      type: object
+      required: [generated_at, window_days, source_type, formula_version, totals, by_scope, diagnostics]
+      properties:
+        generated_at:
+          type: string
+          format: date-time
+        window_days:
+          type: integer
+          const: 7
+        source_type:
+          type: string
+          const: news
+        formula_version:
+          type: string
+          const: kpi-v1
+        totals:
+          $ref: '#/components/schemas/MonitorTotalsKpi'
+        by_scope:
+          type: object
+          required: [claro, competencia]
+          properties:
+            claro:
+              $ref: '#/components/schemas/MonitorScopeKpi'
+            competencia:
+              $ref: '#/components/schemas/MonitorScopeKpi'
+        diagnostics:
+          $ref: '#/components/schemas/MonitorDiagnostics'
     MetaResponse:
       type: object
       properties:

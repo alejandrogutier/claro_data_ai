@@ -57,13 +57,11 @@ Este contrato se usa junto a `UX_PLANNING.md` secciones `2.3`, `7.4`, `21`, `26`
 | CLARO-042 | checklist transversal | CLARO-037, CLARO-038, CLARO-035 | gate go-live completo y aprobado |
 
 ## Now
-- CLARO-023 | doing | P1 | Dashboard Overview Salud de Marca | arranque de KPI real post-cierre config: `BHS`, `SOV`, `sentimiento_neto`, `riesgo_activo` con tendencia 7d. UX_REF: 9.1, 12, 21.2
+- CLARO-036 | doing | P1 | Alertas e Incidentes | siguiente bloque tras KPIs: severidad in-app+email con cooldown 60m y SLA respuesta SEV-1 <=30m. UX_REF: 9.4, 12.4, 21.2
 
 ## Next
-- CLARO-033 | todo | P1 | Motor de KPIs BHS/SOV severidad | `BHS=50/25/25`, SOV ponderado `calidad 60 + alcance 40`, severidad `SEV1>=80`, `SEV2>=60`. UX_REF: 12, 21.2
 - CLARO-034 | todo | P1 | Modulo Analisis (3 paginas) | overview marca, deep-dive por canal y benchmark competencia. UX_REF: 10, 21.3
 - CLARO-035 | todo | P1 | Modulo Reportes (3 paginas) | historial/centro, plantillas y programacion/envios (salida `Web + CSV`). UX_REF: 11, 16, 21.4
-- CLARO-036 | todo | P1 | Alertas e Incidentes | in-app+email, cooldown 60m, asignacion manual+reglas, SLA respuesta SEV-1 <=30m. UX_REF: 9.4, 12.4, 21.2
 - CLARO-040 | todo | P2 | Loop de calidad semantica | falso positivo con reason code + recalibracion mensual de reglas/umbrales. UX_REF: 13
 - CLARO-041 | todo | P2 | UX de adopcion | diccionario de KPI en app + tour guiado basico por rol. UX_REF: 18, 26, 27
 - CLARO-042 | todo | P1 | Go-live readiness social | gate con 16 cuentas activas + set final competidores + UAT 2 semanas + piloto 1 semana. UX_REF: 23, 24, 27
@@ -123,3 +121,5 @@ Antes de mover `doing` -> `done`:
 - CLARO-037 | done | P1 | Integracion Hootsuite/Awario/News a 15m | endpoints `/v1/connectors*` desplegados en runtime, sync manual/runs operativos y validados en `contract:test` + smoke business
 - CLARO-038 | done | P1 | Catalogos administrables por Admin | CRUD de cuentas, competidores y taxonomias desplegado (`/v1/config/accounts|competitors|taxonomies/*`) con validacion de `201/409`
 - CLARO-039 | done | P1 | Gobernanza de datos y exportes | `/v1/config/audit` y `/v1/config/audit/export` operativos con export CSV sanitizado por rol y permisos S3/KMS ajustados en IAM
+- CLARO-023 | done | P1 | Dashboard Overview Salud de Marca | `/v1/monitor/overview` operativo (news-only 7d) y UI de `/app/monitor/overview` conectada a KPIs reales (`BHS`, `SOV`, `sentimiento_neto`, `riesgo_activo`, `severidad`)
+- CLARO-033 | done | P1 | Motor de KPIs BHS/SOV severidad | formulas `kpi-v1` implementadas en backend (BHS 50/25/25, SOV 60/40 calidad-volumen, severidad `SEV1..SEV4`) con contract/smoke en verde
