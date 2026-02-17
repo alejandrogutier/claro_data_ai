@@ -1,7 +1,12 @@
 # AWS
 
 ## Objetivo
-Definir la arquitectura base de `claro_data` para V1 en AWS con escalabilidad serverless, seguridad por defecto y preparacion para conectores de social media.
+Definir la arquitectura AWS de `claro_data` para V1 con una app unificada de monitoreo de marca Claro Colombia, integrando social propio, listening competitivo y noticias.
+
+## Region y contexto
+- Region objetivo: `us-east-1`
+- Ambiente: `prod` unico
+- Zona horaria de operacion de negocio: `America/Bogota`
 
 ## Diagrama Logico
 ```mermaid
@@ -17,7 +22,7 @@ flowchart TD
     LAPI --> S3RAW[S3 Raw Payloads]
     LAPI --> S3EXP[S3 Exports]
 
-    EVB[EventBridge 15 min] --> SFN[Step Functions Ingestion]
+    EVB[EventBridge 15 min] --> SFN[Step Functions Sync]
     SFN --> SQS[SQS Queue]
     SQS --> LWORK[Lambda Workers]
     LWORK --> AURORA
@@ -26,15 +31,14 @@ flowchart TD
 
     COG[Cognito User Pool + Groups] --> APIGW
 
-    SES[SES Digest 08:00] --> U
+    SES[SES Reportes/Digest 08:00] --> U
     CW[CloudWatch + X-Ray + Dashboards] --> OPS[Operacion]
 ```
 
-## Componentes y Como Se Engranan
+## Componentes y engrane
 
 ### Edge/UI
 - `S3 + CloudFront` para SPA (`React + Vite + TypeScript`).
-- Dominio inicial: URL nativa CloudFront.
 
 ### Auth
 - Cognito User Pool.
@@ -42,46 +46,66 @@ flowchart TD
 - JWT Authorizer en API Gateway + enforcement RBAC en backend.
 
 ### API
-- API Gateway HTTP con rutas versionadas `/v1/*`.
-- Lambdas Node.js/TypeScript para dominio de negocio.
+- API Gateway HTTP `/v1/*`.
+- Lambdas Node.js/TypeScript para dominio funcional.
 
 ### Orquestacion
-- EventBridge dispara ingesta cada 15 minutos.
-- Step Functions controla fetch -> normalize -> dedupe -> persist -> classify.
-- SQS desacopla procesamiento y controla concurrencia.
-- DLQ para reprocesos e incidentes.
+- EventBridge cada 15 min.
+- Step Functions para sync multifuente.
+- SQS para desacople y control de concurrencia.
+- DLQ para reprocesos.
 
 ### Datos
-- Aurora PostgreSQL Serverless v2 (single region `us-east-1`).
-- Prisma ORM para modelo y migraciones.
-- PostgreSQL FTS para busqueda textual avanzada.
+- Aurora PostgreSQL Serverless v2.
+- Prisma ORM + migraciones.
+- FTS para busqueda avanzada.
 
 ### Storage
-- S3 `raw payloads` (versionado, lifecycle).
-- S3 `exports` (CSV).
-- S3 `frontend` para artefactos web.
+- S3 raw payloads.
+- S3 exports.
+- S3 frontend.
 
 ### IA
-- Bedrock modelo fijo:
-  - `anthropic.claude-haiku-4-5-20251001-v1:0`
+- Bedrock fijo `anthropic.claude-haiku-4-5-20251001-v1:0`.
 - Prompt versioning en repositorio.
 
-### Email
-- SES para digest diario a las 08:00.
+### Email/reportes
+- SES para digest y reportes programados.
 
 ### Observabilidad
 - CloudWatch Logs/Metrics.
-- X-Ray tracing.
-- Dashboards operativos (sin alertas push en V1).
+- X-Ray.
+- Dashboards de operacion y costo.
 
-### Seguridad
-- Secrets Manager para llaves externas.
-- KMS en todos los componentes de datos.
+## Vision funcional V1 sobre esta arquitectura
+
+### Fuentes unificadas
+- Hootsuite (cuentas propias)
+- Awario (menciones externas/competencia)
+- News providers
+
+### Cadencia
+- Pull programado cada 15 minutos por fuente.
+
+### KPIs oficiales
+- `BHS` (Brand Health Score)
+- `SOV` (Share of Voice)
+- `sentimiento_neto`
+- `riesgo_activo`
+
+### Metas
+- SOV: +5 pp trimestral
+- BHS: >=70 sostenido
+- SLA SEV-1: <=30 min
+
+## Seguridad
+- Secrets en Secrets Manager.
+- Cifrado KMS en datos y logs.
 - IAM least privilege.
-- Auditoria de acciones de negocio.
+- Auditoria de cambios criticos.
+- PII minimizada/enmascarada por defecto.
 
-## Estandar Obligatorio de Tags
-Aplicar en **todos** los recursos AWS:
+## Tags obligatorios
 - `claro=true`
 - `app=claro-data`
 - `env=prod`
@@ -89,33 +113,8 @@ Aplicar en **todos** los recursos AWS:
 - `cost-center=<centro_costos>`
 - `managed-by=terraform`
 
-## Politica de Costos
-- AWS Budget habilitado para plataforma.
-- Limites diarios de clasificacion (cupo por termino/corrida).
-- Control de concurrencia en workers y Step Functions.
-- Dashboards de costo por servicio/tag.
-
-## Preparacion para Social Media
-- Arquitectura con interfaz de conectores (`fetch`, `normalize`, `rate_limit_policy`).
-- `source_type` unificado (`news|social`) en modelo de datos.
-- Integracion futura con terceros agregadores (ej. Hootsuite/Awario), sin OAuth directo con redes sociales.
-
-## API v1 Base
-- `GET /v1/terms`
-- `POST /v1/terms`
-- `PATCH /v1/terms/{id}`
-- `POST /v1/ingestion/runs`
-- `GET /v1/content`
-- `PATCH /v1/content/{id}/state`
-- `POST /v1/content/bulk/state`
-- `PATCH /v1/content/{id}/classification`
-- `POST /v1/analysis/runs`
-- `GET /v1/analysis/history`
-- `POST /v1/exports/csv`
-- `GET /v1/meta`
-
-## Objetivos Operativos (V1)
-- Ingesta por corrida <= 5 minutos.
-- Clasificacion de 100 articulos <= 10 minutos.
+## Objetivos operativos V1
+- Ingesta/sync disponible <= 15 min.
+- Clasificacion de 100 items <= 10 min.
 - Disponibilidad objetivo: 99.5%.
 - Recuperacion DB: RPO 15m / RTO 2h.

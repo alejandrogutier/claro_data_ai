@@ -243,6 +243,33 @@ resource "aws_iam_role_policy_attachment" "lambda_ingestion_sqs" {
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaSQSQueueExecutionRole"
 }
 
+resource "aws_iam_role" "lambda_export" {
+  name = "${local.name_prefix}-lambda-export-role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Action = "sts:AssumeRole"
+        Effect = "Allow"
+        Principal = {
+          Service = "lambda.amazonaws.com"
+        }
+      }
+    ]
+  })
+}
+
+resource "aws_iam_role_policy_attachment" "lambda_export_basic" {
+  role       = aws_iam_role.lambda_export.name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+}
+
+resource "aws_iam_role_policy_attachment" "lambda_export_sqs" {
+  role       = aws_iam_role.lambda_export.name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaSQSQueueExecutionRole"
+}
+
 resource "aws_iam_role" "lambda_migrations" {
   name = "${local.name_prefix}-lambda-migrations-role"
 
@@ -297,6 +324,9 @@ resource "aws_lambda_function" "api" {
       DB_NAME                     = var.db_name
       INGESTION_STATE_MACHINE_ARN = aws_sfn_state_machine.ingestion.arn
       RAW_BUCKET_NAME             = aws_s3_bucket.raw.bucket
+      EXPORT_BUCKET_NAME          = aws_s3_bucket.exports.bucket
+      EXPORT_QUEUE_URL            = aws_sqs_queue.export.url
+      EXPORT_SIGNED_URL_SECONDS   = "900"
       INGESTION_DEFAULT_TERMS     = var.ingestion_default_terms
     }
   }
@@ -328,6 +358,30 @@ resource "aws_lambda_function" "ingestion_worker" {
       DB_NAME                     = var.db_name
       RAW_BUCKET_NAME             = aws_s3_bucket.raw.bucket
       INGESTION_DEFAULT_TERMS     = var.ingestion_default_terms
+    }
+  }
+}
+
+resource "aws_lambda_function" "export_worker" {
+  function_name = "${local.name_prefix}-export-worker"
+  role          = aws_iam_role.lambda_export.arn
+  runtime       = "nodejs22.x"
+  handler       = "exports/worker.main"
+
+  filename         = var.lambda_package_path
+  source_code_hash = filebase64sha256(var.lambda_package_path)
+
+  timeout     = 300
+  memory_size = 1024
+
+  environment {
+    variables = {
+      APP_ENV                   = var.environment
+      DB_RESOURCE_ARN           = aws_rds_cluster.aurora.arn
+      DB_SECRET_ARN             = data.aws_secretsmanager_secret.database.arn
+      DB_NAME                   = var.db_name
+      EXPORT_BUCKET_NAME        = aws_s3_bucket.exports.bucket
+      EXPORT_SIGNED_URL_SECONDS = "900"
     }
   }
 }
@@ -408,6 +462,7 @@ resource "aws_apigatewayv2_route" "private_routes" {
     "POST /v1/analysis/runs",
     "GET /v1/analysis/history",
     "POST /v1/exports/csv",
+    "GET /v1/exports/{id}",
     "GET /v1/meta"
   ])
 
@@ -452,6 +507,29 @@ resource "aws_sqs_queue" "ingestion" {
 resource "aws_lambda_event_source_mapping" "ingestion_queue_to_worker" {
   event_source_arn = aws_sqs_queue.ingestion.arn
   function_name    = aws_lambda_function.ingestion_worker.arn
+  batch_size       = 1
+}
+
+resource "aws_sqs_queue" "export_dlq" {
+  name                      = "${local.name_prefix}-export-dlq"
+  message_retention_seconds = 1209600
+  kms_master_key_id         = aws_kms_key.app.arn
+}
+
+resource "aws_sqs_queue" "export" {
+  name                       = "${local.name_prefix}-export"
+  visibility_timeout_seconds = 300
+  message_retention_seconds  = 345600
+  kms_master_key_id          = aws_kms_key.app.arn
+  redrive_policy = jsonencode({
+    deadLetterTargetArn = aws_sqs_queue.export_dlq.arn
+    maxReceiveCount     = 5
+  })
+}
+
+resource "aws_lambda_event_source_mapping" "export_queue_to_worker" {
+  event_source_arn = aws_sqs_queue.export.arn
+  function_name    = aws_lambda_function.export_worker.arn
   batch_size       = 1
 }
 

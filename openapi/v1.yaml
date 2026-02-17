@@ -214,6 +214,16 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ContentStateEvent'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationError'
   /v1/content/bulk/state:
     post:
       tags: [Content]
@@ -231,6 +241,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/BulkActionResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/ValidationError'
   /v1/content/{id}/classification:
     patch:
       tags: [Content]
@@ -250,6 +266,14 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Classification'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationError'
   /v1/analysis/runs:
     post:
       tags: [Analysis]
@@ -298,6 +322,33 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ExportAccepted'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+  /v1/exports/{id}:
+    get:
+      tags: [Exports]
+      summary: Consultar estado de export y URL de descarga
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      responses:
+        '200':
+          description: Estado actual del export
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExportStatusResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationError'
   /v1/meta:
     get:
       tags: [Meta]
@@ -675,6 +726,8 @@ components:
                 format: uuid
               error:
                 type: string
+              message:
+                type: string
     UpdateClassificationRequest:
       type: object
       required: [categoria, sentimiento]
@@ -753,7 +806,29 @@ components:
       properties:
         filters:
           type: object
-          additionalProperties: true
+          properties:
+            state:
+              $ref: '#/components/schemas/ContentState'
+            source_type:
+              $ref: '#/components/schemas/SourceType'
+            term_id:
+              type: string
+              format: uuid
+            provider:
+              type: string
+            category:
+              type: string
+            sentimiento:
+              type: string
+            from:
+              type: string
+              format: date-time
+            to:
+              type: string
+              format: date-time
+            q:
+              type: string
+          additionalProperties: false
     ExportAccepted:
       type: object
       required: [export_id, status]
@@ -764,6 +839,32 @@ components:
         status:
           type: string
           const: accepted
+    ExportStatusResponse:
+      type: object
+      required: [export_id, status, row_count, created_at]
+      properties:
+        export_id:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum: [queued, running, completed, failed]
+        row_count:
+          type: integer
+        created_at:
+          type: string
+          format: date-time
+        completed_at:
+          type: string
+          format: date-time
+          nullable: true
+        download_url:
+          type: string
+          format: uri
+          nullable: true
+        filters:
+          type: object
+          additionalProperties: true
     MetaResponse:
       type: object
       properties:

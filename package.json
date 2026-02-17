@@ -8,6 +8,7 @@
     "build": "tsc -p tsconfig.json",
     "check": "tsc -p tsconfig.json --noEmit",
     "openapi:validate": "node scripts/openapi/validate.js",
+    "contract:test": "node scripts/contracts/test_api_contract.js",
     "prisma:generate": "prisma generate",
     "prisma:migrate:dev": "prisma migrate dev",
     "prisma:migrate:deploy": "prisma migrate deploy",
@@ -18,7 +19,6 @@
     "pg": "^8.16.3"
   },
   "devDependencies": {
-    "@apidevtools/swagger-parser": "^12.1.0",
     "@prisma/client": "^6.16.2",
     "@apidevtools/swagger-parser": "^12.1.0",
     "@types/aws-lambda": "^8.10.145",

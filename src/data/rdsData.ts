@@ -4,6 +4,9 @@ import { env } from "../config/env";
 export type SqlParameter = AWS.RDSDataService.SqlParameter;
 export type SqlField = AWS.RDSDataService.Field;
 export type SqlRow = AWS.RDSDataService.FieldList;
+type SqlExecutionOptions = {
+  transactionId?: string;
+};
 
 const toTimestamp = (value: Date): string => value.toISOString().replace("T", " ").replace("Z", "");
 
@@ -99,7 +102,46 @@ export class RdsDataClient {
     return new RdsDataClient(env.dbResourceArn, env.dbSecretArn, env.dbName, env.awsRegion);
   }
 
-  async execute(sql: string, parameters: SqlParameter[] = []): Promise<AWS.RDSDataService.ExecuteStatementResponse> {
+  async beginTransaction(): Promise<string> {
+    const response = await this.client
+      .beginTransaction({
+        resourceArn: this.resourceArn,
+        secretArn: this.secretArn,
+        database: this.database
+      })
+      .promise();
+
+    if (!response.transactionId) {
+      throw new Error("Failed to begin transaction");
+    }
+    return response.transactionId;
+  }
+
+  async commitTransaction(transactionId: string): Promise<void> {
+    await this.client
+      .commitTransaction({
+        resourceArn: this.resourceArn,
+        secretArn: this.secretArn,
+        transactionId
+      })
+      .promise();
+  }
+
+  async rollbackTransaction(transactionId: string): Promise<void> {
+    await this.client
+      .rollbackTransaction({
+        resourceArn: this.resourceArn,
+        secretArn: this.secretArn,
+        transactionId
+      })
+      .promise();
+  }
+
+  async execute(
+    sql: string,
+    parameters: SqlParameter[] = [],
+    options: SqlExecutionOptions = {}
+  ): Promise<AWS.RDSDataService.ExecuteStatementResponse> {
     return this.client
       .executeStatement({
         resourceArn: this.resourceArn,
@@ -107,6 +149,7 @@ export class RdsDataClient {
         database: this.database,
         sql,
         parameters,
+        transactionId: options.transactionId,
         continueAfterTimeout: true
       })
       .promise();
@@ -115,7 +158,8 @@ export class RdsDataClient {
   async batchExecute(
     sql: string,
     parameterSets: SqlParameter[][],
-    chunkSize = 20
+    chunkSize = 20,
+    options: SqlExecutionOptions = {}
   ): Promise<AWS.RDSDataService.BatchExecuteStatementResponse[]> {
     if (parameterSets.length === 0) return [];
 
@@ -129,7 +173,8 @@ export class RdsDataClient {
           secretArn: this.secretArn,
           database: this.database,
           sql,
-          parameterSets: chunk
+          parameterSets: chunk,
+          transactionId: options.transactionId
         })
         .promise();
 

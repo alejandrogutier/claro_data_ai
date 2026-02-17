@@ -10,6 +10,9 @@ export type AppEnv = {
   dbName?: string;
   ingestionStateMachineArn?: string;
   rawBucketName?: string;
+  exportBucketName?: string;
+  exportQueueUrl?: string;
+  exportSignedUrlSeconds?: number;
   ingestionDefaultTerms?: string;
 };
 
@@ -25,5 +28,10 @@ export const env: AppEnv = {
   dbName: process.env.DB_NAME,
   ingestionStateMachineArn: process.env.INGESTION_STATE_MACHINE_ARN,
   rawBucketName: process.env.RAW_BUCKET_NAME,
+  exportBucketName: process.env.EXPORT_BUCKET_NAME,
+  exportQueueUrl: process.env.EXPORT_QUEUE_URL,
+  exportSignedUrlSeconds: process.env.EXPORT_SIGNED_URL_SECONDS
+    ? Number.parseInt(process.env.EXPORT_SIGNED_URL_SECONDS, 10)
+    : 900,
   ingestionDefaultTerms: process.env.INGESTION_DEFAULT_TERMS
 };

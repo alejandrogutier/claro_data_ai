@@ -1,7 +1,7 @@
 # Terraform Base (claro_data)
 
 ## Objetivo
-Provisionar base de arquitectura AWS para V1 en una sola region (`us-west-2`).
+Provisionar la base AWS de `claro_data` para V1 en una sola region (`us-east-1`), soportando la vision de monitoreo unificado de marca (social + listening externo + news).
 
 ## Incluye
 - KMS key y cifrado por defecto
@@ -16,6 +16,10 @@ Provisionar base de arquitectura AWS para V1 en una sola region (`us-west-2`).
 - SES identidad remitente
 - AWS Budget mensual
 
+## Nota de alcance conectores sociales
+- La integracion con Hootsuite y Awario se implementa a nivel aplicacion (Lambdas + secretos + jobs).
+- Este modulo Terraform provee la infraestructura base para esa integracion, no recursos nativos de terceros.
+
 ## Uso
 ```bash
 ./scripts/aws/build_lambda_package.sh
@@ -27,9 +31,19 @@ terraform apply -var-file=terraform.tfvars
 ```
 
 ## Notas
-- Este modulo es un baseline de arranque. Ajustar networking (CIDR/SG), dominios y politicas IAM por entorno real.
-- Los secretos se leen desde Secrets Manager via nombres configurables:
+- Baseline de arranque. Ajustar networking (CIDR/SG), dominios y politicas IAM por entorno real.
+- Secretos runtime en Secrets Manager (nombres configurables):
   - `claro-data-prod/provider-api-keys`
   - `claro-data-prod/app-config`
   - `claro-data-prod/aws-credentials`
-- El artefacto Lambda se empaqueta localmente en `build/lambda-api.zip`.
+  - `claro-data-prod/database`
+- Artefacto Lambda local: `build/lambda-api.zip`.
+
+## Tags obligatorios
+Aplicar en todos los recursos:
+- `claro=true`
+- `app=claro-data`
+- `env=prod`
+- `owner=<equipo_responsable>`
+- `cost-center=<centro_costos>`
+- `managed-by=terraform`

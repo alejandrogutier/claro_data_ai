@@ -1,12 +1,38 @@
 import type { APIGatewayProxyEventV2 } from "aws-lambda";
-import { AppStoreError, createAppStore, type ContentFilters, type ContentRecord } from "../../data/appStore";
-import { notImplemented } from "../../lib/placeholders";
-import { getRole, hasRole } from "../../core/auth";
-import { json } from "../../core/http";
+import {
+  AppStoreError,
+  createAppStore,
+  type ClassificationRecord,
+  type ContentFilters,
+  type ContentRecord,
+  type ContentState,
+  type ContentStateEventRecord
+} from "../../data/appStore";
+import { getAuthPrincipal, getRole, hasRole } from "../../core/auth";
+import { getPathWithoutStage, getRequestId, json, parseBody } from "../../core/http";
 
 const VALID_STATES = new Set(["active", "archived", "hidden"]);
 const VALID_SOURCE_TYPES = new Set(["news", "social"]);
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+type StateBody = {
+  target_state?: string;
+  reason?: string;
+};
+
+type BulkStateBody = {
+  ids?: unknown;
+  target_state?: string;
+  reason?: string;
+};
+
+type ClassificationBody = {
+  categoria?: string;
+  sentimiento?: string;
+  etiquetas?: unknown;
+  confidence_override?: number;
+  reason?: string;
+};
 
 const parseLimit = (value: string | undefined): number | null => {
   if (!value) return 50;
@@ -47,11 +73,50 @@ const toApiContent = (item: ContentRecord) => ({
   updated_at: item.updatedAt.toISOString()
 });
 
+const toApiStateEvent = (event: ContentStateEventRecord) => ({
+  id: event.id,
+  content_item_id: event.contentItemId,
+  previous_state: event.previousState,
+  next_state: event.nextState,
+  actor_user_id: event.actorUserId,
+  reason: event.reason,
+  created_at: event.createdAt.toISOString()
+});
+
+const toApiClassification = (classification: ClassificationRecord) => ({
+  id: classification.id,
+  content_item_id: classification.contentItemId,
+  categoria: classification.categoria,
+  sentimiento: classification.sentimiento,
+  etiquetas: classification.etiquetas,
+  confianza: classification.confianza,
+  override_by: classification.overriddenByUserId,
+  override_reason: classification.overrideReason,
+  prompt_version: classification.promptVersion,
+  model_id: classification.modelId,
+  created_at: classification.createdAt.toISOString(),
+  updated_at: classification.updatedAt.toISOString()
+});
+
 const mapStoreError = (error: unknown) => {
   if (error instanceof AppStoreError) {
     if (error.code === "validation") {
       return json(422, {
         error: "validation_error",
+        message: error.message
+      });
+    }
+
+    if (error.code === "not_found") {
+      return json(404, {
+        error: "not_found",
+        message: error.message
+      });
+    }
+
+    if (error.code === "conflict") {
+      return json(409, {
+        error: "conflict",
         message: error.message
       });
     }
@@ -61,6 +126,53 @@ const mapStoreError = (error: unknown) => {
     error: "internal_error",
     message: (error as Error).message
   });
+};
+
+const getIdFromPath = (event: APIGatewayProxyEventV2, pattern: RegExp): string | null => {
+  const path = getPathWithoutStage(event);
+  const match = path.match(pattern);
+  if (!match) return null;
+  return match[1] ?? null;
+};
+
+const normalizeReason = (reason: unknown): string | null => {
+  if (reason === undefined || reason === null) return null;
+  if (typeof reason !== "string") return null;
+  const trimmed = reason.trim();
+  if (!trimmed) return null;
+  return trimmed.slice(0, 500);
+};
+
+const normalizeTags = (raw: unknown): string[] | null => {
+  if (raw === undefined) return null;
+  if (!Array.isArray(raw)) return null;
+
+  const items = raw
+    .map((item) => (typeof item === "string" ? item.trim() : ""))
+    .filter((item) => item.length > 0)
+    .slice(0, 50);
+
+  return [...new Set(items)];
+};
+
+const parseContentStateBody = (event: APIGatewayProxyEventV2): { targetState: ContentState; reason: string | null } | null => {
+  const body = parseBody<StateBody>(event);
+  if (!body) return null;
+
+  const targetState = body.target_state;
+  if (!targetState || !VALID_STATES.has(targetState)) {
+    return null;
+  }
+
+  const reason = normalizeReason(body.reason);
+  if (body.reason !== undefined && body.reason !== null && reason === null) {
+    return null;
+  }
+
+  return {
+    targetState: targetState as ContentState,
+    reason
+  };
 };
 
 export const listContent = async (event: APIGatewayProxyEventV2) => {
@@ -90,7 +202,7 @@ export const listContent = async (event: APIGatewayProxyEventV2) => {
         message: "state must be one of active|archived|hidden"
       });
     }
-    filters.state = query.state as "active" | "archived" | "hidden";
+    filters.state = query.state as ContentState;
   }
 
   if (query.source_type) {
@@ -158,26 +270,234 @@ export const listContent = async (event: APIGatewayProxyEventV2) => {
   }
 };
 
-export const updateContentState = (event: APIGatewayProxyEventV2) => {
+export const updateContentState = async (event: APIGatewayProxyEventV2) => {
   const role = getRole(event);
   if (!hasRole(role, "Analyst")) {
     return json(403, { error: "forbidden", message: "Se requiere rol Analyst o Admin" });
   }
-  return notImplemented("PATCH /v1/content/{id}/state");
+
+  const contentId = getIdFromPath(event, /^\/v1\/content\/([^/]+)\/state$/);
+  if (!contentId || !UUID_REGEX.test(contentId)) {
+    return json(422, { error: "validation_error", message: "Invalid content id" });
+  }
+
+  const parsed = parseContentStateBody(event);
+  if (!parsed) {
+    return json(422, {
+      error: "validation_error",
+      message: "Body must include target_state in active|archived|hidden and optional reason"
+    });
+  }
+
+  const store = createAppStore();
+  if (!store) {
+    return json(500, {
+      error: "misconfigured",
+      message: "Database runtime is not configured"
+    });
+  }
+
+  try {
+    const principal = getAuthPrincipal(event);
+    const actorUserId = await store.upsertUserFromPrincipal(principal);
+    const stateEvent = await store.changeContentState({
+      contentItemId: contentId,
+      targetState: parsed.targetState,
+      reason: parsed.reason ?? undefined,
+      actorUserId,
+      requestId: getRequestId(event)
+    });
+
+    return json(200, toApiStateEvent(stateEvent));
+  } catch (error) {
+    return mapStoreError(error);
+  }
 };
 
-export const bulkUpdateContentState = (event: APIGatewayProxyEventV2) => {
+export const bulkUpdateContentState = async (event: APIGatewayProxyEventV2) => {
   const role = getRole(event);
   if (!hasRole(role, "Analyst")) {
     return json(403, { error: "forbidden", message: "Se requiere rol Analyst o Admin" });
   }
-  return notImplemented("POST /v1/content/bulk/state");
+
+  const body = parseBody<BulkStateBody>(event);
+  if (!body) {
+    return json(400, {
+      error: "invalid_json",
+      message: "Body JSON invalido"
+    });
+  }
+
+  if (!body.target_state || !VALID_STATES.has(body.target_state)) {
+    return json(422, {
+      error: "validation_error",
+      message: "target_state must be one of active|archived|hidden"
+    });
+  }
+
+  if (!Array.isArray(body.ids)) {
+    return json(422, {
+      error: "validation_error",
+      message: "ids must be an array of UUIDs"
+    });
+  }
+
+  const ids = [...new Set(body.ids.map((value) => (typeof value === "string" ? value.trim() : "")).filter(Boolean))];
+  if (ids.length < 1 || ids.length > 500) {
+    return json(422, {
+      error: "validation_error",
+      message: "ids must contain between 1 and 500 UUIDs"
+    });
+  }
+
+  const invalidId = ids.find((value) => !UUID_REGEX.test(value));
+  if (invalidId) {
+    return json(422, {
+      error: "validation_error",
+      message: `Invalid UUID in ids: ${invalidId}`
+    });
+  }
+
+  const reason = normalizeReason(body.reason);
+  if (body.reason !== undefined && body.reason !== null && reason === null) {
+    return json(422, {
+      error: "validation_error",
+      message: "reason must be a non-empty string when provided"
+    });
+  }
+
+  const store = createAppStore();
+  if (!store) {
+    return json(500, {
+      error: "misconfigured",
+      message: "Database runtime is not configured"
+    });
+  }
+
+  try {
+    const principal = getAuthPrincipal(event);
+    const actorUserId = await store.upsertUserFromPrincipal(principal);
+
+    let processed = 0;
+    const failures: Array<{ id: string; error: string; message: string }> = [];
+
+    for (const id of ids) {
+      try {
+        await store.changeContentState({
+          contentItemId: id,
+          targetState: body.target_state as ContentState,
+          reason: reason ?? undefined,
+          actorUserId,
+          requestId: getRequestId(event)
+        });
+        processed += 1;
+      } catch (error) {
+        if (error instanceof AppStoreError) {
+          failures.push({
+            id,
+            error: error.code,
+            message: error.message
+          });
+        } else {
+          failures.push({
+            id,
+            error: "internal_error",
+            message: (error as Error).message
+          });
+        }
+      }
+    }
+
+    return json(200, {
+      processed,
+      failed: failures.length,
+      failures
+    });
+  } catch (error) {
+    return mapStoreError(error);
+  }
 };
 
-export const updateClassification = (event: APIGatewayProxyEventV2) => {
+export const updateClassification = async (event: APIGatewayProxyEventV2) => {
   const role = getRole(event);
   if (!hasRole(role, "Analyst")) {
     return json(403, { error: "forbidden", message: "Se requiere rol Analyst o Admin" });
   }
-  return notImplemented("PATCH /v1/content/{id}/classification");
+
+  const contentId = getIdFromPath(event, /^\/v1\/content\/([^/]+)\/classification$/);
+  if (!contentId || !UUID_REGEX.test(contentId)) {
+    return json(422, { error: "validation_error", message: "Invalid content id" });
+  }
+
+  const body = parseBody<ClassificationBody>(event);
+  if (!body) {
+    return json(400, {
+      error: "invalid_json",
+      message: "Body JSON invalido"
+    });
+  }
+
+  const categoria = typeof body.categoria === "string" ? body.categoria.trim() : "";
+  const sentimiento = typeof body.sentimiento === "string" ? body.sentimiento.trim() : "";
+
+  if (!categoria || !sentimiento) {
+    return json(422, {
+      error: "validation_error",
+      message: "categoria and sentimiento are required"
+    });
+  }
+
+  const etiquetas = normalizeTags(body.etiquetas);
+  if (body.etiquetas !== undefined && etiquetas === null) {
+    return json(422, {
+      error: "validation_error",
+      message: "etiquetas must be an array of strings"
+    });
+  }
+
+  if (
+    body.confidence_override !== undefined &&
+    (typeof body.confidence_override !== "number" || body.confidence_override < 0 || body.confidence_override > 1)
+  ) {
+    return json(422, {
+      error: "validation_error",
+      message: "confidence_override must be a number between 0 and 1"
+    });
+  }
+
+  const reason = normalizeReason(body.reason);
+  if (body.reason !== undefined && body.reason !== null && reason === null) {
+    return json(422, {
+      error: "validation_error",
+      message: "reason must be a non-empty string when provided"
+    });
+  }
+
+  const store = createAppStore();
+  if (!store) {
+    return json(500, {
+      error: "misconfigured",
+      message: "Database runtime is not configured"
+    });
+  }
+
+  try {
+    const principal = getAuthPrincipal(event);
+    const actorUserId = await store.upsertUserFromPrincipal(principal);
+
+    const classification = await store.upsertManualClassification({
+      contentItemId: contentId,
+      categoria,
+      sentimiento,
+      etiquetas,
+      confianza: body.confidence_override,
+      reason: reason ?? undefined,
+      actorUserId,
+      requestId: getRequestId(event)
+    });
+
+    return json(200, toApiClassification(classification));
+  } catch (error) {
+    return mapStoreError(error);
+  }
 };

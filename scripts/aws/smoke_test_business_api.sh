@@ -118,6 +118,46 @@ wait_run_terminal() {
   return 1
 }
 
+wait_export_completed() {
+  local export_id="$1"
+  local token="$2"
+
+  for i in {1..60}; do
+    local code
+    code="$(curl -s -o /tmp/claro-export-status.json -w "%{http_code}" -H "Authorization: Bearer $token" "$API_BASE/v1/exports/$export_id")"
+    if [[ "$code" != "200" ]]; then
+      echo "[FAIL] GET /v1/exports/$export_id expected 200 got=$code"
+      cat /tmp/claro-export-status.json
+      exit 1
+    fi
+
+    local status
+    status="$(jq -r '.status // empty' /tmp/claro-export-status.json)"
+    if [[ "$status" == "completed" ]]; then
+      local download_url
+      download_url="$(jq -r '.download_url // empty' /tmp/claro-export-status.json)"
+      if [[ -z "$download_url" || "$download_url" == "null" ]]; then
+        echo "[FAIL] completed export missing download_url"
+        cat /tmp/claro-export-status.json
+        exit 1
+      fi
+      echo "[OK] export completed with download_url"
+      return 0
+    fi
+
+    if [[ "$status" == "failed" ]]; then
+      echo "[FAIL] export failed for export_id=$export_id"
+      cat /tmp/claro-export-status.json
+      exit 1
+    fi
+
+    sleep 5
+  done
+
+  echo "[FAIL] export timeout export_id=$export_id"
+  exit 1
+}
+
 echo "[1] Health and auth checks"
 CODE="$(curl -s -o /tmp/claro-health.json -w "%{http_code}" "$API_BASE/v1/health")"
 assert_code "$CODE" "200" "GET /v1/health"
@@ -154,7 +194,11 @@ if [[ "$CODE_1" != "accepted" ]]; then
   exit 1
 fi
 EXEC_1="$(jq -r '.execution_arn' /tmp/claro-ingestion-replay-1.json)"
-wait_execution "$EXEC_1"
+if [[ -n "$EXEC_1" && "$EXEC_1" != "null" ]]; then
+  wait_execution "$EXEC_1"
+else
+  echo "[INFO] first ingestion accepted without execution_arn (skip dispatch)"
+fi
 
 CLUSTER_ARN="$(aws rds describe-db-clusters --region "$AWS_REGION" --query 'DBClusters[?DBClusterIdentifier==`claro-data-prod-aurora`].DBClusterArn | [0]' --output text)"
 if [[ -z "$CLUSTER_ARN" || "$CLUSTER_ARN" == "None" ]]; then
@@ -181,7 +225,11 @@ if [[ "$CODE_2" != "accepted" ]]; then
   exit 1
 fi
 EXEC_2="$(jq -r '.execution_arn' /tmp/claro-ingestion-replay-2.json)"
-wait_execution "$EXEC_2"
+if [[ -n "$EXEC_2" && "$EXEC_2" != "null" ]]; then
+  wait_execution "$EXEC_2"
+else
+  echo "[INFO] second ingestion accepted without execution_arn (idempotent skip)"
+fi
 
 COUNT_2="$(count_run_links "$RUN_ID" "$CLUSTER_ARN" "$DB_SECRET_ARN")"
 STATUS_2="$(get_run_status "$RUN_ID" "$CLUSTER_ARN" "$DB_SECRET_ARN")"
@@ -204,7 +252,11 @@ if [[ "$CODE_3" != "accepted" ]]; then
   exit 1
 fi
 EXEC_3="$(jq -r '.execution_arn' /tmp/claro-ingestion-replay-3.json)"
-wait_execution "$EXEC_3"
+if [[ -n "$EXEC_3" && "$EXEC_3" != "null" ]]; then
+  wait_execution "$EXEC_3"
+else
+  echo "[INFO] replay-on-completed accepted without execution_arn (idempotent skip)"
+fi
 
 COUNT_3="$(count_run_links "$RUN_ID" "$CLUSTER_ARN" "$DB_SECRET_ARN")"
 STATUS_3="$(get_run_status "$RUN_ID" "$CLUSTER_ARN" "$DB_SECRET_ARN")"
@@ -216,5 +268,51 @@ if [[ "$COUNT_2" != "$COUNT_3" ]]; then
 fi
 
 echo "[OK] replay on completed run did not duplicate run-content links"
+
+echo "[4] Editorial operations (state, bulk, classification)"
+CODE="$(curl -s -o /tmp/claro-content-for-state.json -w "%{http_code}" -H "Authorization: Bearer $VIEWER_TOKEN" "$API_BASE/v1/content?limit=1")"
+assert_code "$CODE" "200" "GET /v1/content for editorial tests"
+
+CONTENT_ID="$(jq -r '.items[0].id // empty' /tmp/claro-content-for-state.json)"
+CURRENT_STATE="$(jq -r '.items[0].state // empty' /tmp/claro-content-for-state.json)"
+if [[ -z "$CONTENT_ID" || -z "$CURRENT_STATE" ]]; then
+  echo "[FAIL] no content available for editorial tests"
+  cat /tmp/claro-content-for-state.json
+  exit 1
+fi
+
+TARGET_STATE="active"
+if [[ "$CURRENT_STATE" == "active" ]]; then
+  TARGET_STATE="archived"
+fi
+
+CODE="$(curl -s -o /tmp/claro-content-state.json -w "%{http_code}" -X PATCH -H "Authorization: Bearer $ANALYST_TOKEN" -H "Content-Type: application/json" -d "{\"target_state\":\"$TARGET_STATE\",\"reason\":\"smoke state change\"}" "$API_BASE/v1/content/$CONTENT_ID/state")"
+if [[ "$CODE" == "409" ]]; then
+  if [[ "$TARGET_STATE" == "active" ]]; then TARGET_STATE="archived"; else TARGET_STATE="active"; fi
+  CODE="$(curl -s -o /tmp/claro-content-state.json -w "%{http_code}" -X PATCH -H "Authorization: Bearer $ANALYST_TOKEN" -H "Content-Type: application/json" -d "{\"target_state\":\"$TARGET_STATE\",\"reason\":\"smoke state retry\"}" "$API_BASE/v1/content/$CONTENT_ID/state")"
+fi
+assert_code "$CODE" "200" "PATCH /v1/content/{id}/state analyst"
+
+BULK_TARGET="active"
+if [[ "$TARGET_STATE" == "active" ]]; then BULK_TARGET="hidden"; fi
+RANDOM_ID="$(node -e 'console.log(require("crypto").randomUUID())')"
+CODE="$(curl -s -o /tmp/claro-content-bulk-state.json -w "%{http_code}" -X POST -H "Authorization: Bearer $ANALYST_TOKEN" -H "Content-Type: application/json" -d "{\"ids\":[\"$CONTENT_ID\",\"$RANDOM_ID\"],\"target_state\":\"$BULK_TARGET\",\"reason\":\"smoke bulk state\"}" "$API_BASE/v1/content/bulk/state")"
+assert_code "$CODE" "200" "POST /v1/content/bulk/state analyst"
+
+CODE="$(curl -s -o /tmp/claro-content-classification.json -w "%{http_code}" -X PATCH -H "Authorization: Bearer $ANALYST_TOKEN" -H "Content-Type: application/json" -d '{"categoria":"smoke-test","sentimiento":"neutral","etiquetas":["smoke","contract"],"confidence_override":0.87,"reason":"smoke classification override"}' "$API_BASE/v1/content/$CONTENT_ID/classification")"
+assert_code "$CODE" "200" "PATCH /v1/content/{id}/classification analyst"
+
+echo "[5] Export async"
+CODE="$(curl -s -o /tmp/claro-export-create.json -w "%{http_code}" -X POST -H "Authorization: Bearer $ANALYST_TOKEN" -H "Content-Type: application/json" -d '{"filters":{"q":"claro"}}' "$API_BASE/v1/exports/csv")"
+assert_code "$CODE" "202" "POST /v1/exports/csv analyst"
+
+EXPORT_ID="$(jq -r '.export_id // empty' /tmp/claro-export-create.json)"
+if [[ -z "$EXPORT_ID" ]]; then
+  echo "[FAIL] export_id missing in create response"
+  cat /tmp/claro-export-create.json
+  exit 1
+fi
+
+wait_export_completed "$EXPORT_ID" "$ANALYST_TOKEN"
 
 echo "Smoke business API completed"

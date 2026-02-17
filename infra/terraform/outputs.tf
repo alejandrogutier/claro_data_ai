@@ -30,6 +30,14 @@ output "ingestion_queue_url" {
   value = aws_sqs_queue.ingestion.url
 }
 
+output "export_queue_url" {
+  value = aws_sqs_queue.export.url
+}
+
 output "db_migration_lambda_name" {
   value = aws_lambda_function.db_migration_runner.function_name
+}
+
+output "export_worker_lambda_name" {
+  value = aws_lambda_function.export_worker.function_name
 }
