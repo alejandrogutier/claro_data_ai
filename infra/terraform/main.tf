@@ -4,6 +4,43 @@ resource "aws_kms_key" "app" {
   enable_key_rotation     = true
 }
 
+resource "aws_kms_key_policy" "app" {
+  key_id = aws_kms_key.app.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid    = "EnableRootPermissions"
+        Effect = "Allow"
+        Principal = {
+          AWS = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:root"
+        }
+        Action   = "kms:*"
+        Resource = "*"
+      },
+      {
+        Sid    = "AllowCloudFrontDecryptFrontendObjects"
+        Effect = "Allow"
+        Principal = {
+          Service = "cloudfront.amazonaws.com"
+        }
+        Action = [
+          "kms:Decrypt",
+          "kms:DescribeKey",
+          "kms:GenerateDataKey"
+        ]
+        Resource = "*"
+        Condition = {
+          StringEquals = {
+            "AWS:SourceArn" = aws_cloudfront_distribution.frontend.arn
+          }
+        }
+      }
+    ]
+  })
+}
+
 resource "aws_kms_alias" "app" {
   name          = "alias/${local.name_prefix}"
   target_key_id = aws_kms_key.app.key_id
