@@ -29,3 +29,7 @@ output "ingestion_state_machine_arn" {
 output "ingestion_queue_url" {
   value = aws_sqs_queue.ingestion.url
 }
+
+output "db_migration_lambda_name" {
+  value = aws_lambda_function.db_migration_runner.function_name
+}

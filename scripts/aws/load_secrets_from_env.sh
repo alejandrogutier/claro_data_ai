@@ -20,7 +20,7 @@ if ! command -v jq >/dev/null 2>&1; then
   exit 1
 fi
 
-PROVIDER_SECRET_NAME="${PROVIDER_SECRET_NAME:-claro-data-prod/provider-api-keys}"
+PROVIDER_SECRET_NAME="${PROVIDER_KEYS_SECRET_NAME:-${PROVIDER_SECRET_NAME:-claro-data-prod/provider-api-keys}}"
 APP_CONFIG_SECRET_NAME="${APP_CONFIG_SECRET_NAME:-claro-data-prod/app-config}"
 AWS_CREDENTIALS_SECRET_NAME="${AWS_CREDENTIALS_SECRET_NAME:-claro-data-prod/aws-credentials}"
 
@@ -85,6 +85,17 @@ upsert_secret() {
       --secret-string "$payload" >/dev/null
     echo "created secret: $name"
   fi
+
+  aws secretsmanager tag-resource \
+    --region "$AWS_REGION" \
+    --secret-id "$name" \
+    --tags \
+      Key=claro,Value=true \
+      Key=app,Value="${APP_TAG:-claro-data}" \
+      Key=env,Value="${ENV_TAG:-prod}" \
+      Key=owner,Value="${OWNER_TAG:-claro-data-team}" \
+      Key=cost-center,Value="${COST_CENTER_TAG:-marketing-intelligence}" \
+      Key=managed-by,Value=terraform >/dev/null
 }
 
 echo "Loading secrets into Secrets Manager (region: $AWS_REGION)"

@@ -13,12 +13,14 @@
     "prisma:db:push": "prisma db push"
   },
   "dependencies": {
-    "aws-sdk": "^2.1692.0"
+    "aws-sdk": "^2.1692.0",
+    "pg": "^8.16.3"
   },
   "devDependencies": {
     "@prisma/client": "^6.16.2",
     "@types/aws-lambda": "^8.10.145",
     "@types/node": "^22.13.10",
+    "@types/pg": "^8.16.0",
     "prisma": "^6.16.2",
     "typescript": "^5.8.2"
   }

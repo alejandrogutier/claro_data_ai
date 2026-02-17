@@ -243,6 +243,33 @@ resource "aws_iam_role_policy_attachment" "lambda_ingestion_sqs" {
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaSQSQueueExecutionRole"
 }
 
+resource "aws_iam_role" "lambda_migrations" {
+  name = "${local.name_prefix}-lambda-migrations-role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Action = "sts:AssumeRole"
+        Effect = "Allow"
+        Principal = {
+          Service = "lambda.amazonaws.com"
+        }
+      }
+    ]
+  })
+}
+
+resource "aws_iam_role_policy_attachment" "lambda_migrations_basic" {
+  role       = aws_iam_role.lambda_migrations.name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+}
+
+resource "aws_iam_role_policy_attachment" "lambda_migrations_vpc_access" {
+  role       = aws_iam_role.lambda_migrations.name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole"
+}
+
 resource "aws_lambda_function" "api" {
   function_name = "${local.name_prefix}-api"
   role          = aws_iam_role.lambda_api.arn
@@ -295,6 +322,36 @@ resource "aws_lambda_function" "ingestion_worker" {
       AWS_CREDENTIALS_SECRET_NAME = data.aws_secretsmanager_secret.aws_credentials.name
       RAW_BUCKET_NAME             = aws_s3_bucket.raw.bucket
       INGESTION_DEFAULT_TERMS     = var.ingestion_default_terms
+    }
+  }
+}
+
+resource "aws_lambda_function" "db_migration_runner" {
+  function_name = "${local.name_prefix}-db-migration-runner"
+  role          = aws_iam_role.lambda_migrations.arn
+  runtime       = "nodejs22.x"
+  handler       = "migrations/runner.main"
+
+  filename         = var.lambda_package_path
+  source_code_hash = filebase64sha256(var.lambda_package_path)
+
+  timeout     = 300
+  memory_size = 512
+
+  vpc_config {
+    subnet_ids         = var.private_subnet_ids
+    security_group_ids = [aws_security_group.aurora.id]
+  }
+
+  environment {
+    variables = {
+      APP_ENV      = var.environment
+      DB_HOST      = aws_rds_cluster.aurora.endpoint
+      DB_PORT      = "5432"
+      DB_NAME      = var.db_name
+      DB_USER      = var.db_master_username
+      DB_PASSWORD  = var.db_master_password
+      MIGRATION_ID = "20260217022500_init"
     }
   }
 }
