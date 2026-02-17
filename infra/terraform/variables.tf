@@ -95,3 +95,9 @@ variable "aws_credentials_secret_name" {
   description = "Nombre del secreto con credenciales AWS legado"
   default     = "claro-data-prod/aws-credentials"
 }
+
+variable "ingestion_default_terms" {
+  type        = string
+  description = "Terminos por defecto para corridas programadas, separados por coma"
+  default     = ""
+}

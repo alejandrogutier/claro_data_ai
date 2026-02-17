@@ -10,15 +10,15 @@ resource "aws_kms_alias" "app" {
 }
 
 resource "aws_s3_bucket" "frontend" {
-  bucket = "${local.name_prefix}-frontend"
+  bucket = "${local.name_prefix}-${data.aws_caller_identity.current.account_id}-frontend"
 }
 
 resource "aws_s3_bucket" "raw" {
-  bucket = "${local.name_prefix}-raw"
+  bucket = "${local.name_prefix}-${data.aws_caller_identity.current.account_id}-raw"
 }
 
 resource "aws_s3_bucket" "exports" {
-  bucket = "${local.name_prefix}-exports"
+  bucket = "${local.name_prefix}-${data.aws_caller_identity.current.account_id}-exports"
 }
 
 resource "aws_s3_bucket_versioning" "raw" {
@@ -216,6 +216,33 @@ resource "aws_iam_role_policy_attachment" "lambda_basic" {
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
 }
 
+resource "aws_iam_role" "lambda_ingestion" {
+  name = "${local.name_prefix}-lambda-ingestion-role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Action = "sts:AssumeRole"
+        Effect = "Allow"
+        Principal = {
+          Service = "lambda.amazonaws.com"
+        }
+      }
+    ]
+  })
+}
+
+resource "aws_iam_role_policy_attachment" "lambda_ingestion_basic" {
+  role       = aws_iam_role.lambda_ingestion.name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+}
+
+resource "aws_iam_role_policy_attachment" "lambda_ingestion_sqs" {
+  role       = aws_iam_role.lambda_ingestion.name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaSQSQueueExecutionRole"
+}
+
 resource "aws_lambda_function" "api" {
   function_name = "${local.name_prefix}-api"
   role          = aws_iam_role.lambda_api.arn
@@ -238,6 +265,36 @@ resource "aws_lambda_function" "api" {
       PROVIDER_KEYS_SECRET_NAME   = data.aws_secretsmanager_secret.provider_keys.name
       APP_CONFIG_SECRET_NAME      = data.aws_secretsmanager_secret.app_config.name
       AWS_CREDENTIALS_SECRET_NAME = data.aws_secretsmanager_secret.aws_credentials.name
+      INGESTION_STATE_MACHINE_ARN = aws_sfn_state_machine.ingestion.arn
+      RAW_BUCKET_NAME             = aws_s3_bucket.raw.bucket
+      INGESTION_DEFAULT_TERMS     = var.ingestion_default_terms
+    }
+  }
+}
+
+resource "aws_lambda_function" "ingestion_worker" {
+  function_name = "${local.name_prefix}-ingestion-worker"
+  role          = aws_iam_role.lambda_ingestion.arn
+  runtime       = "nodejs22.x"
+  handler       = "ingestion/worker.main"
+
+  filename         = var.lambda_package_path
+  source_code_hash = filebase64sha256(var.lambda_package_path)
+
+  timeout     = 120
+  memory_size = 1024
+
+  environment {
+    variables = {
+      APP_ENV                     = var.environment
+      PROVIDER_KEYS_SECRET_ARN    = data.aws_secretsmanager_secret.provider_keys.arn
+      APP_CONFIG_SECRET_ARN       = data.aws_secretsmanager_secret.app_config.arn
+      AWS_CREDENTIALS_SECRET_ARN  = data.aws_secretsmanager_secret.aws_credentials.arn
+      PROVIDER_KEYS_SECRET_NAME   = data.aws_secretsmanager_secret.provider_keys.name
+      APP_CONFIG_SECRET_NAME      = data.aws_secretsmanager_secret.app_config.name
+      AWS_CREDENTIALS_SECRET_NAME = data.aws_secretsmanager_secret.aws_credentials.name
+      RAW_BUCKET_NAME             = aws_s3_bucket.raw.bucket
+      INGESTION_DEFAULT_TERMS     = var.ingestion_default_terms
     }
   }
 }
@@ -329,6 +386,12 @@ resource "aws_sqs_queue" "ingestion" {
   })
 }
 
+resource "aws_lambda_event_source_mapping" "ingestion_queue_to_worker" {
+  event_source_arn = aws_sqs_queue.ingestion.arn
+  function_name    = aws_lambda_function.ingestion_worker.arn
+  batch_size       = 1
+}
+
 resource "aws_iam_role" "step_functions" {
   name = "${local.name_prefix}-sfn-role"
 
@@ -359,6 +422,15 @@ resource "aws_iam_role_policy" "step_functions" {
           "sqs:SendMessage"
         ]
         Resource = [aws_sqs_queue.ingestion.arn]
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "kms:GenerateDataKey",
+          "kms:Decrypt",
+          "kms:DescribeKey"
+        ]
+        Resource = [aws_kms_key.app.arn]
       }
     ]
   })
@@ -369,17 +441,15 @@ resource "aws_sfn_state_machine" "ingestion" {
   role_arn = aws_iam_role.step_functions.arn
 
   definition = jsonencode({
-    Comment = "Ingestion orchestration skeleton"
+    Comment = "Ingestion orchestration"
     StartAt = "DispatchToQueue"
     States = {
       DispatchToQueue = {
         Type     = "Task"
         Resource = "arn:aws:states:::sqs:sendMessage"
         Parameters = {
-          QueueUrl = aws_sqs_queue.ingestion.url
-          MessageBody = {
-            triggerType = "scheduled"
-          }
+          QueueUrl        = aws_sqs_queue.ingestion.url
+          "MessageBody.$" = "States.JsonToString($)"
         }
         End = true
       }
@@ -397,6 +467,14 @@ resource "aws_cloudwatch_event_target" "ingestion_schedule" {
   target_id = "start-ingestion-state-machine"
   arn       = aws_sfn_state_machine.ingestion.arn
   role_arn  = aws_iam_role.events_to_sfn.arn
+  input = jsonencode({
+    triggerType        = "scheduled"
+    runId              = "scheduled"
+    requestedAt        = "eventbridge"
+    terms              = []
+    language           = "es"
+    maxArticlesPerTerm = 100
+  })
 }
 
 resource "aws_iam_role" "events_to_sfn" {

@@ -21,3 +21,11 @@ output "aurora_endpoint" {
 output "bedrock_model_id" {
   value = "anthropic.claude-haiku-4-5-20251001-v1:0"
 }
+
+output "ingestion_state_machine_arn" {
+  value = aws_sfn_state_machine.ingestion.arn
+}
+
+output "ingestion_queue_url" {
+  value = aws_sqs_queue.ingestion.url
+}

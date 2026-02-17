@@ -10,3 +10,5 @@ build
 infra/terraform/tfplan
 infra/terraform/tfplan*
 .DS_Store
+
+infra/terraform/state-backups/

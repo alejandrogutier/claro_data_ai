@@ -27,3 +27,62 @@ resource "aws_iam_role_policy" "lambda_secrets_access" {
     ]
   })
 }
+
+resource "aws_iam_role_policy" "lambda_api_ingestion_start" {
+  name = "${local.name_prefix}-lambda-api-ingestion-start"
+  role = aws_iam_role.lambda_api.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "states:StartExecution"
+        ]
+        Resource = [aws_sfn_state_machine.ingestion.arn]
+      }
+    ]
+  })
+}
+
+resource "aws_iam_role_policy" "lambda_ingestion_access" {
+  name = "${local.name_prefix}-lambda-ingestion-access"
+  role = aws_iam_role.lambda_ingestion.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "secretsmanager:GetSecretValue",
+          "secretsmanager:DescribeSecret"
+        ]
+        Resource = [
+          data.aws_secretsmanager_secret.provider_keys.arn,
+          data.aws_secretsmanager_secret.app_config.arn,
+          data.aws_secretsmanager_secret.aws_credentials.arn
+        ]
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "s3:PutObject",
+          "s3:PutObjectTagging"
+        ]
+        Resource = ["${aws_s3_bucket.raw.arn}/*"]
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "kms:Decrypt",
+          "kms:Encrypt",
+          "kms:GenerateDataKey",
+          "kms:DescribeKey"
+        ]
+        Resource = [aws_kms_key.app.arn]
+      }
+    ]
+  })
+}
