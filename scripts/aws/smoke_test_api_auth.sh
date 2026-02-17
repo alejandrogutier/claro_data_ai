@@ -27,7 +27,7 @@ echo "[2] Private route without token (expect 401 from gateway)"
 curl -s -o /tmp/meta-no-token.json -w "%{http_code}\n" "$API_BASE/v1/meta"
 cat /tmp/meta-no-token.json
 
-echo "[3] Viewer on viewer route GET /v1/meta (expect 501 until implementation)"
+echo "[3] Viewer on viewer route GET /v1/meta (expect 200)"
 curl -s -o /tmp/meta-viewer.json -w "%{http_code}\n" -H "Authorization: Bearer $VIEWER_TOKEN" "$API_BASE/v1/meta"
 cat /tmp/meta-viewer.json
 
@@ -35,6 +35,6 @@ echo "[4] Viewer on admin route POST /v1/terms (expect 403)"
 curl -s -o /tmp/terms-viewer.json -w "%{http_code}\n" -X POST -H "Authorization: Bearer $VIEWER_TOKEN" -H "Content-Type: application/json" -d '{"name":"test"}' "$API_BASE/v1/terms"
 cat /tmp/terms-viewer.json
 
-echo "[5] Admin on admin route POST /v1/terms (expect 501 until implementation)"
-curl -s -o /tmp/terms-admin.json -w "%{http_code}\n" -X POST -H "Authorization: Bearer $ADMIN_TOKEN" -H "Content-Type: application/json" -d '{"name":"test"}' "$API_BASE/v1/terms"
+echo "[5] Admin on admin route POST /v1/terms (expect 201 or 409)"
+curl -s -o /tmp/terms-admin.json -w "%{http_code}\n" -X POST -H "Authorization: Bearer $ADMIN_TOKEN" -H "Content-Type: application/json" -d '{"name":"test","language":"es","max_articles_per_run":50}' "$API_BASE/v1/terms"
 cat /tmp/terms-admin.json

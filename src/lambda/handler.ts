@@ -77,13 +77,13 @@ export const main = async (event: APIGatewayProxyEventV2) => {
 
   if (key === "GET /v1/health") return handleHealth();
 
-  if (key === "GET /v1/terms") return listTerms();
+  if (key === "GET /v1/terms") return listTerms(event);
   if (key === "POST /v1/terms") return createTerm(event);
   if (key.match(/^PATCH \/v1\/terms\/[^/]+$/)) return updateTerm(event);
 
   if (key === "POST /v1/ingestion/runs") return createIngestionRun(event);
 
-  if (key === "GET /v1/content") return listContent();
+  if (key === "GET /v1/content") return listContent(event);
   if (key.match(/^PATCH \/v1\/content\/[^/]+\/state$/)) return updateContentState(event);
   if (key === "POST /v1/content/bulk/state") return bulkUpdateContentState(event);
   if (key.match(/^PATCH \/v1\/content\/[^/]+\/classification$/)) return updateClassification(event);

@@ -4,7 +4,7 @@ info:
   version: 1.0.0
   description: API base v1 para ingestion, clasificacion, analisis y gestion de contenido.
 servers:
-  - url: https://{api_id}.execute-api.us-west-2.amazonaws.com/prod
+  - url: https://{api_id}.execute-api.us-east-1.amazonaws.com/prod
     variables:
       api_id:
         default: replace-me
@@ -52,6 +52,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/TermListResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/ValidationError'
     post:
       tags: [Terms]
       summary: Crear termino monitoreado
@@ -68,6 +74,14 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Term'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationError'
   /v1/terms/{id}:
     patch:
       tags: [Terms]
@@ -87,6 +101,16 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Term'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationError'
   /v1/ingestion/runs:
     post:
       tags: [Ingestion]
@@ -104,6 +128,14 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/IngestionRunAccepted'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationError'
   /v1/content:
     get:
       tags: [Content]
@@ -157,6 +189,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ContentListResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/ValidationError'
   /v1/content/{id}/state:
     patch:
       tags: [Content]
@@ -271,12 +309,47 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/MetaResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
 components:
   securitySchemes:
     bearerAuth:
       type: http
       scheme: bearer
       bearerFormat: JWT
+  responses:
+    Unauthorized:
+      description: JWT invalido o ausente
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    Forbidden:
+      description: Rol insuficiente para ejecutar la accion
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    ValidationError:
+      description: Error de validacion de datos de entrada
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    Conflict:
+      description: Conflicto de datos (duplicado/estado invalido)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    NotFound:
+      description: Recurso no encontrado
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
   parameters:
     Id:
       name: id
@@ -300,6 +373,14 @@ components:
         maximum: 200
         default: 50
   schemas:
+    ErrorResponse:
+      type: object
+      required: [error, message]
+      properties:
+        error:
+          type: string
+        message:
+          type: string
     UserRole:
       type: string
       enum: [Admin, Analyst, Viewer]
@@ -358,7 +439,7 @@ components:
         max_articles_per_run:
           type: integer
           minimum: 1
-          maximum: 100
+          maximum: 500
           default: 100
     UpdateTermRequest:
       type: object
@@ -372,7 +453,7 @@ components:
         max_articles_per_run:
           type: integer
           minimum: 1
-          maximum: 100
+          maximum: 500
     ContentItem:
       type: object
       required: [id, source_type, state, title, canonical_url, created_at]
@@ -389,6 +470,8 @@ components:
           type: string
         source_name:
           type: string
+        source_id:
+          type: string
         state:
           $ref: '#/components/schemas/ContentState'
         title:
@@ -400,6 +483,13 @@ components:
         canonical_url:
           type: string
           format: uri
+        image_url:
+          type: string
+          format: uri
+        language:
+          type: string
+        category:
+          type: string
         published_at:
           type: string
           format: date-time
@@ -413,6 +503,12 @@ components:
         updated_at:
           type: string
           format: date-time
+        raw_payload_s3_key:
+          type: string
+        categoria:
+          type: string
+        sentimiento:
+          type: string
     Classification:
       type: object
       required: [id, content_item_id, categoria, sentimiento, prompt_version, model_id, created_at]
@@ -473,6 +569,13 @@ components:
     CreateIngestionRunRequest:
       type: object
       properties:
+        run_id:
+          type: string
+          format: uuid
+        terms:
+          type: array
+          items:
+            type: string
         term_ids:
           type: array
           items:
@@ -484,11 +587,11 @@ components:
         max_articles_per_term:
           type: integer
           minimum: 1
-          maximum: 100
+          maximum: 500
           default: 100
     IngestionRunAccepted:
       type: object
-      required: [run_id, status]
+      required: [run_id, status, input]
       properties:
         run_id:
           type: string
@@ -496,6 +599,42 @@ components:
         status:
           type: string
           const: accepted
+        execution_arn:
+          type: string
+          nullable: true
+        start_date:
+          type: string
+          format: date-time
+          nullable: true
+        skip_reason:
+          type: string
+          nullable: true
+        input:
+          type: object
+          properties:
+            triggerType:
+              type: string
+            runId:
+              type: string
+              format: uuid
+            requestId:
+              type: string
+            requestedAt:
+              type: string
+              format: date-time
+            termIds:
+              type: array
+              items:
+                type: string
+                format: uuid
+            terms:
+              type: array
+              items:
+                type: string
+            language:
+              type: string
+            maxArticlesPerTerm:
+              type: integer
     UpdateContentStateRequest:
       type: object
       required: [target_state]
@@ -631,29 +770,27 @@ components:
         providers:
           type: array
           items:
-            type: object
-            properties:
-              value:
-                type: string
-              count:
-                type: integer
+            $ref: '#/components/schemas/MetaCountItem'
         categories:
           type: array
           items:
-            type: object
-            properties:
-              value:
-                type: string
-              count:
-                type: integer
+            $ref: '#/components/schemas/MetaCountItem'
         sentimientos:
           type: array
           items:
-            type: string
+            $ref: '#/components/schemas/MetaCountItem'
         states:
           type: array
           items:
-            $ref: '#/components/schemas/ContentState'
+            $ref: '#/components/schemas/MetaCountItem'
+    MetaCountItem:
+      type: object
+      required: [value, count]
+      properties:
+        value:
+          type: string
+        count:
+          type: integer
     ContentListResponse:
       type: object
       required: [items, page_info]

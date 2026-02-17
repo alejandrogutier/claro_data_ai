@@ -1,15 +1,16 @@
-import { readFileSync } from "fs";
+import { readFileSync, readdirSync } from "fs";
 import { join } from "path";
 import { randomUUID, createHash } from "crypto";
 import { Client } from "pg";
 
 type MigrationResult = {
   status: "applied" | "already_applied";
-  migration_name: string;
+  migration_name: string | null;
+  applied_migrations: string[];
   finished_at: string;
 };
 
-const MIGRATION_NAME = "20260217022500_init";
+const MIGRATIONS_DIR = join(__dirname, "../prisma/migrations");
 
 const requiredEnv = (name: string): string => {
   const value = process.env[name];
@@ -17,8 +18,14 @@ const requiredEnv = (name: string): string => {
   return value;
 };
 
-const readMigrationSql = (): string => {
-  const filePath = join(__dirname, "../prisma/migrations", MIGRATION_NAME, "migration.sql");
+const listLocalMigrations = (): string[] =>
+  readdirSync(MIGRATIONS_DIR, { withFileTypes: true })
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => entry.name)
+    .sort((a, b) => a.localeCompare(b));
+
+const readMigrationSql = (migrationName: string): string => {
+  const filePath = join(MIGRATIONS_DIR, migrationName, "migration.sql");
   return readFileSync(filePath, "utf8");
 };
 
@@ -37,17 +44,15 @@ const ensurePrismaMigrationsTable = async (client: Client) => {
   `);
 };
 
-const hasMigration = async (client: Client, migrationName: string): Promise<boolean> => {
-  const result = await client.query(
-    `SELECT 1
+const listAppliedMigrationNames = async (client: Client): Promise<Set<string>> => {
+  const result = await client.query<{ migration_name: string }>(
+    `SELECT migration_name
      FROM "_prisma_migrations"
-     WHERE migration_name = $1
-       AND finished_at IS NOT NULL
-       AND rolled_back_at IS NULL
-     LIMIT 1`,
-    [migrationName]
+     WHERE finished_at IS NOT NULL
+       AND rolled_back_at IS NULL`
   );
-  return (result.rowCount ?? 0) > 0;
+
+  return new Set(result.rows.map((row) => row.migration_name));
 };
 
 const recordMigration = async (client: Client, migrationName: string, checksum: string) => {
@@ -57,6 +62,18 @@ const recordMigration = async (client: Client, migrationName: string, checksum: 
      VALUES ($1, $2, now(), $3, '', NULL, now(), 1)`,
     [randomUUID(), checksum, migrationName]
   );
+};
+
+const applyMigration = async (client: Client, migrationName: string, sql: string, checksum: string) => {
+  await client.query("BEGIN");
+  try {
+    await client.query(sql);
+    await recordMigration(client, migrationName, checksum);
+    await client.query("COMMIT");
+  } catch (error) {
+    await client.query("ROLLBACK");
+    throw error;
+  }
 };
 
 const getClient = (): Client =>
@@ -74,38 +91,36 @@ const getClient = (): Client =>
 
 export const main = async (): Promise<MigrationResult> => {
   const client = getClient();
-  const migrationSql = readMigrationSql();
-  const checksum = createHash("sha256").update(migrationSql).digest("hex");
 
   await client.connect();
   try {
     await ensurePrismaMigrationsTable(client);
-    const alreadyApplied = await hasMigration(client, MIGRATION_NAME);
-    if (alreadyApplied) {
+
+    const localMigrations = listLocalMigrations();
+    const appliedMigrationNames = await listAppliedMigrationNames(client);
+    const pending = localMigrations.filter((name) => !appliedMigrationNames.has(name));
+
+    if (pending.length === 0) {
       return {
         status: "already_applied",
-        migration_name: MIGRATION_NAME,
+        migration_name: localMigrations[localMigrations.length - 1] ?? null,
+        applied_migrations: [],
         finished_at: new Date().toISOString()
       };
     }
 
-    await client.query("BEGIN");
-    await client.query(migrationSql);
-    await recordMigration(client, MIGRATION_NAME, checksum);
-    await client.query("COMMIT");
+    for (const migrationName of pending) {
+      const sql = readMigrationSql(migrationName);
+      const checksum = createHash("sha256").update(sql).digest("hex");
+      await applyMigration(client, migrationName, sql, checksum);
+    }
 
     return {
       status: "applied",
-      migration_name: MIGRATION_NAME,
+      migration_name: pending[pending.length - 1] ?? null,
+      applied_migrations: pending,
       finished_at: new Date().toISOString()
     };
-  } catch (error) {
-    try {
-      await client.query("ROLLBACK");
-    } catch {
-      // noop: original error is more relevant
-    }
-    throw error;
   } finally {
     await client.end();
   }

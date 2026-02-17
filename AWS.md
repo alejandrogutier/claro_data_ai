@@ -52,7 +52,7 @@ flowchart TD
 - DLQ para reprocesos e incidentes.
 
 ### Datos
-- Aurora PostgreSQL Serverless v2 (single region `us-west-2`).
+- Aurora PostgreSQL Serverless v2 (single region `us-east-1`).
 - Prisma ORM para modelo y migraciones.
 - PostgreSQL FTS para busqueda textual avanzada.
 

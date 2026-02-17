@@ -1,8 +1,6 @@
 # Backlog
 
 ## Now
-- CLARO-006 | doing | P1 | Adaptadores de proveedores de noticias de APIS.md | adaptadores base implementados con retries/backoff y fail-soft; falta hardening por proveedor
-- CLARO-007 | doing | P1 | Dedupe por URL canonica + persistencia unificada | dedupe + upsert por `canonicalUrl` implementados; falta reforzar idempotencia cruzada para escenarios de replay extremo
 - CLARO-017 | doing | P2 | OpenAPI 3.1 + pruebas de contrato | especificacion base creada en `openapi/v1.yaml`; faltan pruebas de contrato
 
 ## Next
@@ -28,3 +26,5 @@
 - CLARO-003 | done | P0 | Cognito + RBAC en API Gateway | JWT authorizer + rutas privadas + enforcement de rol en Lambda validados con smoke test
 - CLARO-004 | done | P0 | Aurora PostgreSQL + Prisma + esquema inicial | migracion `20260217022500_init` aplicada en Aurora via `db-migration-runner` y secreto `claro-data-prod/database` creado
 - CLARO-005 | done | P0 | Pipeline ingesta programada cada 15 min | corrida manual y scheduler operativos con persistencia SQL en `IngestionRun`, `IngestionRunItem` y `ContentItem`
+- CLARO-006 | done | P1 | Adaptadores de proveedores de noticias de APIS.md | taxonomia de errores (`rate_limit|auth|timeout|upstream_5xx|schema|unknown`), truncado seguro de campos y metricas unificadas por proveedor
+- CLARO-007 | done | P1 | Dedupe por URL canonica + persistencia unificada | tabla `IngestionRunContentLink` + replay gate por `run_id` + verificacion de no-duplicado en replay sobre corrida `completed`

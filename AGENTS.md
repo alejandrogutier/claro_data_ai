@@ -1,7 +1,7 @@
 # AGENTS
 
 ## Objetivo
-Definir el sistema de agentes operativos de `claro_data` para ingesta, clasificación, análisis y gobierno del ciclo de vida de contenido, sobre una arquitectura AWS serverless en `us-west-2`.
+Definir el sistema de agentes operativos de `claro_data` para ingesta, clasificación, análisis y gobierno del ciclo de vida de contenido, sobre una arquitectura AWS serverless en `us-east-1`.
 
 ## Principios Operativos
 - Toda ejecución debe ser trazable (request_id, run_id, actor, timestamp).

@@ -12,31 +12,58 @@ type IngestionDispatchMessage = {
   runId?: string;
   requestId?: string;
   requestedAt?: string;
+  termIds?: string[];
   terms?: string[];
   language?: string;
   maxArticlesPerTerm?: number;
 };
 
 const s3 = new AWS.S3({ region: env.awsRegion });
+const RUN_DUPLICATE_WINDOW_MS = 10 * 60 * 1000;
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
-const isUuid = (value: string): boolean =>
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+const isUuid = (value: string): boolean => UUID_REGEX.test(value);
+
+const mergeUnique = (items: string[]): string[] => {
+  const seen = new Set<string>();
+  const merged: string[] = [];
+
+  for (const item of items) {
+    const normalized = item.trim();
+    if (!normalized) continue;
+    const key = normalized.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    merged.push(normalized);
+  }
+
+  return merged;
+};
 
 const parseTerms = (terms: unknown): string[] => {
   if (!Array.isArray(terms)) return [];
-  return terms
-    .map((item) => (typeof item === "string" ? item.trim() : ""))
-    .filter((item) => item.length > 0)
-    .slice(0, 50);
+  return mergeUnique(
+    terms
+      .map((item) => (typeof item === "string" ? item.trim() : ""))
+      .filter((item) => item.length > 0)
+      .slice(0, 50)
+  );
+};
+
+const parseTermIds = (termIds: unknown): string[] => {
+  if (!Array.isArray(termIds)) return [];
+
+  return mergeUnique(
+    termIds
+      .map((item) => (typeof item === "string" ? item.trim() : ""))
+      .filter((value) => value.length > 0 && isUuid(value))
+      .slice(0, 50)
+  );
 };
 
 const parseDefaultTerms = (raw?: string): string[] => {
   if (!raw) return [];
-  return raw
-    .split(",")
-    .map((item) => item.trim())
-    .filter((item) => item.length > 0)
-    .slice(0, 50);
+  return mergeUnique(raw.split(",").map((item) => item.trim()));
 };
 
 const parseLanguage = (value: unknown): string => {
@@ -98,13 +125,27 @@ const processRecord = async (
   const triggerType = message.triggerType ?? "scheduled";
   const language = parseLanguage(message.language);
   const maxArticlesPerTerm = parseLimit(message.maxArticlesPerTerm);
+  const requestedTermIds = parseTermIds(message.termIds);
 
-  const requestedTerms = parseTerms(message.terms);
-  const defaultTermsFromConfig = parseDefaultTerms(appConfig.INGESTION_DEFAULT_TERMS ?? env.ingestionDefaultTerms);
-  const terms = requestedTerms.length > 0 ? requestedTerms : defaultTermsFromConfig;
+  let terms = parseTerms(message.terms);
+
+  if (sqlStore && requestedTermIds.length > 0) {
+    const resolvedFromIds = await sqlStore.resolveTermIdsToNames(requestedTermIds);
+    terms = mergeUnique([...terms, ...resolvedFromIds]);
+  }
+
+  if (terms.length === 0 && sqlStore) {
+    const activeTerms = await sqlStore.listActiveTermNames(50);
+    terms = mergeUnique([...terms, ...activeTerms]);
+  }
 
   if (terms.length === 0) {
-    throw new Error("No terms provided in message and no INGESTION_DEFAULT_TERMS configured");
+    const defaultTermsFromConfig = parseDefaultTerms(appConfig.INGESTION_DEFAULT_TERMS ?? env.ingestionDefaultTerms);
+    terms = mergeUnique([...terms, ...defaultTermsFromConfig]);
+  }
+
+  if (terms.length === 0) {
+    throw new Error("No terms provided in message and no active/default terms configured");
   }
 
   const startedAt = new Date();
@@ -116,8 +157,33 @@ const processRecord = async (
   let itemsRaw = 0;
   let itemsDeduped = 0;
   let itemsPersisted = 0;
+  let runStarted = false;
 
   if (sqlStore) {
+    const snapshot = await sqlStore.getRunSnapshot(runId);
+
+    if (snapshot?.status === "completed") {
+      return {
+        run_id: runId,
+        trigger_type: triggerType,
+        status: "skipped",
+        skip_reason: "run_already_completed"
+      };
+    }
+
+    if (
+      snapshot?.status === "running" &&
+      snapshot.startedAt &&
+      Date.now() - snapshot.startedAt.getTime() <= RUN_DUPLICATE_WINDOW_MS
+    ) {
+      return {
+        run_id: runId,
+        trigger_type: triggerType,
+        status: "skipped",
+        skip_reason: "run_already_running"
+      };
+    }
+
     await sqlStore.startRun({
       runId,
       triggerType,
@@ -126,6 +192,8 @@ const processRecord = async (
       requestId: message.requestId,
       startedAt
     });
+
+    runStarted = true;
   }
 
   try {
@@ -150,6 +218,7 @@ const processRecord = async (
         requestId: message.requestId ?? null,
         requestedAt: message.requestedAt ?? null,
         term,
+        termIds: requestedTermIds,
         language,
         maxArticlesPerTerm,
         providerResults,
@@ -167,7 +236,19 @@ const processRecord = async (
         rawPayloadS3Key: rawS3Key
       }));
 
-      const persistedCount = sqlStore ? await sqlStore.upsertContentItems(persistableItems) : deduped.length;
+      let insertedCanonicalUrls = new Set<string>(deduped.map((item) => item.canonicalUrl));
+      if (sqlStore) {
+        const refs = await sqlStore.upsertContentItems(persistableItems);
+        insertedCanonicalUrls = await sqlStore.upsertRunContentLinks(runId, term, refs);
+      }
+
+      const persistedByProvider = new Map<string, number>();
+      for (const article of deduped) {
+        if (!insertedCanonicalUrls.has(article.canonicalUrl)) continue;
+        persistedByProvider.set(article.provider, (persistedByProvider.get(article.provider) ?? 0) + 1);
+      }
+
+      const persistedCount = insertedCanonicalUrls.size;
 
       for (const result of providerResults) {
         runItems.push({
@@ -175,9 +256,11 @@ const processRecord = async (
           provider: result.provider,
           status: result.error ? "failed" : "completed",
           fetchedCount: result.rawCount,
-          persistedCount: result.items.length,
+          persistedCount: persistedByProvider.get(result.provider) ?? 0,
           latencyMs: result.durationMs,
-          errorMessage: result.error ? `[term:${term}] ${result.error}` : undefined
+          errorMessage: result.error
+            ? `[${result.errorType ?? "unknown"}][term:${term}] ${result.error}`
+            : undefined
         });
       }
 
@@ -199,7 +282,7 @@ const processRecord = async (
       });
     }
 
-    if (sqlStore) {
+    if (sqlStore && runStarted) {
       await sqlStore.replaceRunItems(runItems);
       await sqlStore.finishRun({
         runId,
@@ -220,6 +303,7 @@ const processRecord = async (
     return {
       run_id: runId,
       trigger_type: triggerType,
+      status: "processed",
       terms_count: terms.length,
       providers_total: providersTotal,
       providers_failed: providersFailed,
@@ -229,7 +313,7 @@ const processRecord = async (
       term_summaries: termSummaries
     };
   } catch (error) {
-    if (sqlStore) {
+    if (sqlStore && runStarted) {
       try {
         if (runItems.length > 0) {
           await sqlStore.replaceRunItems(runItems);

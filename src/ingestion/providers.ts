@@ -9,6 +9,8 @@ export type ProviderName =
   | "guardian"
   | "nyt";
 
+export type ProviderErrorType = "rate_limit" | "auth" | "timeout" | "upstream_5xx" | "schema" | "unknown";
+
 export type NormalizedArticle = {
   sourceType: "news";
   provider: ProviderName;
@@ -41,6 +43,7 @@ export type ProviderFetchResult = {
   requestUrl?: string;
   rawCount: number;
   durationMs: number;
+  errorType?: ProviderErrorType;
   error?: string;
 };
 
@@ -82,6 +85,14 @@ const asRecord = (value: unknown): Record<string, unknown> | null => {
 const asRecordArray = (value: unknown): Record<string, unknown>[] =>
   Array.isArray(value) ? value.map((item) => asRecord(item)).filter((item): item is Record<string, unknown> => item !== null) : [];
 
+const MAX_TITLE = 500;
+const MAX_SUMMARY = 2000;
+const MAX_CONTENT = 16000;
+const MAX_SOURCE = 200;
+const MAX_CATEGORY = 120;
+const MAX_AUTHOR = 200;
+const MAX_URL = 2048;
+
 const toStringOrUndefined = (value: unknown): string | undefined => {
   if (typeof value === "string") {
     const trimmed = value.trim();
@@ -89,6 +100,23 @@ const toStringOrUndefined = (value: unknown): string | undefined => {
   }
   if (typeof value === "number" || typeof value === "boolean") return String(value);
   return undefined;
+};
+
+const trimTo = (value: string | undefined, max: number): string | undefined => {
+  if (!value) return undefined;
+  const normalized = value.trim();
+  if (!normalized) return undefined;
+  return normalized.slice(0, max);
+};
+
+const classifyProviderError = (error: unknown): ProviderErrorType => {
+  const message = (error as Error).message ?? "";
+  if (message.includes("HTTP 429")) return "rate_limit";
+  if (message.includes("HTTP 401") || message.includes("HTTP 403")) return "auth";
+  if (/HTTP 5\\d\\d/.test(message)) return "upstream_5xx";
+  if (/AbortError|timed out|timeout/i.test(message)) return "timeout";
+  if (/Unexpected token|invalid json|parse/i.test(message)) return "schema";
+  return "unknown";
 };
 
 const toIsoOrUndefined = (value: unknown): string | undefined => {
@@ -119,6 +147,7 @@ const makeResult = (
   items: opts.items ?? [],
   requestUrl: opts.requestUrl,
   rawCount: opts.rawCount ?? 0,
+  errorType: opts.errorType,
   error: opts.error,
   durationMs: Date.now() - startedAt
 });
@@ -135,24 +164,24 @@ const makeArticle = (
   const canonicalUrl = canonicalizeUrl(rawUrl);
   if (!canonicalUrl) return null;
 
-  const title = payload.title?.trim();
+  const title = trimTo(payload.title, MAX_TITLE);
   if (!title) return null;
 
   return {
     sourceType: "news",
     provider,
     term,
-    canonicalUrl,
+    canonicalUrl: canonicalUrl.slice(0, MAX_URL),
     title,
-    sourceName: payload.sourceName,
-    sourceId: payload.sourceId,
-    author: payload.author,
-    summary: payload.summary,
-    content: payload.content,
-    imageUrl: payload.imageUrl,
+    sourceName: trimTo(payload.sourceName, MAX_SOURCE),
+    sourceId: trimTo(payload.sourceId, MAX_SOURCE),
+    author: trimTo(payload.author, MAX_AUTHOR),
+    summary: trimTo(payload.summary, MAX_SUMMARY),
+    content: trimTo(payload.content, MAX_CONTENT),
+    imageUrl: trimTo(payload.imageUrl, MAX_URL),
     publishedAt: payload.publishedAt,
-    language: payload.language,
-    category: payload.category,
+    language: trimTo(payload.language, 8),
+    category: trimTo(payload.category, MAX_CATEGORY),
     metadata: payload.metadata
   };
 };
@@ -161,7 +190,7 @@ const runNewsApi: ProviderAdapter = async ({ term, language, maxArticlesPerTerm,
   const startedAt = Date.now();
   const apiKey = providerKeys.NEWS_API_KEY;
   if (!apiKey) {
-    return makeResult("newsapi", term, startedAt, { error: "Missing NEWS_API_KEY" });
+    return makeResult("newsapi", term, startedAt, { errorType: "auth", error: "Missing NEWS_API_KEY" });
   }
 
   const requestUrl = buildUrl(readEndpoint("newsapi"), {
@@ -204,6 +233,7 @@ const runNewsApi: ProviderAdapter = async ({ term, language, maxArticlesPerTerm,
   } catch (error) {
     return makeResult("newsapi", term, startedAt, {
       requestUrl,
+      errorType: classifyProviderError(error),
       error: (error as Error).message
     });
   }
@@ -213,7 +243,7 @@ const runGNews: ProviderAdapter = async ({ term, language, maxArticlesPerTerm, p
   const startedAt = Date.now();
   const apiKey = providerKeys.GNEWS_API_KEY;
   if (!apiKey) {
-    return makeResult("gnews", term, startedAt, { error: "Missing GNEWS_API_KEY" });
+    return makeResult("gnews", term, startedAt, { errorType: "auth", error: "Missing GNEWS_API_KEY" });
   }
 
   const requestUrl = buildUrl(readEndpoint("gnews"), {
@@ -252,6 +282,7 @@ const runGNews: ProviderAdapter = async ({ term, language, maxArticlesPerTerm, p
   } catch (error) {
     return makeResult("gnews", term, startedAt, {
       requestUrl,
+      errorType: classifyProviderError(error),
       error: (error as Error).message
     });
   }
@@ -261,7 +292,7 @@ const runNewsData: ProviderAdapter = async ({ term, language, maxArticlesPerTerm
   const startedAt = Date.now();
   const apiKey = providerKeys.NEWSDATA_API_KEY;
   if (!apiKey) {
-    return makeResult("newsdata", term, startedAt, { error: "Missing NEWSDATA_API_KEY" });
+    return makeResult("newsdata", term, startedAt, { errorType: "auth", error: "Missing NEWSDATA_API_KEY" });
   }
 
   const requestUrl = buildUrl(readEndpoint("newsdata"), {
@@ -301,6 +332,7 @@ const runNewsData: ProviderAdapter = async ({ term, language, maxArticlesPerTerm
   } catch (error) {
     return makeResult("newsdata", term, startedAt, {
       requestUrl,
+      errorType: classifyProviderError(error),
       error: (error as Error).message
     });
   }
@@ -310,7 +342,7 @@ const runWorldNews: ProviderAdapter = async ({ term, language, maxArticlesPerTer
   const startedAt = Date.now();
   const apiKey = providerKeys.WORLDNEWS_API_KEY;
   if (!apiKey) {
-    return makeResult("worldnews", term, startedAt, { error: "Missing WORLDNEWS_API_KEY" });
+    return makeResult("worldnews", term, startedAt, { errorType: "auth", error: "Missing WORLDNEWS_API_KEY" });
   }
 
   const requestUrl = buildUrl(readEndpoint("worldnews"), {
@@ -350,6 +382,7 @@ const runWorldNews: ProviderAdapter = async ({ term, language, maxArticlesPerTer
   } catch (error) {
     return makeResult("worldnews", term, startedAt, {
       requestUrl,
+      errorType: classifyProviderError(error),
       error: (error as Error).message
     });
   }
@@ -359,7 +392,7 @@ const runGuardian: ProviderAdapter = async ({ term, maxArticlesPerTerm, provider
   const startedAt = Date.now();
   const apiKey = providerKeys.GUARDIAN_API_KEY;
   if (!apiKey) {
-    return makeResult("guardian", term, startedAt, { error: "Missing GUARDIAN_API_KEY" });
+    return makeResult("guardian", term, startedAt, { errorType: "auth", error: "Missing GUARDIAN_API_KEY" });
   }
 
   const requestUrl = buildUrl(readEndpoint("guardian"), {
@@ -402,6 +435,7 @@ const runGuardian: ProviderAdapter = async ({ term, maxArticlesPerTerm, provider
   } catch (error) {
     return makeResult("guardian", term, startedAt, {
       requestUrl,
+      errorType: classifyProviderError(error),
       error: (error as Error).message
     });
   }
@@ -411,7 +445,7 @@ const runNyt: ProviderAdapter = async ({ term, maxArticlesPerTerm, providerKeys 
   const startedAt = Date.now();
   const apiKey = providerKeys.NYT_API_KEY;
   if (!apiKey) {
-    return makeResult("nyt", term, startedAt, { error: "Missing NYT_API_KEY" });
+    return makeResult("nyt", term, startedAt, { errorType: "auth", error: "Missing NYT_API_KEY" });
   }
 
   const requestUrl = buildUrl(readEndpoint("nyt"), {
@@ -457,6 +491,7 @@ const runNyt: ProviderAdapter = async ({ term, maxArticlesPerTerm, providerKeys 
   } catch (error) {
     return makeResult("nyt", term, startedAt, {
       requestUrl,
+      errorType: classifyProviderError(error),
       error: (error as Error).message
     });
   }

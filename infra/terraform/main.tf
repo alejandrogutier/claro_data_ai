@@ -292,6 +292,9 @@ resource "aws_lambda_function" "api" {
       PROVIDER_KEYS_SECRET_NAME   = data.aws_secretsmanager_secret.provider_keys.name
       APP_CONFIG_SECRET_NAME      = data.aws_secretsmanager_secret.app_config.name
       AWS_CREDENTIALS_SECRET_NAME = data.aws_secretsmanager_secret.aws_credentials.name
+      DB_RESOURCE_ARN             = aws_rds_cluster.aurora.arn
+      DB_SECRET_ARN               = data.aws_secretsmanager_secret.database.arn
+      DB_NAME                     = var.db_name
       INGESTION_STATE_MACHINE_ARN = aws_sfn_state_machine.ingestion.arn
       RAW_BUCKET_NAME             = aws_s3_bucket.raw.bucket
       INGESTION_DEFAULT_TERMS     = var.ingestion_default_terms
