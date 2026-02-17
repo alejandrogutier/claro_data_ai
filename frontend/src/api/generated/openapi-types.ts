@@ -60,6 +60,8 @@ export interface paths {
                     /** @description Cursor opaco para paginacion */
                     cursor?: components["parameters"]["Cursor"];
                     limit?: components["parameters"]["Limit"];
+                    /** @description Filtra terminos por alcance de monitoreo (`claro|competencia`). */
+                    scope?: components["schemas"]["TermScope"];
                 };
                 header?: never;
                 path?: never;
@@ -641,6 +643,621 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/connectors": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Listar configuracion de conectores */
+        get: {
+            parameters: {
+                query?: {
+                    limit?: components["parameters"]["Limit"];
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Lista de conectores */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ConnectorListResponse"];
+                    };
+                };
+                401: components["responses"]["Unauthorized"];
+                403: components["responses"]["Forbidden"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/connectors/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Actualizar configuracion de conector */
+        patch: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: components["parameters"]["Id"];
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["PatchConnectorRequest"];
+                };
+            };
+            responses: {
+                /** @description Conector actualizado */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Connector"];
+                    };
+                };
+                401: components["responses"]["Unauthorized"];
+                403: components["responses"]["Forbidden"];
+                404: components["responses"]["NotFound"];
+                409: components["responses"]["Conflict"];
+                422: components["responses"]["ValidationError"];
+            };
+        };
+        trace?: never;
+    };
+    "/v1/connectors/{id}/sync": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Disparar sincronizacion manual de conector */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: components["parameters"]["Id"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Corrida de sincronizacion aceptada */
+                202: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ConnectorSyncRun"];
+                    };
+                };
+                401: components["responses"]["Unauthorized"];
+                403: components["responses"]["Forbidden"];
+                404: components["responses"]["NotFound"];
+                422: components["responses"]["ValidationError"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/connectors/{id}/runs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Historial de corridas de sincronizacion de un conector */
+        get: {
+            parameters: {
+                query?: {
+                    limit?: number;
+                };
+                header?: never;
+                path: {
+                    id: components["parameters"]["Id"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Lista de corridas de sincronizacion */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ConnectorRunListResponse"];
+                    };
+                };
+                401: components["responses"]["Unauthorized"];
+                403: components["responses"]["Forbidden"];
+                404: components["responses"]["NotFound"];
+                422: components["responses"]["ValidationError"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/config/accounts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Listar cuentas propias monitoreadas */
+        get: {
+            parameters: {
+                query?: {
+                    limit?: number;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Lista de cuentas */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["OwnedAccountListResponse"];
+                    };
+                };
+                401: components["responses"]["Unauthorized"];
+                403: components["responses"]["Forbidden"];
+            };
+        };
+        put?: never;
+        /** Crear cuenta propia */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["CreateOwnedAccountRequest"];
+                };
+            };
+            responses: {
+                /** @description Cuenta creada */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["OwnedAccount"];
+                    };
+                };
+                401: components["responses"]["Unauthorized"];
+                403: components["responses"]["Forbidden"];
+                409: components["responses"]["Conflict"];
+                422: components["responses"]["ValidationError"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/config/accounts/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Actualizar cuenta propia */
+        patch: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: components["parameters"]["Id"];
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["UpdateOwnedAccountRequest"];
+                };
+            };
+            responses: {
+                /** @description Cuenta actualizada */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["OwnedAccount"];
+                    };
+                };
+                401: components["responses"]["Unauthorized"];
+                403: components["responses"]["Forbidden"];
+                404: components["responses"]["NotFound"];
+                409: components["responses"]["Conflict"];
+                422: components["responses"]["ValidationError"];
+            };
+        };
+        trace?: never;
+    };
+    "/v1/config/competitors": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Listar competidores */
+        get: {
+            parameters: {
+                query?: {
+                    limit?: number;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Lista de competidores */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["CompetitorListResponse"];
+                    };
+                };
+                401: components["responses"]["Unauthorized"];
+                403: components["responses"]["Forbidden"];
+            };
+        };
+        put?: never;
+        /** Crear competidor */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["CreateCompetitorRequest"];
+                };
+            };
+            responses: {
+                /** @description Competidor creado */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Competitor"];
+                    };
+                };
+                401: components["responses"]["Unauthorized"];
+                403: components["responses"]["Forbidden"];
+                409: components["responses"]["Conflict"];
+                422: components["responses"]["ValidationError"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/config/competitors/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Actualizar competidor */
+        patch: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: components["parameters"]["Id"];
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["UpdateCompetitorRequest"];
+                };
+            };
+            responses: {
+                /** @description Competidor actualizado */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Competitor"];
+                    };
+                };
+                401: components["responses"]["Unauthorized"];
+                403: components["responses"]["Forbidden"];
+                404: components["responses"]["NotFound"];
+                409: components["responses"]["Conflict"];
+                422: components["responses"]["ValidationError"];
+            };
+        };
+        trace?: never;
+    };
+    "/v1/config/taxonomies/{kind}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Listar entradas de taxonomia por tipo */
+        get: {
+            parameters: {
+                query?: {
+                    include_inactive?: boolean;
+                };
+                header?: never;
+                path: {
+                    kind: components["parameters"]["TaxonomyKind"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Entradas de taxonomia */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["TaxonomyListResponse"];
+                    };
+                };
+                401: components["responses"]["Unauthorized"];
+                403: components["responses"]["Forbidden"];
+                422: components["responses"]["ValidationError"];
+            };
+        };
+        put?: never;
+        /** Crear entrada de taxonomia */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    kind: components["parameters"]["TaxonomyKind"];
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["CreateTaxonomyEntryRequest"];
+                };
+            };
+            responses: {
+                /** @description Entrada creada */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["TaxonomyEntry"];
+                    };
+                };
+                401: components["responses"]["Unauthorized"];
+                403: components["responses"]["Forbidden"];
+                409: components["responses"]["Conflict"];
+                422: components["responses"]["ValidationError"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/config/taxonomies/{kind}/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Actualizar entrada de taxonomia */
+        patch: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    kind: components["parameters"]["TaxonomyKind"];
+                    id: components["parameters"]["Id"];
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["UpdateTaxonomyEntryRequest"];
+                };
+            };
+            responses: {
+                /** @description Entrada actualizada */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["TaxonomyEntry"];
+                    };
+                };
+                401: components["responses"]["Unauthorized"];
+                403: components["responses"]["Forbidden"];
+                404: components["responses"]["NotFound"];
+                409: components["responses"]["Conflict"];
+                422: components["responses"]["ValidationError"];
+            };
+        };
+        trace?: never;
+    };
+    "/v1/config/audit": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Listar auditoria de configuracion */
+        get: {
+            parameters: {
+                query?: {
+                    /** @description Cursor opaco para paginacion */
+                    cursor?: components["parameters"]["Cursor"];
+                    limit?: number;
+                    resource_type?: string;
+                    action?: string;
+                    actor_user_id?: string;
+                    from?: string;
+                    to?: string;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Auditoria paginada */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["AuditListResponse"];
+                    };
+                };
+                401: components["responses"]["Unauthorized"];
+                403: components["responses"]["Forbidden"];
+                422: components["responses"]["ValidationError"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/config/audit/export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Exportar auditoria a CSV (sanitizado por rol) */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["CreateAuditExportRequest"];
+                };
+            };
+            responses: {
+                /** @description Export generado */
+                202: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["AuditExportResponse"];
+                    };
+                };
+                401: components["responses"]["Unauthorized"];
+                403: components["responses"]["Forbidden"];
+                422: components["responses"]["ValidationError"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -655,12 +1272,15 @@ export interface components {
         SourceType: "news" | "social";
         /** @enum {string} */
         ContentState: "active" | "archived" | "hidden";
+        /** @enum {string} */
+        TermScope: "claro" | "competencia";
         Term: {
             /** Format: uuid */
             id: string;
             name: string;
             /** @default es */
             language: string;
+            scope: components["schemas"]["TermScope"];
             is_active: boolean;
             /** @description cron/rule de ingestion */
             schedule?: string;
@@ -679,12 +1299,15 @@ export interface components {
             name: string;
             /** @default es */
             language: string;
+            /** @default claro */
+            scope: components["schemas"]["TermScope"];
             /** @default 100 */
             max_articles_per_run: number;
         };
         UpdateTermRequest: {
             name?: string;
             language?: string;
+            scope?: components["schemas"]["TermScope"];
             is_active?: boolean;
             max_articles_per_run?: number;
         };
@@ -891,6 +1514,249 @@ export interface components {
             value: string;
             count: number;
         };
+        /** @enum {string} */
+        ConnectorHealth: "unknown" | "healthy" | "degraded" | "offline";
+        Connector: {
+            /** Format: uuid */
+            id: string;
+            provider: string;
+            enabled: boolean;
+            frequency_minutes: number;
+            health_status: components["schemas"]["ConnectorHealth"];
+            /** Format: date-time */
+            last_sync_at?: string | null;
+            last_error?: string | null;
+            latency_p95_ms?: number | null;
+            metadata?: {
+                [key: string]: unknown;
+            };
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+        };
+        PatchConnectorRequest: {
+            enabled?: boolean;
+            frequency_minutes?: number;
+        };
+        ConnectorSyncRun: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            connector_id: string;
+            /** @enum {string} */
+            status: "queued" | "running" | "completed" | "failed";
+            /** Format: date-time */
+            started_at?: string | null;
+            /** Format: date-time */
+            finished_at?: string | null;
+            metrics?: {
+                [key: string]: unknown;
+            };
+            error?: string | null;
+            /** Format: uuid */
+            triggered_by_user_id?: string | null;
+            /** Format: date-time */
+            created_at: string;
+        };
+        ConnectorListResponse: {
+            items: components["schemas"]["Connector"][];
+        };
+        ConnectorRunListResponse: {
+            /** Format: uuid */
+            connector_id: string;
+            items: components["schemas"]["ConnectorSyncRun"][];
+        };
+        OwnedAccount: {
+            /** Format: uuid */
+            id: string;
+            plataforma: string;
+            handle: string;
+            nombre_cuenta: string;
+            linea_negocio?: string | null;
+            region_macro?: string | null;
+            idioma: string;
+            owner_equipo?: string | null;
+            estado: string;
+            tags_campana: string[];
+            metadata?: {
+                [key: string]: unknown;
+            };
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+        };
+        OwnedAccountListResponse: {
+            items: components["schemas"]["OwnedAccount"][];
+        };
+        CreateOwnedAccountRequest: {
+            platform: string;
+            handle: string;
+            account_name: string;
+            business_line?: string;
+            macro_region?: string;
+            /** @default es */
+            language: string;
+            team_owner?: string;
+            /** @default active */
+            status: string;
+            campaign_tags?: string[];
+            metadata?: {
+                [key: string]: unknown;
+            };
+        };
+        UpdateOwnedAccountRequest: {
+            platform?: string;
+            handle?: string;
+            account_name?: string;
+            business_line?: string | null;
+            macro_region?: string | null;
+            language?: string;
+            team_owner?: string | null;
+            status?: string;
+            campaign_tags?: string[];
+            metadata?: {
+                [key: string]: unknown;
+            };
+        };
+        Competitor: {
+            /** Format: uuid */
+            id: string;
+            marca_competidora: string;
+            aliases: string[];
+            prioridad: number;
+            estado: string;
+            metadata?: {
+                [key: string]: unknown;
+            };
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+        };
+        CompetitorListResponse: {
+            items: components["schemas"]["Competitor"][];
+        };
+        CreateCompetitorRequest: {
+            brand_name: string;
+            aliases?: string[];
+            priority?: number;
+            status?: string;
+            metadata?: {
+                [key: string]: unknown;
+            };
+        };
+        UpdateCompetitorRequest: {
+            brand_name?: string;
+            aliases?: string[];
+            priority?: number;
+            status?: string;
+            metadata?: {
+                [key: string]: unknown;
+            };
+        };
+        TaxonomyEntry: {
+            /** Format: uuid */
+            id: string;
+            /** @enum {string} */
+            kind: "categories" | "business_lines" | "macro_regions" | "campaigns";
+            key: string;
+            label: string;
+            description?: string | null;
+            is_active: boolean;
+            sort_order: number;
+            metadata?: {
+                [key: string]: unknown;
+            };
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+        };
+        TaxonomyListResponse: {
+            /** @enum {string} */
+            kind: "categories" | "business_lines" | "macro_regions" | "campaigns";
+            items: components["schemas"]["TaxonomyEntry"][];
+        };
+        CreateTaxonomyEntryRequest: {
+            key: string;
+            label: string;
+            description?: string;
+            /** @default true */
+            is_active: boolean;
+            /** @default 100 */
+            sort_order: number;
+            metadata?: {
+                [key: string]: unknown;
+            };
+        };
+        UpdateTaxonomyEntryRequest: {
+            key?: string;
+            label?: string;
+            description?: string | null;
+            is_active?: boolean;
+            sort_order?: number;
+            metadata?: {
+                [key: string]: unknown;
+            };
+        };
+        AuditItem: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            actor_user_id?: string | null;
+            actor_email?: string | null;
+            actor_name?: string | null;
+            actor_role?: string | null;
+            action: string;
+            resource_type: string;
+            resource_id?: string | null;
+            request_id?: string | null;
+            before?: {
+                [key: string]: unknown;
+            } | null;
+            after?: {
+                [key: string]: unknown;
+            } | null;
+            /** Format: date-time */
+            created_at: string;
+        };
+        AuditListResponse: {
+            items: components["schemas"]["AuditItem"][];
+            page_info: components["schemas"]["PageInfo"];
+        };
+        CreateAuditExportRequest: {
+            filters?: {
+                resource_type?: string;
+                action?: string;
+                /** Format: uuid */
+                actor_user_id?: string;
+                /** Format: date-time */
+                from?: string;
+                /** Format: date-time */
+                to?: string;
+            };
+            /** @default 2000 */
+            limit: number;
+        };
+        AuditExportResponse: {
+            /** Format: uuid */
+            export_id: string;
+            /** @constant */
+            status: "completed";
+            /** @constant */
+            format: "csv";
+            row_count: number;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: uri */
+            download_url: string;
+            s3_key?: string;
+            /** Format: uuid */
+            requested_by_user_id?: string;
+            request_id?: string;
+        };
         ContentListResponse: {
             items: components["schemas"]["ContentItem"][];
             page_info: components["schemas"]["PageInfo"];
@@ -959,6 +1825,7 @@ export interface components {
         /** @description Cursor opaco para paginacion */
         Cursor: string;
         Limit: number;
+        TaxonomyKind: "categories" | "business_lines" | "macro_regions" | "campaigns";
     };
     requestBodies: never;
     headers: never;

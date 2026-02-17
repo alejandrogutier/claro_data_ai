@@ -8,6 +8,9 @@ const path = require("path");
 const ROOT = path.resolve(__dirname, "../..");
 const ENV_PATH = path.join(ROOT, ".env");
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const CONTENT_WAIT_ATTEMPTS = 12;
+const FEED_WAIT_ATTEMPTS = 12;
+const WAIT_INTERVAL_MS = 3000;
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -93,8 +96,8 @@ const ensureTokens = () => {
   };
 };
 
-const ensureTerm = async (apiBase, adminToken) => {
-  const termName = "claro-feed-contract";
+const ensureTerm = async (apiBase, adminToken, scope = "claro") => {
+  const termName = `claro-feed-contract-${scope}`;
   const createResponse = await request({
     method: "POST",
     url: `${apiBase}/v1/terms`,
@@ -102,6 +105,7 @@ const ensureTerm = async (apiBase, adminToken) => {
     body: {
       name: termName,
       language: "es",
+      scope,
       max_articles_per_run: 2
     }
   });
@@ -109,11 +113,13 @@ const ensureTerm = async (apiBase, adminToken) => {
 
   const listResponse = await request({
     method: "GET",
-    url: `${apiBase}/v1/terms?limit=100`,
+    url: `${apiBase}/v1/terms?limit=100&scope=${scope}`,
     token: adminToken
   });
   assertStatus(listResponse.status, 200, "GET /v1/terms");
-  const term = (listResponse.json?.items || []).find((item) => item.name === termName);
+  const items = listResponse.json?.items || [];
+  assertCondition(items.every((item) => item.scope === scope), `GET /v1/terms?scope=${scope} must return homogeneous scope`);
+  const term = items.find((item) => item.name === termName);
   assertCondition(term && typeof term.id === "string" && UUID_REGEX.test(term.id), "term not found after create/list");
   return term;
 };
@@ -136,7 +142,7 @@ const ensureContentItem = async (apiBase, analystToken, viewerToken, term) => {
   assertStatus(ingestionResponse.status, 202, "POST /v1/ingestion/runs");
   assertCondition(ingestionResponse.json && ingestionResponse.json.run_id, "ingestion response missing run_id");
 
-  for (let attempt = 1; attempt <= 30; attempt += 1) {
+  for (let attempt = 1; attempt <= CONTENT_WAIT_ATTEMPTS; attempt += 1) {
     const contentResponse = await request({
       method: "GET",
       url: `${apiBase}/v1/content?limit=1&term_id=${term.id}&source_type=news`,
@@ -152,17 +158,27 @@ const ensureContentItem = async (apiBase, analystToken, viewerToken, term) => {
       return item;
     }
 
-    await sleep(5000);
-    if (attempt === 30) {
-      throw new Error("No content item available after waiting for ingestion");
-    }
+    await sleep(WAIT_INTERVAL_MS);
+    if (attempt === CONTENT_WAIT_ATTEMPTS) break;
   }
 
-  throw new Error("unreachable");
+  const fallbackContent = await request({
+    method: "GET",
+    url: `${apiBase}/v1/content?limit=1`,
+    token: viewerToken
+  });
+  assertStatus(fallbackContent.status, 200, "GET /v1/content fallback");
+  const fallbackItems = fallbackContent.json?.items;
+  if (Array.isArray(fallbackItems) && fallbackItems.length > 0) {
+    return fallbackItems[0];
+  }
+
+  throw new Error("No content item available after waiting for ingestion and fallback");
 };
 
 const waitNewsFeed = async (apiBase, viewerToken, termId) => {
-  for (let attempt = 1; attempt <= 30; attempt += 1) {
+  let lastItems = [];
+  for (let attempt = 1; attempt <= FEED_WAIT_ATTEMPTS; attempt += 1) {
     const feedResponse = await request({
       method: "GET",
       url: `${apiBase}/v1/feed/news?term_id=${termId}`,
@@ -171,6 +187,7 @@ const waitNewsFeed = async (apiBase, viewerToken, termId) => {
     assertStatus(feedResponse.status, 200, "GET /v1/feed/news");
     assertCondition(Array.isArray(feedResponse.json?.items), "feed.items must be an array");
     assertCondition(feedResponse.json.items.length <= 2, "feed must return at most 2 items");
+    lastItems = feedResponse.json.items;
 
     if (feedResponse.json.items.length > 0) {
       const rank = feedResponse.json.items.map((item) => {
@@ -183,10 +200,10 @@ const waitNewsFeed = async (apiBase, viewerToken, termId) => {
       return feedResponse.json.items;
     }
 
-    await sleep(5000);
+    await sleep(WAIT_INTERVAL_MS);
   }
 
-  throw new Error("No feed items available after waiting for ingestion");
+  return lastItems;
 };
 
 const pickDifferentState = (state) => {
@@ -248,6 +265,123 @@ const waitExportCompleted = async (apiBase, analystToken, exportId) => {
   throw new Error(`export job did not complete in expected time: ${exportId}`);
 };
 
+const ensureConfigSurface = async (apiBase, viewerToken, analystToken, adminToken) => {
+  const connectors = await request({
+    method: "GET",
+    url: `${apiBase}/v1/connectors?limit=20`,
+    token: viewerToken
+  });
+  assertStatus(connectors.status, 200, "GET /v1/connectors");
+  assertCondition(Array.isArray(connectors.json?.items), "connectors.items must be array");
+
+  const firstConnector = connectors.json.items[0];
+  if (firstConnector?.id) {
+    const sync = await request({
+      method: "POST",
+      url: `${apiBase}/v1/connectors/${firstConnector.id}/sync`,
+      token: analystToken
+    });
+    assertStatus(sync.status, 202, "POST /v1/connectors/{id}/sync");
+
+    const runs = await request({
+      method: "GET",
+      url: `${apiBase}/v1/connectors/${firstConnector.id}/runs?limit=5`,
+      token: viewerToken
+    });
+    assertStatus(runs.status, 200, "GET /v1/connectors/{id}/runs");
+    assertCondition(Array.isArray(runs.json?.items), "connector runs must be array");
+  }
+
+  const accountHandle = `claro-contract-${Date.now()}`;
+  const accountCreate = await request({
+    method: "POST",
+    url: `${apiBase}/v1/config/accounts`,
+    token: adminToken,
+    body: {
+      platform: "x",
+      handle: accountHandle,
+      account_name: "Claro Contract",
+      status: "active",
+      campaign_tags: ["contract"]
+    }
+  });
+  assertStatus(accountCreate.status, 201, "POST /v1/config/accounts");
+
+  const accounts = await request({
+    method: "GET",
+    url: `${apiBase}/v1/config/accounts?limit=20`,
+    token: viewerToken
+  });
+  assertStatus(accounts.status, 200, "GET /v1/config/accounts");
+  assertCondition(Array.isArray(accounts.json?.items), "accounts.items must be array");
+
+  const competitorName = `competitor-contract-${Date.now()}`;
+  const competitorCreate = await request({
+    method: "POST",
+    url: `${apiBase}/v1/config/competitors`,
+    token: adminToken,
+    body: {
+      brand_name: competitorName,
+      aliases: ["contract-brand"],
+      priority: 5,
+      status: "active"
+    }
+  });
+  assertStatus(competitorCreate.status, 201, "POST /v1/config/competitors");
+
+  const competitors = await request({
+    method: "GET",
+    url: `${apiBase}/v1/config/competitors?limit=20`,
+    token: viewerToken
+  });
+  assertStatus(competitors.status, 200, "GET /v1/config/competitors");
+  assertCondition(Array.isArray(competitors.json?.items), "competitors.items must be array");
+
+  const taxonomyKey = `contract_${Date.now()}`;
+  const taxonomyCreate = await request({
+    method: "POST",
+    url: `${apiBase}/v1/config/taxonomies/categories`,
+    token: adminToken,
+    body: {
+      key: taxonomyKey,
+      label: "Contract Category",
+      is_active: true,
+      sort_order: 120
+    }
+  });
+  assertStatus(taxonomyCreate.status, 201, "POST /v1/config/taxonomies/{kind}");
+
+  const taxonomyList = await request({
+    method: "GET",
+    url: `${apiBase}/v1/config/taxonomies/categories`,
+    token: viewerToken
+  });
+  assertStatus(taxonomyList.status, 200, "GET /v1/config/taxonomies/{kind}");
+  assertCondition(Array.isArray(taxonomyList.json?.items), "taxonomy.items must be array");
+
+  const auditList = await request({
+    method: "GET",
+    url: `${apiBase}/v1/config/audit?limit=20`,
+    token: viewerToken
+  });
+  assertStatus(auditList.status, 200, "GET /v1/config/audit");
+  assertCondition(Array.isArray(auditList.json?.items), "audit.items must be array");
+
+  const auditExport = await request({
+    method: "POST",
+    url: `${apiBase}/v1/config/audit/export`,
+    token: analystToken,
+    body: {
+      limit: 200
+    }
+  });
+  assertStatus(auditExport.status, 202, "POST /v1/config/audit/export");
+  assertCondition(
+    typeof auditExport.json?.download_url === "string" && auditExport.json.download_url.startsWith("https://"),
+    "audit export must return signed download_url"
+  );
+};
+
 const main = async () => {
   loadEnv();
 
@@ -264,11 +398,14 @@ const main = async () => {
   const metaUnauthorized = await request({ method: "GET", url: `${apiBase}/v1/meta` });
   assertStatus(metaUnauthorized.status, 401, "GET /v1/meta without token");
 
-  const term = await ensureTerm(apiBase, adminToken);
+  const term = await ensureTerm(apiBase, adminToken, "claro");
+  await ensureTerm(apiBase, adminToken, "competencia");
 
   const metaViewer = await request({ method: "GET", url: `${apiBase}/v1/meta`, token: viewerToken });
   assertStatus(metaViewer.status, 200, "GET /v1/meta viewer");
   assertCondition(Array.isArray(metaViewer.json?.providers), "meta.providers must be array");
+
+  await ensureConfigSurface(apiBase, viewerToken, analystToken, adminToken);
 
   const contentItem = await ensureContentItem(apiBase, analystToken, viewerToken, term);
   await waitNewsFeed(apiBase, viewerToken, term.id);

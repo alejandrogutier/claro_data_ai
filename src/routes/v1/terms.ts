@@ -1,19 +1,22 @@
 import type { APIGatewayProxyEventV2 } from "aws-lambda";
-import { AppStoreError, createAppStore, type TermRecord, type UpdateTermInput } from "../../data/appStore";
+import { AppStoreError, createAppStore, type TermRecord, type TermScope, type UpdateTermInput } from "../../data/appStore";
 import { getRole, hasRole } from "../../core/auth";
 import { json, parseBody } from "../../core/http";
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const TERM_SCOPES: TermScope[] = ["claro", "competencia"];
 
 type CreateTermBody = {
   name?: unknown;
   language?: unknown;
+  scope?: unknown;
   max_articles_per_run?: unknown;
 };
 
 type UpdateTermBody = {
   name?: unknown;
   language?: unknown;
+  scope?: unknown;
   is_active?: unknown;
   max_articles_per_run?: unknown;
 };
@@ -22,6 +25,7 @@ const toApiTerm = (term: TermRecord) => ({
   id: term.id,
   name: term.name,
   language: term.language,
+  scope: term.scope,
   is_active: term.isActive,
   max_articles_per_run: term.maxArticlesPerRun,
   created_at: term.createdAt.toISOString(),
@@ -49,6 +53,15 @@ const normalizeLanguage = (value: unknown): string | null => {
   const normalized = value.trim().toLowerCase();
   if (!normalized || normalized.length > 8) return null;
   return normalized;
+};
+
+const normalizeScope = (value: unknown, fallback: TermScope = "claro"): TermScope | null => {
+  if (value === undefined) return fallback;
+  if (typeof value !== "string") return null;
+  const normalized = value.trim().toLowerCase();
+  if (!normalized) return null;
+  if (!TERM_SCOPES.includes(normalized as TermScope)) return null;
+  return normalized as TermScope;
 };
 
 const normalizeMaxArticles = (value: unknown): number | null => {
@@ -101,9 +114,20 @@ export const listTerms = async (event: APIGatewayProxyEventV2) => {
   }
 
   const cursor = query.cursor ?? undefined;
+  let scope: TermScope | undefined;
+  if (query.scope !== undefined) {
+    const parsedScope = normalizeScope(query.scope, "claro");
+    if (!parsedScope) {
+      return json(422, {
+        error: "validation_error",
+        message: "scope must be one of: claro, competencia"
+      });
+    }
+    scope = parsedScope;
+  }
 
   try {
-    const result = await store.listTerms(limit, cursor);
+    const result = await store.listTerms(limit, cursor, scope);
     return json(200, {
       items: result.items.map(toApiTerm),
       page_info: {
@@ -140,12 +164,13 @@ export const createTerm = async (event: APIGatewayProxyEventV2) => {
 
   const name = normalizeName(body.name);
   const language = normalizeLanguage(body.language);
+  const scope = normalizeScope(body.scope, "claro");
   const maxArticlesPerRun = normalizeMaxArticles(body.max_articles_per_run);
 
-  if (!name || !language || maxArticlesPerRun === null) {
+  if (!name || !language || !scope || maxArticlesPerRun === null) {
     return json(422, {
       error: "validation_error",
-      message: "name (2-160), language (1-8) y max_articles_per_run (1-500) son requeridos"
+      message: "name (2-160), language (1-8), scope (claro|competencia) y max_articles_per_run (1-500) son requeridos"
     });
   }
 
@@ -153,6 +178,7 @@ export const createTerm = async (event: APIGatewayProxyEventV2) => {
     const term = await store.createTerm({
       name,
       language,
+      scope,
       maxArticlesPerRun
     });
 
@@ -214,6 +240,17 @@ export const updateTerm = async (event: APIGatewayProxyEventV2) => {
       });
     }
     update.language = language;
+  }
+
+  if (body.scope !== undefined) {
+    const scope = normalizeScope(body.scope, "claro");
+    if (!scope) {
+      return json(422, {
+        error: "validation_error",
+        message: "scope debe ser uno de: claro, competencia"
+      });
+    }
+    update.scope = scope;
   }
 
   if (body.is_active !== undefined) {

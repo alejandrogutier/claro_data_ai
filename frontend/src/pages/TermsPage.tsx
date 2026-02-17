@@ -1,17 +1,19 @@
 import { useEffect, useMemo, useState } from "react";
-import { ApiError, type Term } from "../api/client";
+import { ApiError, type Term, type TermScope } from "../api/client";
 import { useApiClient } from "../api/useApiClient";
 import { useAuth } from "../auth/AuthContext";
 
 type TermFormState = {
   name: string;
   language: string;
+  scope: TermScope;
   maxArticlesPerRun: number;
 };
 
 const defaultTermForm: TermFormState = {
   name: "",
   language: "es",
+  scope: "claro",
   maxArticlesPerRun: 2
 };
 
@@ -55,6 +57,7 @@ export const TermsPage = () => {
       const created = await client.createTerm({
         name: form.name.trim(),
         language: form.language.trim() || "es",
+        scope: form.scope,
         max_articles_per_run: form.maxArticlesPerRun
       });
 
@@ -71,7 +74,10 @@ export const TermsPage = () => {
     }
   };
 
-  const onQuickUpdate = async (term: Term, patch: { is_active?: boolean; max_articles_per_run?: number }) => {
+  const onQuickUpdate = async (
+    term: Term,
+    patch: { is_active?: boolean; max_articles_per_run?: number; scope?: TermScope }
+  ) => {
     if (!canMutate) return;
     setError(null);
 
@@ -120,6 +126,18 @@ export const TermsPage = () => {
           </label>
 
           <label>
+            Scope
+            <select
+              value={form.scope}
+              onChange={(event) => setForm((current) => ({ ...current, scope: event.target.value as TermScope }))}
+              required
+            >
+              <option value="claro">claro</option>
+              <option value="competencia">competencia</option>
+            </select>
+          </label>
+
+          <label>
             Max articulos por corrida
             <input
               type="number"
@@ -163,12 +181,25 @@ export const TermsPage = () => {
                 <div>
                   <p className="term-name">{term.name}</p>
                   <p className="term-meta">
-                    {term.language} | estado: {term.is_active ? "active" : "inactive"} | max configurado: {term.max_articles_per_run}
+                    {term.language} | scope: {term.scope} | estado: {term.is_active ? "active" : "inactive"} | max configurado:{" "}
+                    {term.max_articles_per_run}
                   </p>
                 </div>
 
                 {canMutate ? (
                   <div className="term-actions">
+                    <button
+                      className="btn btn-outline"
+                      type="button"
+                      onClick={() =>
+                        void onQuickUpdate(term, {
+                          scope: term.scope === "claro" ? "competencia" : "claro"
+                        })
+                      }
+                    >
+                      {term.scope === "claro" ? "Mover a competencia" : "Mover a claro"}
+                    </button>
+
                     <button
                       className="btn btn-outline"
                       type="button"

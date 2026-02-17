@@ -14,11 +14,41 @@ export const AppShell = () => {
         </div>
 
         <nav className="app-nav" aria-label="Navegacion principal">
-          <NavLink to="/app/feed" className="nav-link">
-            Feed Noticias
+          <p className="nav-group-title">Monitoreo</p>
+          <NavLink to="/app/monitor/overview" className="nav-link">
+            Overview
           </NavLink>
-          <NavLink to="/app/terms" className="nav-link">
-            Queries / Terminos
+          <NavLink to="/app/monitor/feed-claro" className="nav-link">
+            Feed Claro
+          </NavLink>
+          <NavLink to="/app/monitor/feed-competencia" className="nav-link">
+            Feed Competencia
+          </NavLink>
+
+          <p className="nav-group-title">Configuracion</p>
+          <NavLink to="/app/config/connectors" className="nav-link">
+            Conectores
+          </NavLink>
+          <NavLink to="/app/config/accounts" className="nav-link">
+            Cuentas
+          </NavLink>
+          <NavLink to="/app/config/competitors" className="nav-link">
+            Competidores
+          </NavLink>
+          <NavLink to="/app/config/queries" className="nav-link">
+            Queries
+          </NavLink>
+          <NavLink to="/app/config/taxonomy" className="nav-link">
+            Taxonomias
+          </NavLink>
+          <NavLink to="/app/config/alerts" className="nav-link">
+            Alertas
+          </NavLink>
+          <NavLink to="/app/config/report-templates" className="nav-link">
+            Reportes
+          </NavLink>
+          <NavLink to="/app/config/audit" className="nav-link">
+            Auditoria
           </NavLink>
         </nav>
 

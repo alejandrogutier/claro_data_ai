@@ -2,8 +2,8 @@
 
 ## Estado General
 - Proyecto: `Inception`
-- Avance global: `91%`
-- Historias en curso: `CLARO-031, CLARO-032, CLARO-044`
+- Avance global: `98%`
+- Historias en curso: `CLARO-023`
 - Ambiente objetivo inicial: `prod` unico en `us-east-1`
 - Ultima actualizacion: `2026-02-17`
 
@@ -32,10 +32,15 @@
 | CLARO-020 | todo | 0% | Riesgo de privacidad | Gobernanza de datos sociales pendiente |
 | CLARO-021 | done | 100% | Ninguno | Blueprint UX/UI inicial consolidado y extendido a vision social/news/competencia |
 | CLARO-022 | done | 100% | Ninguno | Frontend base creado en `frontend/` con React+Vite, login Cognito Hosted UI (PKCE), app shell y guardas RBAC |
+| CLARO-023 | doing | 5% | Ninguno | Kickoff de Overview KPI real iniciado tras cierre de configuracion (`BHS`, `SOV`, `sentimiento_neto`, `riesgo_activo`) |
 | CLARO-029 | done | 100% | Ninguno | OpenAPI alineado con `/v1/feed/news` y pipeline `openapi-typescript` operativo con cliente tipado para frontend |
-| CLARO-031 | doing | 35% | Faltan 7 pantallas del modulo | Vertical minimo de queries/terminos operativo (CRUD base sobre `TrackedTerm`) |
-| CLARO-032 | doing | 40% | Faltan overview y feed competencia | Vertical minimo de feed operativo (`/app/feed` + `/v1/feed/news` con limite 2) |
-| CLARO-044 | doing | 45% | Falta configurar secretos/repo en GitHub y ejecutar deploy real | Workflows CI + deploy Amplify creados en `.github/workflows` |
+| CLARO-031 | done | 100% | Ninguno | 8 rutas de configuracion operativas sin stubs criticos y validadas end-to-end contra backend desplegado en AWS |
+| CLARO-032 | done | 100% | Ninguno | Monitoreo V1 completo con rutas separadas (`/app/monitor/overview`, `/app/monitor/feed-claro`, `/app/monitor/feed-competencia`) y consumo de feed limitado a 2 noticias por query |
+| CLARO-033 | todo | 0% | Ninguno | Motor KPI y severidad pendiente (`BHS=50/25/25`, `SOV=calidad 60 + alcance 40`, `SEV1>=80`) |
+| CLARO-037 | done | 100% | Ninguno | Superficie `/v1/connectors*` desplegada en runtime (`GET/PATCH/sync/runs`) y validada en `contract:test` + smoke business |
+| CLARO-038 | done | 100% | Ninguno | CRUD de cuentas, competidores y taxonomias desplegado y validado (`/v1/config/accounts|competitors|taxonomies/*`, respuestas `201/409`) |
+| CLARO-039 | done | 100% | Ninguno | Gobernanza de auditoria/export cerrada con `/v1/config/audit` y `/v1/config/audit/export`, sanitizacion por rol y permisos S3/KMS aplicados |
+| CLARO-044 | done | 100% | Ninguno | Deploy automatico Amplify en `main` validado; `VITE_*` cargadas en branch, rewrite SPA en `200`, callback/logout Cognito agregados para dominio Amplify y login funcional en URL publica |
 
 ## Riesgos Activos y Mitigacion
 1. **Riesgo**: catalogos reales aun no cargados (16 cuentas + competidores finales).
@@ -46,8 +51,10 @@
    - Mitigacion: filtro automatico obligatorio y loop mensual de recalibracion.
 4. **Riesgo**: manejo de datos sensibles en social listening.
    - Mitigacion: minimizacion/enmascaramiento PII y export completo solo para Admin.
-5. **Riesgo**: drift temporal entre contrato/codigo y runtime AWS desplegado.
-   - Mitigacion: aplicar Terraform + redeploy Lambda antes de correr contract/smoke de release.
+5. **Riesgo**: definiciones KPI pueden quedar desalineadas entre negocio y calculo tecnico en CLARO-023/033.
+   - Mitigacion: congelar contrato de formulas (BHS/SOV/severidad) antes de implementar agregaciones y visualizacion.
+6. **Riesgo**: datos historicos de cuentas/competidores incompletos para overview inicial.
+   - Mitigacion: cargar catalogos base priorizados y marcar KPI sin base suficiente como `insufficient_data`.
 
 ## Decisiones Cerradas de Arquitectura y Producto
 - AWS serverless en `us-east-1`.
@@ -62,8 +69,7 @@
 - Zona horaria operativa: `America/Bogota`.
 
 ## Proximos Hitos
-1. Ejecutar deploy real de frontend en AWS Amplify desde `main` y validar URL publicada (CLARO-044).
-2. Completar modulo de configuracion V1 restante (CLARO-031).
-3. Completar monitoreo V1 (overview + competencia) (CLARO-032).
-4. Activar motor KPI de negocio (`BHS/SOV/severidad`) y alertas (CLARO-033/036).
-5. Retomar CLARO-013 (analysis async real) reutilizando patron de jobs y trazabilidad aplicado en export.
+1. Implementar CLARO-023: Overview con KPI reales (`BHS`, `SOV`, `sentimiento_neto`, `riesgo_activo`) y tendencia 7d.
+2. Implementar CLARO-033: motor de formulas y severidad reutilizable para monitoreo y analisis.
+3. Conectar CLARO-036 para alertas de severidad sobre KPI ya calculados.
+4. Retomar CLARO-013 (analysis async real) reutilizando patron de jobs y trazabilidad aplicado en export.

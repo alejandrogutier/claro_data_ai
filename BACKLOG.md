@@ -57,19 +57,13 @@ Este contrato se usa junto a `UX_PLANNING.md` secciones `2.3`, `7.4`, `21`, `26`
 | CLARO-042 | checklist transversal | CLARO-037, CLARO-038, CLARO-035 | gate go-live completo y aprobado |
 
 ## Now
-- CLARO-031 | doing | P1 | Configuracion V1 social/news (8 pantallas) | MVP inicial listo: pantalla `Queries/Terminos` conectada a `TrackedTerm` con CRUD base; faltan 7 pantallas del modulo. UX_REF: 8, 21.1
-- CLARO-032 | doing | P1 | Monitoreo V1 (overview + feed Claro + feed competencia) | MVP inicial listo: `/app/feed` + `GET /v1/feed/news` con limite 2 por query; faltan overview y feed competencia. UX_REF: 9, 21.2
-- CLARO-044 | doing | P1 | CI/CD frontend en AWS Amplify via GitHub Actions | workflow de deploy en `main`, validacion de URL publicada y smoke post-deploy
+- CLARO-023 | doing | P1 | Dashboard Overview Salud de Marca | arranque de KPI real post-cierre config: `BHS`, `SOV`, `sentimiento_neto`, `riesgo_activo` con tendencia 7d. UX_REF: 9.1, 12, 21.2
 
 ## Next
-- CLARO-023 | todo | P1 | Dashboard Overview Salud de Marca | KPIs fijos (`BHS`, `SOV`, `sentimiento neto`, `riesgo activo`) y tendencia 7d. UX_REF: 9.1, 12, 21.2
 - CLARO-033 | todo | P1 | Motor de KPIs BHS/SOV severidad | `BHS=50/25/25`, SOV ponderado `calidad 60 + alcance 40`, severidad `SEV1>=80`, `SEV2>=60`. UX_REF: 12, 21.2
 - CLARO-034 | todo | P1 | Modulo Analisis (3 paginas) | overview marca, deep-dive por canal y benchmark competencia. UX_REF: 10, 21.3
 - CLARO-035 | todo | P1 | Modulo Reportes (3 paginas) | historial/centro, plantillas y programacion/envios (salida `Web + CSV`). UX_REF: 11, 16, 21.4
 - CLARO-036 | todo | P1 | Alertas e Incidentes | in-app+email, cooldown 60m, asignacion manual+reglas, SLA respuesta SEV-1 <=30m. UX_REF: 9.4, 12.4, 21.2
-- CLARO-037 | todo | P1 | Integracion Hootsuite/Awario/News a 15m | pull programado, health por conector, idempotencia y dedupe cross-source. UX_REF: 4, 8.1, 14
-- CLARO-038 | todo | P1 | Catalogos administrables por Admin | lineas de negocio, macro-regiones Colombia, campañas (`campana > iniciativa`). UX_REF: 8.2, 8.3, 8.5
-- CLARO-039 | todo | P1 | Gobernanza de datos y exportes | retencion activa 24 meses, PII minimizada/enmascarada, CSV sanitizado (100k max), PII completa solo Admin. UX_REF: 17, 21.4
 - CLARO-040 | todo | P2 | Loop de calidad semantica | falso positivo con reason code + recalibracion mensual de reglas/umbrales. UX_REF: 13
 - CLARO-041 | todo | P2 | UX de adopcion | diccionario de KPI en app + tour guiado basico por rol. UX_REF: 18, 26, 27
 - CLARO-042 | todo | P1 | Go-live readiness social | gate con 16 cuentas activas + set final competidores + UAT 2 semanas + piloto 1 semana. UX_REF: 23, 24, 27
@@ -123,3 +117,9 @@ Antes de mover `doing` -> `done`:
 - CLARO-010 | done | P1 | Maquina de estados active/archived/hidden + acciones bulk | endpoints single/bulk operativos con transiciones auditadas (`ContentStateEvent` + `AuditLog`) y manejo deterministico de errores (`404/409/422`)
 - CLARO-015 | done | P2 | Exportacion CSV controlada | flujo async real (`POST /v1/exports/csv` + `GET /v1/exports/{id}`), worker SQS, persistencia `ExportJob` y URL firmada en `completed`
 - CLARO-017 | done | P1 | OpenAPI 3.1 + pruebas de contrato | contrato actualizado (`/v1/exports/{id}` + errores mutables), `npm run contract:test` y smoke business extendido (`state/bulk/classification/export`)
+- CLARO-032 | done | P1 | Monitoreo V1 (overview + feed Claro + feed competencia) | rutas `/app/monitor/overview`, `/app/monitor/feed-claro` y `/app/monitor/feed-competencia` operativas con separacion por `scope` y feed limitado a 2 noticias por query
+- CLARO-044 | done | P1 | CI/CD frontend en AWS Amplify via GitHub Actions | Amplify `main` configurado con variables `VITE_*`, rewrite SPA `200`, callbacks Cognito actualizados para dominio Amplify y verificacion real de `/` + `/login` en `200`
+- CLARO-031 | done | P1 | Configuracion V1 social/news (8 pantallas) | rutas `/app/config/*` desplegadas sin stubs criticos y consumo de backend real validado con contract/smoke en AWS
+- CLARO-037 | done | P1 | Integracion Hootsuite/Awario/News a 15m | endpoints `/v1/connectors*` desplegados en runtime, sync manual/runs operativos y validados en `contract:test` + smoke business
+- CLARO-038 | done | P1 | Catalogos administrables por Admin | CRUD de cuentas, competidores y taxonomias desplegado (`/v1/config/accounts|competitors|taxonomies/*`) con validacion de `201/409`
+- CLARO-039 | done | P1 | Gobernanza de datos y exportes | `/v1/config/audit` y `/v1/config/audit/export` operativos con export CSV sanitizado por rol y permisos S3/KMS ajustados en IAM

@@ -18,6 +18,9 @@ tags:
   - name: Analysis
   - name: Exports
   - name: Meta
+  - name: Connectors
+  - name: Config
+  - name: Audit
 paths:
   /v1/health:
     get:
@@ -46,6 +49,11 @@ paths:
       parameters:
         - $ref: '#/components/parameters/Cursor'
         - $ref: '#/components/parameters/Limit'
+        - name: scope
+          in: query
+          schema:
+            $ref: '#/components/schemas/TermScope'
+          description: Filtra terminos por alcance de monitoreo (`claro|competencia`).
       responses:
         '200':
           description: Lista de terminos
@@ -391,6 +399,405 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '403':
           $ref: '#/components/responses/Forbidden'
+  /v1/connectors:
+    get:
+      tags: [Connectors]
+      summary: Listar configuracion de conectores
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Lista de conectores
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConnectorListResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /v1/connectors/{id}:
+    patch:
+      tags: [Connectors]
+      summary: Actualizar configuracion de conector
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchConnectorRequest'
+      responses:
+        '200':
+          description: Conector actualizado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Connector'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+  /v1/connectors/{id}/sync:
+    post:
+      tags: [Connectors]
+      summary: Disparar sincronizacion manual de conector
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      responses:
+        '202':
+          description: Corrida de sincronizacion aceptada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConnectorSyncRun'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+  /v1/connectors/{id}/runs:
+    get:
+      tags: [Connectors]
+      summary: Historial de corridas de sincronizacion de un conector
+      parameters:
+        - $ref: '#/components/parameters/Id'
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+      responses:
+        '200':
+          description: Lista de corridas de sincronizacion
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConnectorRunListResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+  /v1/config/accounts:
+    get:
+      tags: [Config]
+      summary: Listar cuentas propias monitoreadas
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 300
+            default: 200
+      responses:
+        '200':
+          description: Lista de cuentas
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OwnedAccountListResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    post:
+      tags: [Config]
+      summary: Crear cuenta propia
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateOwnedAccountRequest'
+      responses:
+        '201':
+          description: Cuenta creada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OwnedAccount'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+  /v1/config/accounts/{id}:
+    patch:
+      tags: [Config]
+      summary: Actualizar cuenta propia
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateOwnedAccountRequest'
+      responses:
+        '200':
+          description: Cuenta actualizada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OwnedAccount'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+  /v1/config/competitors:
+    get:
+      tags: [Config]
+      summary: Listar competidores
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 300
+            default: 200
+      responses:
+        '200':
+          description: Lista de competidores
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CompetitorListResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    post:
+      tags: [Config]
+      summary: Crear competidor
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateCompetitorRequest'
+      responses:
+        '201':
+          description: Competidor creado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Competitor'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+  /v1/config/competitors/{id}:
+    patch:
+      tags: [Config]
+      summary: Actualizar competidor
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateCompetitorRequest'
+      responses:
+        '200':
+          description: Competidor actualizado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Competitor'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+  /v1/config/taxonomies/{kind}:
+    get:
+      tags: [Config]
+      summary: Listar entradas de taxonomia por tipo
+      parameters:
+        - $ref: '#/components/parameters/TaxonomyKind'
+        - name: include_inactive
+          in: query
+          schema:
+            type: boolean
+            default: false
+      responses:
+        '200':
+          description: Entradas de taxonomia
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TaxonomyListResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+    post:
+      tags: [Config]
+      summary: Crear entrada de taxonomia
+      parameters:
+        - $ref: '#/components/parameters/TaxonomyKind'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateTaxonomyEntryRequest'
+      responses:
+        '201':
+          description: Entrada creada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TaxonomyEntry'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+  /v1/config/taxonomies/{kind}/{id}:
+    patch:
+      tags: [Config]
+      summary: Actualizar entrada de taxonomia
+      parameters:
+        - $ref: '#/components/parameters/TaxonomyKind'
+        - $ref: '#/components/parameters/Id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateTaxonomyEntryRequest'
+      responses:
+        '200':
+          description: Entrada actualizada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TaxonomyEntry'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+  /v1/config/audit:
+    get:
+      tags: [Audit]
+      summary: Listar auditoria de configuracion
+      parameters:
+        - $ref: '#/components/parameters/Cursor'
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 500
+            default: 100
+        - name: resource_type
+          in: query
+          schema:
+            type: string
+        - name: action
+          in: query
+          schema:
+            type: string
+        - name: actor_user_id
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: from
+          in: query
+          schema:
+            type: string
+            format: date-time
+        - name: to
+          in: query
+          schema:
+            type: string
+            format: date-time
+      responses:
+        '200':
+          description: Auditoria paginada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuditListResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+  /v1/config/audit/export:
+    post:
+      tags: [Audit]
+      summary: Exportar auditoria a CSV (sanitizado por rol)
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateAuditExportRequest'
+      responses:
+        '202':
+          description: Export generado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuditExportResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/ValidationError'
 components:
   securitySchemes:
     bearerAuth:
@@ -450,6 +857,13 @@ components:
         minimum: 1
         maximum: 200
         default: 50
+    TaxonomyKind:
+      name: kind
+      in: path
+      required: true
+      schema:
+        type: string
+        enum: [categories, business_lines, macro_regions, campaigns]
   schemas:
     ErrorResponse:
       type: object
@@ -468,9 +882,12 @@ components:
     ContentState:
       type: string
       enum: [active, archived, hidden]
+    TermScope:
+      type: string
+      enum: [claro, competencia]
     Term:
       type: object
-      required: [id, name, is_active, created_at]
+      required: [id, name, scope, is_active, created_at]
       properties:
         id:
           type: string
@@ -480,6 +897,8 @@ components:
         language:
           type: string
           default: es
+        scope:
+          $ref: '#/components/schemas/TermScope'
         is_active:
           type: boolean
         schedule:
@@ -514,6 +933,9 @@ components:
         language:
           type: string
           default: es
+        scope:
+          $ref: '#/components/schemas/TermScope'
+          default: claro
         max_articles_per_run:
           type: integer
           minimum: 1
@@ -526,6 +948,8 @@ components:
           type: string
         language:
           type: string
+        scope:
+          $ref: '#/components/schemas/TermScope'
         is_active:
           type: boolean
         max_articles_per_run:
@@ -924,6 +1348,465 @@ components:
           type: string
         count:
           type: integer
+    ConnectorHealth:
+      type: string
+      enum: [unknown, healthy, degraded, offline]
+    Connector:
+      type: object
+      required: [id, provider, enabled, frequency_minutes, health_status, created_at, updated_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        provider:
+          type: string
+        enabled:
+          type: boolean
+        frequency_minutes:
+          type: integer
+        health_status:
+          $ref: '#/components/schemas/ConnectorHealth'
+        last_sync_at:
+          type: string
+          format: date-time
+          nullable: true
+        last_error:
+          type: string
+          nullable: true
+        latency_p95_ms:
+          type: integer
+          nullable: true
+        metadata:
+          type: object
+          additionalProperties: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    PatchConnectorRequest:
+      type: object
+      properties:
+        enabled:
+          type: boolean
+        frequency_minutes:
+          type: integer
+          minimum: 5
+          maximum: 1440
+    ConnectorSyncRun:
+      type: object
+      required: [id, connector_id, status, created_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        connector_id:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum: [queued, running, completed, failed]
+        started_at:
+          type: string
+          format: date-time
+          nullable: true
+        finished_at:
+          type: string
+          format: date-time
+          nullable: true
+        metrics:
+          type: object
+          additionalProperties: true
+        error:
+          type: string
+          nullable: true
+        triggered_by_user_id:
+          type: string
+          format: uuid
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+    ConnectorListResponse:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Connector'
+    ConnectorRunListResponse:
+      type: object
+      required: [connector_id, items]
+      properties:
+        connector_id:
+          type: string
+          format: uuid
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ConnectorSyncRun'
+    OwnedAccount:
+      type: object
+      required: [id, plataforma, handle, nombre_cuenta, idioma, estado, tags_campana, created_at, updated_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        plataforma:
+          type: string
+        handle:
+          type: string
+        nombre_cuenta:
+          type: string
+        linea_negocio:
+          type: string
+          nullable: true
+        region_macro:
+          type: string
+          nullable: true
+        idioma:
+          type: string
+        owner_equipo:
+          type: string
+          nullable: true
+        estado:
+          type: string
+        tags_campana:
+          type: array
+          items:
+            type: string
+        metadata:
+          type: object
+          additionalProperties: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    OwnedAccountListResponse:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/OwnedAccount'
+    CreateOwnedAccountRequest:
+      type: object
+      required: [platform, handle, account_name]
+      properties:
+        platform:
+          type: string
+          minLength: 1
+        handle:
+          type: string
+          minLength: 2
+        account_name:
+          type: string
+          minLength: 2
+        business_line:
+          type: string
+        macro_region:
+          type: string
+        language:
+          type: string
+          default: es
+        team_owner:
+          type: string
+        status:
+          type: string
+          default: active
+        campaign_tags:
+          type: array
+          items:
+            type: string
+        metadata:
+          type: object
+          additionalProperties: true
+    UpdateOwnedAccountRequest:
+      type: object
+      properties:
+        platform:
+          type: string
+        handle:
+          type: string
+        account_name:
+          type: string
+        business_line:
+          type: string
+          nullable: true
+        macro_region:
+          type: string
+          nullable: true
+        language:
+          type: string
+        team_owner:
+          type: string
+          nullable: true
+        status:
+          type: string
+        campaign_tags:
+          type: array
+          items:
+            type: string
+        metadata:
+          type: object
+          additionalProperties: true
+    Competitor:
+      type: object
+      required: [id, marca_competidora, aliases, prioridad, estado, created_at, updated_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        marca_competidora:
+          type: string
+        aliases:
+          type: array
+          items:
+            type: string
+        prioridad:
+          type: integer
+        estado:
+          type: string
+        metadata:
+          type: object
+          additionalProperties: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    CompetitorListResponse:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Competitor'
+    CreateCompetitorRequest:
+      type: object
+      required: [brand_name]
+      properties:
+        brand_name:
+          type: string
+        aliases:
+          type: array
+          items:
+            type: string
+        priority:
+          type: integer
+          minimum: 1
+          maximum: 10
+        status:
+          type: string
+        metadata:
+          type: object
+          additionalProperties: true
+    UpdateCompetitorRequest:
+      type: object
+      properties:
+        brand_name:
+          type: string
+        aliases:
+          type: array
+          items:
+            type: string
+        priority:
+          type: integer
+          minimum: 1
+          maximum: 10
+        status:
+          type: string
+        metadata:
+          type: object
+          additionalProperties: true
+    TaxonomyEntry:
+      type: object
+      required: [id, kind, key, label, is_active, sort_order, created_at, updated_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        kind:
+          type: string
+          enum: [categories, business_lines, macro_regions, campaigns]
+        key:
+          type: string
+        label:
+          type: string
+        description:
+          type: string
+          nullable: true
+        is_active:
+          type: boolean
+        sort_order:
+          type: integer
+        metadata:
+          type: object
+          additionalProperties: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    TaxonomyListResponse:
+      type: object
+      required: [kind, items]
+      properties:
+        kind:
+          type: string
+          enum: [categories, business_lines, macro_regions, campaigns]
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/TaxonomyEntry'
+    CreateTaxonomyEntryRequest:
+      type: object
+      required: [key, label]
+      properties:
+        key:
+          type: string
+        label:
+          type: string
+        description:
+          type: string
+        is_active:
+          type: boolean
+          default: true
+        sort_order:
+          type: integer
+          default: 100
+        metadata:
+          type: object
+          additionalProperties: true
+    UpdateTaxonomyEntryRequest:
+      type: object
+      properties:
+        key:
+          type: string
+        label:
+          type: string
+        description:
+          type: string
+          nullable: true
+        is_active:
+          type: boolean
+        sort_order:
+          type: integer
+        metadata:
+          type: object
+          additionalProperties: true
+    AuditItem:
+      type: object
+      required: [id, action, resource_type, created_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        actor_user_id:
+          type: string
+          format: uuid
+          nullable: true
+        actor_email:
+          type: string
+          nullable: true
+        actor_name:
+          type: string
+          nullable: true
+        actor_role:
+          type: string
+          nullable: true
+        action:
+          type: string
+        resource_type:
+          type: string
+        resource_id:
+          type: string
+          nullable: true
+        request_id:
+          type: string
+          nullable: true
+        before:
+          type: object
+          nullable: true
+          additionalProperties: true
+        after:
+          type: object
+          nullable: true
+          additionalProperties: true
+        created_at:
+          type: string
+          format: date-time
+    AuditListResponse:
+      type: object
+      required: [items, page_info]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/AuditItem'
+        page_info:
+          $ref: '#/components/schemas/PageInfo'
+    CreateAuditExportRequest:
+      type: object
+      properties:
+        filters:
+          type: object
+          properties:
+            resource_type:
+              type: string
+            action:
+              type: string
+            actor_user_id:
+              type: string
+              format: uuid
+            from:
+              type: string
+              format: date-time
+            to:
+              type: string
+              format: date-time
+          additionalProperties: false
+        limit:
+          type: integer
+          minimum: 1
+          maximum: 5000
+          default: 2000
+    AuditExportResponse:
+      type: object
+      required: [export_id, status, format, row_count, created_at, download_url]
+      properties:
+        export_id:
+          type: string
+          format: uuid
+        status:
+          type: string
+          const: completed
+        format:
+          type: string
+          const: csv
+        row_count:
+          type: integer
+        created_at:
+          type: string
+          format: date-time
+        download_url:
+          type: string
+          format: uri
+        s3_key:
+          type: string
+        requested_by_user_id:
+          type: string
+          format: uuid
+        request_id:
+          type: string
     ContentListResponse:
       type: object
       required: [items, page_info]
