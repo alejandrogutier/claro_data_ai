@@ -438,6 +438,55 @@ resource "aws_iam_role_policy_attachment" "lambda_digest_basic" {
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
 }
 
+resource "aws_iam_role" "lambda_classification_worker" {
+  name = "${local.name_prefix}-lambda-classification-worker-role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Action = "sts:AssumeRole"
+        Effect = "Allow"
+        Principal = {
+          Service = "lambda.amazonaws.com"
+        }
+      }
+    ]
+  })
+}
+
+resource "aws_iam_role_policy_attachment" "lambda_classification_worker_basic" {
+  role       = aws_iam_role.lambda_classification_worker.name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+}
+
+resource "aws_iam_role_policy_attachment" "lambda_classification_worker_sqs" {
+  role       = aws_iam_role.lambda_classification_worker.name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaSQSQueueExecutionRole"
+}
+
+resource "aws_iam_role" "lambda_classification_scheduler" {
+  name = "${local.name_prefix}-lambda-classification-scheduler-role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Action = "sts:AssumeRole"
+        Effect = "Allow"
+        Principal = {
+          Service = "lambda.amazonaws.com"
+        }
+      }
+    ]
+  })
+}
+
+resource "aws_iam_role_policy_attachment" "lambda_classification_scheduler_basic" {
+  role       = aws_iam_role.lambda_classification_scheduler.name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+}
+
 resource "aws_iam_role" "lambda_migrations" {
   name = "${local.name_prefix}-lambda-migrations-role"
 
@@ -660,6 +709,59 @@ resource "aws_lambda_function" "analysis_worker" {
       DB_SECRET_ARN    = data.aws_secretsmanager_secret.database.arn
       DB_NAME          = var.db_name
       BEDROCK_MODEL_ID = "us.anthropic.claude-haiku-4-5-20251001-v1:0"
+    }
+  }
+}
+
+resource "aws_lambda_function" "classification_worker" {
+  function_name = "${local.name_prefix}-classification-worker"
+  role          = aws_iam_role.lambda_classification_worker.arn
+  runtime       = "nodejs22.x"
+  handler       = "classification/worker.main"
+
+  filename         = var.lambda_package_path
+  source_code_hash = filebase64sha256(var.lambda_package_path)
+
+  timeout                        = 240
+  memory_size                    = 1024
+  reserved_concurrent_executions = 2
+
+  environment {
+    variables = {
+      APP_ENV                       = var.environment
+      DB_RESOURCE_ARN               = aws_rds_cluster.aurora.arn
+      DB_SECRET_ARN                 = data.aws_secretsmanager_secret.database.arn
+      DB_NAME                       = var.db_name
+      BEDROCK_MODEL_ID              = "us.anthropic.claude-haiku-4-5-20251001-v1:0"
+      CLASSIFICATION_PROMPT_VERSION = "classification-v1"
+    }
+  }
+}
+
+resource "aws_lambda_function" "classification_scheduler" {
+  function_name = "${local.name_prefix}-classification-scheduler"
+  role          = aws_iam_role.lambda_classification_scheduler.arn
+  runtime       = "nodejs22.x"
+  handler       = "classification/scheduler.main"
+
+  filename         = var.lambda_package_path
+  source_code_hash = filebase64sha256(var.lambda_package_path)
+
+  timeout                        = 120
+  memory_size                    = 512
+  reserved_concurrent_executions = 1
+
+  environment {
+    variables = {
+      APP_ENV                        = var.environment
+      DB_RESOURCE_ARN                = aws_rds_cluster.aurora.arn
+      DB_SECRET_ARN                  = data.aws_secretsmanager_secret.database.arn
+      DB_NAME                        = var.db_name
+      BEDROCK_MODEL_ID               = "us.anthropic.claude-haiku-4-5-20251001-v1:0"
+      CLASSIFICATION_QUEUE_URL       = aws_sqs_queue.classification_generation.url
+      CLASSIFICATION_PROMPT_VERSION  = "classification-v1"
+      CLASSIFICATION_WINDOW_DAYS     = "7"
+      CLASSIFICATION_SCHEDULER_LIMIT = "120"
     }
   }
 }
@@ -954,6 +1056,29 @@ resource "aws_lambda_event_source_mapping" "report_queue_to_worker" {
   batch_size       = 1
 }
 
+resource "aws_sqs_queue" "classification_generation_dlq" {
+  name                      = "${local.name_prefix}-classification-generation-dlq"
+  message_retention_seconds = 1209600
+  kms_master_key_id         = aws_kms_key.app.arn
+}
+
+resource "aws_sqs_queue" "classification_generation" {
+  name                       = "${local.name_prefix}-classification-generation"
+  visibility_timeout_seconds = 360
+  message_retention_seconds  = 345600
+  kms_master_key_id          = aws_kms_key.app.arn
+  redrive_policy = jsonencode({
+    deadLetterTargetArn = aws_sqs_queue.classification_generation_dlq.arn
+    maxReceiveCount     = 5
+  })
+}
+
+resource "aws_lambda_event_source_mapping" "classification_queue_to_worker" {
+  event_source_arn = aws_sqs_queue.classification_generation.arn
+  function_name    = aws_lambda_function.classification_worker.arn
+  batch_size       = 1
+}
+
 resource "aws_sqs_queue" "analysis_generation_dlq" {
   name                      = "${local.name_prefix}-analysis-generation-dlq"
   message_retention_seconds = 1209600
@@ -1013,6 +1138,29 @@ resource "aws_lambda_permission" "report_scheduler_eventbridge" {
   function_name = aws_lambda_function.report_scheduler.function_name
   principal     = "events.amazonaws.com"
   source_arn    = aws_cloudwatch_event_rule.report_schedule.arn
+}
+
+resource "aws_cloudwatch_event_rule" "classification_schedule" {
+  name                = "${local.name_prefix}-classification-scheduler-every-15m"
+  schedule_expression = "rate(15 minutes)"
+}
+
+resource "aws_cloudwatch_event_target" "classification_schedule" {
+  rule      = aws_cloudwatch_event_rule.classification_schedule.name
+  target_id = "classification-scheduler-lambda"
+  arn       = aws_lambda_function.classification_scheduler.arn
+  input = jsonencode({
+    trigger_type = "scheduled"
+    requested_at = "eventbridge"
+  })
+}
+
+resource "aws_lambda_permission" "classification_scheduler_eventbridge" {
+  statement_id  = "AllowExecutionFromEventBridgeClassificationScheduler"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.classification_scheduler.function_name
+  principal     = "events.amazonaws.com"
+  source_arn    = aws_cloudwatch_event_rule.classification_schedule.arn
 }
 
 resource "aws_cloudwatch_event_rule" "digest_daily" {

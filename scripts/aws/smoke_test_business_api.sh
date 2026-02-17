@@ -700,6 +700,41 @@ RANDOM_ID="$(node -e 'console.log(require("crypto").randomUUID())')"
 CODE="$(curl -s -o /tmp/claro-content-bulk-state.json -w "%{http_code}" -X POST -H "Authorization: Bearer $ANALYST_TOKEN" -H "Content-Type: application/json" -d "{\"ids\":[\"$CONTENT_ID\",\"$RANDOM_ID\"],\"target_state\":\"$BULK_TARGET\",\"reason\":\"smoke bulk state\"}" "$API_BASE/v1/content/bulk/state")"
 assert_code "$CODE" "200" "POST /v1/content/bulk/state analyst"
 
+echo "[4.1] Classification async (SQS + Bedrock)"
+CLASSIFICATION_QUEUE_URL="$(terraform -chdir=infra/terraform output -raw classification_generation_queue_url)"
+BEDROCK_MODEL_ID="$(terraform -chdir=infra/terraform output -raw bedrock_model_id)"
+CLASSIFICATION_REQ_ID="smoke-classifier-$(date +%s)"
+
+aws sqs send-message \
+  --region "$AWS_REGION" \
+  --queue-url "$CLASSIFICATION_QUEUE_URL" \
+  --message-body "{\"content_item_id\":\"$CONTENT_ID\",\"prompt_version\":\"classification-v1\",\"model_id\":\"$BEDROCK_MODEL_ID\",\"trigger_type\":\"manual\",\"request_id\":\"$CLASSIFICATION_REQ_ID\",\"requested_at\":\"$(date -u +%Y-%m-%dT%H:%M:%SZ)\"}" >/dev/null
+
+CLASSIFICATION_FOUND="false"
+for i in {1..60}; do
+  COUNT_CLASSIFICATION="$(aws rds-data execute-statement \
+    --region "$AWS_REGION" \
+    --resource-arn "$CLUSTER_ARN" \
+    --secret-arn "$DB_SECRET_ARN" \
+    --database "$DB_NAME" \
+    --sql "SELECT COUNT(*)::int FROM \"public\".\"Classification\" WHERE \"contentItemId\"='${CONTENT_ID}' AND \"promptVersion\"='classification-v1' AND \"modelId\"='${BEDROCK_MODEL_ID}' AND \"isOverride\"=FALSE" \
+    --query 'records[0][0].longValue' \
+    --output text)"
+
+  if [[ "$COUNT_CLASSIFICATION" != "None" && "$COUNT_CLASSIFICATION" -ge 1 ]]; then
+    CLASSIFICATION_FOUND="true"
+    break
+  fi
+
+  sleep 5
+done
+
+if [[ "$CLASSIFICATION_FOUND" != "true" ]]; then
+  echo "[FAIL] classification record not found after wait"
+  exit 1
+fi
+echo "[OK] classification record present"
+
 CODE="$(curl -s -o /tmp/claro-content-classification.json -w "%{http_code}" -X PATCH -H "Authorization: Bearer $ANALYST_TOKEN" -H "Content-Type: application/json" -d '{"categoria":"smoke-test","sentimiento":"neutral","etiquetas":["smoke","contract"],"confidence_override":0.87,"reason":"smoke classification override"}' "$API_BASE/v1/content/$CONTENT_ID/classification")"
 assert_code "$CODE" "200" "PATCH /v1/content/{id}/classification analyst"
 
@@ -719,11 +754,12 @@ wait_export_completed "$EXPORT_ID" "$ANALYST_TOKEN"
 echo "[6] Digest daily (SES)"
 DIGEST_FUNCTION_NAME="$(terraform -chdir=infra/terraform output -raw digest_worker_lambda_name)"
 DIGEST_REQ_ID="smoke-digest-$(date +%s)"
+DIGEST_SCOPE="smoke-${DIGEST_REQ_ID}"
 aws lambda invoke \
   --cli-binary-format raw-in-base64-out \
   --region "$AWS_REGION" \
   --function-name "$DIGEST_FUNCTION_NAME" \
-  --payload "{\"trigger_type\":\"manual\",\"recipient_scope\":\"ops\",\"request_id\":\"$DIGEST_REQ_ID\"}" \
+  --payload "{\"trigger_type\":\"manual\",\"recipient_scope\":\"$DIGEST_SCOPE\",\"request_id\":\"$DIGEST_REQ_ID\"}" \
   /tmp/claro-digest-response.json >/tmp/claro-digest-meta.json
 
 DIGEST_STATUS="$(jq -r '.status // empty' /tmp/claro-digest-response.json)"
@@ -733,5 +769,16 @@ if [[ "$DIGEST_STATUS" != "completed" && "$DIGEST_STATUS" != "skipped" ]]; then
   exit 1
 fi
 echo "[OK] digest run -> $DIGEST_STATUS"
+
+if [[ -n "${ALERT_EMAIL_RECIPIENTS:-}" && "$DIGEST_STATUS" == "completed" ]]; then
+  DIGEST_EMAIL_SENT="$(jq -r '.email_sent // empty' /tmp/claro-digest-response.json)"
+  DIGEST_RECIPIENTS_COUNT="$(jq -r '.recipients_count // empty' /tmp/claro-digest-response.json)"
+  if [[ "$DIGEST_EMAIL_SENT" != "true" || "$DIGEST_RECIPIENTS_COUNT" -lt 1 ]]; then
+    echo "[FAIL] digest completed but email not sent (check SES verification + recipients)"
+    cat /tmp/claro-digest-response.json
+    exit 1
+  fi
+  echo "[OK] digest email sent to $DIGEST_RECIPIENTS_COUNT recipients"
+fi
 
 echo "Smoke business API completed"

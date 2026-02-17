@@ -46,6 +46,10 @@ output "analysis_generation_queue_url" {
   value = aws_sqs_queue.analysis_generation.url
 }
 
+output "classification_generation_queue_url" {
+  value = aws_sqs_queue.classification_generation.url
+}
+
 output "db_migration_lambda_name" {
   value = aws_lambda_function.db_migration_runner.function_name
 }
@@ -64,4 +68,12 @@ output "digest_worker_lambda_name" {
 
 output "analysis_worker_lambda_name" {
   value = aws_lambda_function.analysis_worker.function_name
+}
+
+output "classification_worker_lambda_name" {
+  value = aws_lambda_function.classification_worker.function_name
+}
+
+output "classification_scheduler_lambda_name" {
+  value = aws_lambda_function.classification_scheduler.function_name
 }

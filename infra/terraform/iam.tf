@@ -402,3 +402,97 @@ resource "aws_iam_role_policy" "lambda_analysis_access" {
     ]
   })
 }
+
+resource "aws_iam_role_policy" "lambda_classification_worker_access" {
+  name = "${local.name_prefix}-lambda-classification-worker-access"
+  role = aws_iam_role.lambda_classification_worker.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "secretsmanager:GetSecretValue",
+          "secretsmanager:DescribeSecret"
+        ]
+        Resource = [data.aws_secretsmanager_secret.database.arn]
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "rds-data:ExecuteStatement",
+          "rds-data:BatchExecuteStatement",
+          "rds-data:BeginTransaction",
+          "rds-data:CommitTransaction",
+          "rds-data:RollbackTransaction"
+        ]
+        Resource = [aws_rds_cluster.aurora.arn]
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "bedrock:InvokeModel"
+        ]
+        Resource = ["*"]
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "kms:Decrypt",
+          "kms:Encrypt",
+          "kms:GenerateDataKey",
+          "kms:DescribeKey"
+        ]
+        Resource = [aws_kms_key.app.arn]
+      }
+    ]
+  })
+}
+
+resource "aws_iam_role_policy" "lambda_classification_scheduler_access" {
+  name = "${local.name_prefix}-lambda-classification-scheduler-access"
+  role = aws_iam_role.lambda_classification_scheduler.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "secretsmanager:GetSecretValue",
+          "secretsmanager:DescribeSecret"
+        ]
+        Resource = [data.aws_secretsmanager_secret.database.arn]
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "rds-data:ExecuteStatement",
+          "rds-data:BatchExecuteStatement",
+          "rds-data:BeginTransaction",
+          "rds-data:CommitTransaction",
+          "rds-data:RollbackTransaction"
+        ]
+        Resource = [aws_rds_cluster.aurora.arn]
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "sqs:SendMessage"
+        ]
+        Resource = [aws_sqs_queue.classification_generation.arn]
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "kms:Decrypt",
+          "kms:Encrypt",
+          "kms:GenerateDataKey",
+          "kms:DescribeKey"
+        ]
+        Resource = [aws_kms_key.app.arn]
+      }
+    ]
+  })
+}

@@ -17,6 +17,10 @@ export type AppEnv = {
   incidentQueueUrl?: string;
   reportQueueUrl?: string;
   analysisQueueUrl?: string;
+  classificationQueueUrl?: string;
+  classificationPromptVersion?: string;
+  classificationWindowDays?: number;
+  classificationSchedulerLimit?: number;
   reportConfidenceThreshold?: number;
   reportDefaultTimezone?: string;
   reportEmailSender?: string;
@@ -47,6 +51,14 @@ export const env: AppEnv = {
   incidentQueueUrl: process.env.INCIDENT_QUEUE_URL,
   reportQueueUrl: process.env.REPORT_QUEUE_URL,
   analysisQueueUrl: process.env.ANALYSIS_QUEUE_URL,
+  classificationQueueUrl: process.env.CLASSIFICATION_QUEUE_URL,
+  classificationPromptVersion: process.env.CLASSIFICATION_PROMPT_VERSION ?? "classification-v1",
+  classificationWindowDays: process.env.CLASSIFICATION_WINDOW_DAYS
+    ? Number.parseInt(process.env.CLASSIFICATION_WINDOW_DAYS, 10)
+    : 7,
+  classificationSchedulerLimit: process.env.CLASSIFICATION_SCHEDULER_LIMIT
+    ? Number.parseInt(process.env.CLASSIFICATION_SCHEDULER_LIMIT, 10)
+    : 120,
   reportConfidenceThreshold: process.env.REPORT_CONFIDENCE_THRESHOLD
     ? Number.parseFloat(process.env.REPORT_CONFIDENCE_THRESHOLD)
     : 0.65,

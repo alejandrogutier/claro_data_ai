@@ -810,7 +810,7 @@ class AppStore {
           SELECT c."categoria", c."sentimiento"
           FROM "public"."Classification" c
           WHERE c."contentItemId" = ci."id"
-          ORDER BY c."createdAt" DESC
+          ORDER BY c."isOverride" DESC, c."createdAt" DESC
           LIMIT 1
         ) cls ON TRUE
         LEFT JOIN LATERAL (
@@ -910,7 +910,7 @@ class AppStore {
           SELECT c."categoria", c."sentimiento"
           FROM "public"."Classification" c
           WHERE c."contentItemId" = ci."id"
-          ORDER BY c."createdAt" DESC
+          ORDER BY c."isOverride" DESC, c."createdAt" DESC
           LIMIT 1
         ) cls ON TRUE
         LEFT JOIN LATERAL (
@@ -1418,7 +1418,7 @@ class AppStore {
           SELECT c."sentimiento"
           FROM "public"."Classification" c
           WHERE c."contentItemId" = ci."id"
-          ORDER BY c."createdAt" DESC
+          ORDER BY c."isOverride" DESC, c."createdAt" DESC
           LIMIT 1
         ) cls ON TRUE
         LEFT JOIN LATERAL (
@@ -1608,7 +1608,7 @@ class AppStore {
           FROM (
             SELECT DISTINCT ON (c."contentItemId") c."contentItemId", c."sentimiento"
             FROM "public"."Classification" c
-            ORDER BY c."contentItemId", c."createdAt" DESC
+            ORDER BY c."contentItemId", c."isOverride" DESC, c."createdAt" DESC
           ) latest
           WHERE latest."sentimiento" IS NOT NULL AND latest."sentimiento" <> ''
           GROUP BY latest."sentimiento"

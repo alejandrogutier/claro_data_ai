@@ -1168,7 +1168,7 @@ class IncidentStore {
           SELECT c."sentimiento"
           FROM "public"."Classification" c
           WHERE c."contentItemId" = ci."id"
-          ORDER BY c."createdAt" DESC
+          ORDER BY c."isOverride" DESC, c."createdAt" DESC
           LIMIT 1
         ) cls ON TRUE
         LEFT JOIN LATERAL (
