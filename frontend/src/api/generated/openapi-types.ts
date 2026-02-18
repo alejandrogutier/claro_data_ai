@@ -2146,6 +2146,163 @@ export interface paths {
         };
         trace?: never;
     };
+    "/v1/config/notifications/recipients": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Listar recipients de notificaciones (digest/incidentes) */
+        get: {
+            parameters: {
+                query: {
+                    kind: components["schemas"]["NotificationRecipientKind"];
+                    scope?: string;
+                    include_inactive?: boolean;
+                    limit?: number;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Recipients configurados */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["NotificationRecipientListResponse"];
+                    };
+                };
+                401: components["responses"]["Unauthorized"];
+                403: components["responses"]["Forbidden"];
+                422: components["responses"]["ValidationError"];
+            };
+        };
+        put?: never;
+        /** Crear recipient de notificaciones */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["CreateNotificationRecipientRequest"];
+                };
+            };
+            responses: {
+                /** @description Recipient creado */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["NotificationRecipient"];
+                    };
+                };
+                401: components["responses"]["Unauthorized"];
+                403: components["responses"]["Forbidden"];
+                409: components["responses"]["Conflict"];
+                422: components["responses"]["ValidationError"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/config/notifications/recipients/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Actualizar recipient de notificaciones */
+        patch: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: components["parameters"]["Id"];
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["UpdateNotificationRecipientRequest"];
+                };
+            };
+            responses: {
+                /** @description Recipient actualizado */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["NotificationRecipient"];
+                    };
+                };
+                401: components["responses"]["Unauthorized"];
+                403: components["responses"]["Forbidden"];
+                404: components["responses"]["NotFound"];
+                409: components["responses"]["Conflict"];
+                422: components["responses"]["ValidationError"];
+            };
+        };
+        trace?: never;
+    };
+    "/v1/config/notifications/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Estado SES (sandbox/produccion + sender verificado) */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Estado SES y sender */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["NotificationEmailStatusResponse"];
+                    };
+                };
+                401: components["responses"]["Unauthorized"];
+                403: components["responses"]["Forbidden"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/config/audit": {
         parameters: {
             query?: never;
@@ -3164,6 +3321,49 @@ export interface components {
             source_name?: string | null;
             weight?: number;
             is_active?: boolean;
+        };
+        /** @enum {string} */
+        NotificationRecipientKind: "digest" | "incident";
+        NotificationRecipient: {
+            /** Format: uuid */
+            id: string;
+            kind: components["schemas"]["NotificationRecipientKind"];
+            scope: string;
+            email?: string | null;
+            email_masked: string;
+            is_active: boolean;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+        };
+        NotificationRecipientListResponse: {
+            items: components["schemas"]["NotificationRecipient"][];
+        };
+        CreateNotificationRecipientRequest: {
+            kind: components["schemas"]["NotificationRecipientKind"];
+            /** @default ops */
+            scope: string;
+            email: string;
+            /** @default true */
+            is_active: boolean;
+        };
+        UpdateNotificationRecipientRequest: {
+            scope?: string;
+            email?: string;
+            is_active?: boolean;
+        };
+        NotificationEmailStatusResponse: {
+            production_access_enabled: boolean;
+            sending_enabled: boolean;
+            send_quota: {
+                max_24_hour_send: number | null;
+                max_send_rate: number | null;
+                sent_last_24_hours: number | null;
+            };
+            sender_email: string | null;
+            sender_verification_status: string | null;
+            sender_verified_for_sending: boolean;
         };
         AuditItem: {
             /** Format: uuid */

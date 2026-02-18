@@ -752,9 +752,30 @@ fi
 wait_export_completed "$EXPORT_ID" "$ANALYST_TOKEN"
 
 echo "[6] Digest daily (SES)"
-DIGEST_FUNCTION_NAME="$(terraform -chdir=infra/terraform output -raw digest_worker_lambda_name)"
 DIGEST_REQ_ID="smoke-digest-$(date +%s)"
 DIGEST_SCOPE="smoke-${DIGEST_REQ_ID}"
+
+CODE="$(curl -s -o /tmp/claro-notifications-status.json -w "%{http_code}" -X GET -H "Authorization: Bearer $ANALYST_TOKEN" "$API_BASE/v1/config/notifications/status")"
+assert_code "$CODE" "200" "GET /v1/config/notifications/status analyst"
+
+SES_PRODUCTION_ACCESS_ENABLED="$(jq -r '.production_access_enabled // empty' /tmp/claro-notifications-status.json)"
+SES_SENDING_ENABLED="$(jq -r '.sending_enabled // empty' /tmp/claro-notifications-status.json)"
+SES_SENDER_EMAIL="$(jq -r '.sender_email // empty' /tmp/claro-notifications-status.json)"
+SES_SENDER_VERIFIED="$(jq -r '.sender_verified_for_sending // empty' /tmp/claro-notifications-status.json)"
+
+if [[ -n "$SES_SENDER_EMAIL" ]]; then
+  CODE="$(curl -s -o /tmp/claro-recipient-create.json -w "%{http_code}" -X POST -H "Authorization: Bearer $ADMIN_TOKEN" -H "Content-Type: application/json" -d "{\"kind\":\"digest\",\"scope\":\"$DIGEST_SCOPE\",\"email\":\"$SES_SENDER_EMAIL\",\"is_active\":true}" "$API_BASE/v1/config/notifications/recipients")"
+  if [[ "$CODE" != "201" && "$CODE" != "409" ]]; then
+    echo "[FAIL] POST /v1/config/notifications/recipients expected 201/409 got=$CODE"
+    cat /tmp/claro-recipient-create.json
+    exit 1
+  fi
+  echo "[OK] notification recipient seed -> $CODE"
+else
+  echo "[WARN] sender_email is empty; skipping recipient seed"
+fi
+
+DIGEST_FUNCTION_NAME="$(terraform -chdir=infra/terraform output -raw digest_worker_lambda_name)"
 aws lambda invoke \
   --cli-binary-format raw-in-base64-out \
   --region "$AWS_REGION" \
@@ -770,15 +791,20 @@ if [[ "$DIGEST_STATUS" != "completed" && "$DIGEST_STATUS" != "skipped" ]]; then
 fi
 echo "[OK] digest run -> $DIGEST_STATUS"
 
-if [[ -n "${ALERT_EMAIL_RECIPIENTS:-}" && "$DIGEST_STATUS" == "completed" ]]; then
+if [[ "$DIGEST_STATUS" == "completed" ]]; then
   DIGEST_EMAIL_SENT="$(jq -r '.email_sent // empty' /tmp/claro-digest-response.json)"
   DIGEST_RECIPIENTS_COUNT="$(jq -r '.recipients_count // empty' /tmp/claro-digest-response.json)"
-  if [[ "$DIGEST_EMAIL_SENT" != "true" || "$DIGEST_RECIPIENTS_COUNT" -lt 1 ]]; then
-    echo "[FAIL] digest completed but email not sent (check SES verification + recipients)"
-    cat /tmp/claro-digest-response.json
-    exit 1
+  echo "[INFO] digest email_sent=$DIGEST_EMAIL_SENT recipients_count=$DIGEST_RECIPIENTS_COUNT"
+
+  if [[ "$SES_SENDING_ENABLED" == "true" && "$SES_SENDER_VERIFIED" == "true" ]]; then
+    if [[ "$DIGEST_EMAIL_SENT" != "true" || "$DIGEST_RECIPIENTS_COUNT" -lt 1 ]]; then
+      echo "[FAIL] digest completed but email not sent (check SES sandbox/prod + sender/recipient verification)"
+      cat /tmp/claro-notifications-status.json
+      cat /tmp/claro-digest-response.json
+      exit 1
+    fi
+    echo "[OK] digest email sent to $DIGEST_RECIPIENTS_COUNT recipients"
   fi
-  echo "[OK] digest email sent to $DIGEST_RECIPIENTS_COUNT recipients"
 fi
 
 echo "Smoke business API completed"

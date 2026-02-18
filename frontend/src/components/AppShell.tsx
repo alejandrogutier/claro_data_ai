@@ -72,6 +72,9 @@ export const AppShell = () => {
           <NavLink to="/app/config/source-scoring" className="nav-link">
             Source Scoring
           </NavLink>
+          <NavLink to="/app/config/alerts" className="nav-link">
+            Notificaciones
+          </NavLink>
           <NavLink to="/app/config/audit" className="nav-link">
             Auditoria
           </NavLink>

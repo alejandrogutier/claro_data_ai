@@ -49,6 +49,12 @@ export type SourceWeight = components["schemas"]["SourceWeight"];
 export type SourceWeightListResponse = components["schemas"]["SourceWeightListResponse"];
 export type CreateSourceWeightRequest = components["schemas"]["CreateSourceWeightRequest"];
 export type UpdateSourceWeightRequest = components["schemas"]["UpdateSourceWeightRequest"];
+export type NotificationRecipientKind = components["schemas"]["NotificationRecipientKind"];
+export type NotificationRecipient = components["schemas"]["NotificationRecipient"];
+export type NotificationRecipientListResponse = components["schemas"]["NotificationRecipientListResponse"];
+export type CreateNotificationRecipientRequest = components["schemas"]["CreateNotificationRecipientRequest"];
+export type UpdateNotificationRecipientRequest = components["schemas"]["UpdateNotificationRecipientRequest"];
+export type NotificationEmailStatusResponse = components["schemas"]["NotificationEmailStatusResponse"];
 export type AuditItem = components["schemas"]["AuditItem"];
 export type AuditListResponse = components["schemas"]["AuditListResponse"];
 export type CreateAuditExportRequest = components["schemas"]["CreateAuditExportRequest"];
@@ -435,6 +441,33 @@ export class ApiClient {
       method: "PATCH",
       body: payload
     });
+  }
+
+  listNotificationRecipients(query: {
+    kind: NotificationRecipientKind;
+    scope?: string;
+    include_inactive?: boolean;
+    limit?: number;
+  }): Promise<NotificationRecipientListResponse> {
+    return this.request<NotificationRecipientListResponse>("/v1/config/notifications/recipients", { query });
+  }
+
+  createNotificationRecipient(payload: CreateNotificationRecipientRequest): Promise<NotificationRecipient> {
+    return this.request<NotificationRecipient>("/v1/config/notifications/recipients", {
+      method: "POST",
+      body: payload
+    });
+  }
+
+  patchNotificationRecipient(id: string, payload: UpdateNotificationRecipientRequest): Promise<NotificationRecipient> {
+    return this.request<NotificationRecipient>(`/v1/config/notifications/recipients/${id}`, {
+      method: "PATCH",
+      body: payload
+    });
+  }
+
+  getNotificationEmailStatus(): Promise<NotificationEmailStatusResponse> {
+    return this.request<NotificationEmailStatusResponse>("/v1/config/notifications/status");
   }
 
   listConfigAudit(query: {
