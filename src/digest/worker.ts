@@ -4,8 +4,9 @@ import { env } from "../config/env";
 import { createAppStore, type ContentRecord, type MonitorOverviewRecord } from "../data/appStore";
 import { createDigestStore } from "../data/digestStore";
 import { createIncidentStore, type IncidentRecord } from "../data/incidentStore";
+import { createNotificationRecipientStore } from "../data/notificationRecipientStore";
+import { normalizeRecipients, resolveRecipientsForDelivery } from "../email/sesDelivery";
 
-const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const ACTIVE_INCIDENT_STATUSES = new Set(["open", "acknowledged", "in_progress"]);
 
 const sesv2 = new AWS.SESV2({ region: env.awsRegion });
@@ -38,55 +39,9 @@ const parseEvent = (event: unknown): DigestWorkerEvent => {
   return event as DigestWorkerEvent;
 };
 
-const parseRecipients = (raw?: string): string[] => {
+const parseRecipientsCsv = (raw?: string): string[] => {
   if (!raw) return [];
-  const values = raw
-    .split(",")
-    .map((value) => value.trim().toLowerCase())
-    .filter((value) => value.length > 0 && EMAIL_REGEX.test(value));
-  return [...new Set(values)];
-};
-
-const getDomainIdentity = (email: string): string | null => {
-  const parts = email.split("@");
-  if (parts.length !== 2 || !parts[1]) return null;
-  return parts[1].toLowerCase();
-};
-
-const isIdentityVerified = async (identity: string): Promise<boolean> => {
-  try {
-    const response = await sesv2
-      .getEmailIdentity({
-        EmailIdentity: identity
-      })
-      .promise();
-
-    return response.VerifiedForSendingStatus === true;
-  } catch {
-    return false;
-  }
-};
-
-const resolveVerifiedRecipients = async (recipients: string[]): Promise<string[]> => {
-  const verified: string[] = [];
-
-  for (const recipient of recipients) {
-    const exactVerified = await isIdentityVerified(recipient);
-    if (exactVerified) {
-      verified.push(recipient);
-      continue;
-    }
-
-    const domain = getDomainIdentity(recipient);
-    if (!domain) continue;
-
-    const domainVerified = await isIdentityVerified(domain);
-    if (domainVerified) {
-      verified.push(recipient);
-    }
-  }
-
-  return verified;
+  return normalizeRecipients(raw.split(","));
 };
 
 const toLocalParts = (
@@ -221,8 +176,9 @@ export const main = async (event: unknown): Promise<DigestWorkerResponse> => {
   const digestStore = createDigestStore();
   const appStore = createAppStore();
   const incidentStore = createIncidentStore();
+  const recipientStore = createNotificationRecipientStore();
 
-  if (!digestStore || !appStore || !incidentStore) {
+  if (!digestStore || !appStore || !incidentStore || !recipientStore) {
     return {
       status: "failed",
       run_id: null,
@@ -313,14 +269,30 @@ export const main = async (event: unknown): Promise<DigestWorkerResponse> => {
     }
 
     const sender = env.reportEmailSender || env.alertEmailSender;
-    const recipients = parseRecipients(env.alertEmailRecipients);
-    const verifiedRecipients = await resolveVerifiedRecipients(recipients);
-    recipientsCount = verifiedRecipients.length;
+    let rawRecipients = await recipientStore.listActiveEmails("digest", recipientScope);
+
+    if (rawRecipients.length === 0) {
+      console.info("digest_email_skipped_no_recipients_db", { run_id: claimed.id, recipient_scope: recipientScope });
+      const fallback = parseRecipientsCsv(env.alertEmailRecipients);
+      if (fallback.length > 0) {
+        console.warn("digest_email_recipients_fallback_env_deprecated", { run_id: claimed.id, candidate_count: fallback.length });
+        rawRecipients = fallback;
+      }
+    }
+
+    const resolved = await resolveRecipientsForDelivery(rawRecipients);
+    const deliverableRecipients = resolved.recipients;
+    recipientsCount = deliverableRecipients.length;
 
     if (!sender) {
       console.warn("digest_email_skipped_missing_sender", { run_id: claimed.id });
-    } else if (verifiedRecipients.length === 0) {
-      console.info("digest_email_skipped_no_verified_recipients", { run_id: claimed.id, recipients });
+    } else if (deliverableRecipients.length === 0) {
+      console.info("digest_email_skipped_no_deliverable_recipients", {
+        run_id: claimed.id,
+        recipient_scope: recipientScope,
+        is_sandbox: resolved.isSandbox,
+        candidate_count: rawRecipients.length
+      });
     } else {
       const subject = `[Claro Data] Digest diario ${digestDate}`;
       const body = buildEmailBody({
@@ -338,7 +310,7 @@ export const main = async (event: unknown): Promise<DigestWorkerResponse> => {
           .sendEmail({
             FromEmailAddress: sender,
             Destination: {
-              ToAddresses: verifiedRecipients
+              ToAddresses: deliverableRecipients
             },
             Content: {
               Simple: {
@@ -361,7 +333,7 @@ export const main = async (event: unknown): Promise<DigestWorkerResponse> => {
         console.error("digest_email_send_failed", {
           run_id: claimed.id,
           message: (error as Error).message,
-          recipients: verifiedRecipients
+          recipients_count: deliverableRecipients.length
         });
       }
     }

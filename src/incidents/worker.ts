@@ -2,6 +2,8 @@ import AWS from "aws-sdk";
 import type { SQSEvent } from "aws-lambda";
 import { env } from "../config/env";
 import { createIncidentStore, type IncidentRecord } from "../data/incidentStore";
+import { createNotificationRecipientStore } from "../data/notificationRecipientStore";
+import { normalizeRecipients, resolveRecipientsForDelivery } from "../email/sesDelivery";
 
 type IncidentEvaluationMessage = {
   trigger_type?: "scheduled" | "manual";
@@ -9,8 +11,6 @@ type IncidentEvaluationMessage = {
   request_id?: string;
   actor_user_id?: string;
 };
-
-const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 const sesv2 = new AWS.SESV2({ region: env.awsRegion });
 
@@ -26,53 +26,7 @@ const parseMessage = (body: string): IncidentEvaluationMessage => {
 
 const parseRecipients = (raw?: string): string[] => {
   if (!raw) return [];
-  const values = raw
-    .split(",")
-    .map((value) => value.trim().toLowerCase())
-    .filter((value) => value.length > 0 && EMAIL_REGEX.test(value));
-  return [...new Set(values)];
-};
-
-const getDomainIdentity = (email: string): string | null => {
-  const parts = email.split("@");
-  if (parts.length !== 2 || !parts[1]) return null;
-  return parts[1].toLowerCase();
-};
-
-const isIdentityVerified = async (identity: string): Promise<boolean> => {
-  try {
-    const response = await sesv2
-      .getEmailIdentity({
-        EmailIdentity: identity
-      })
-      .promise();
-
-    return response.VerifiedForSendingStatus === true;
-  } catch {
-    return false;
-  }
-};
-
-const resolveVerifiedRecipients = async (recipients: string[]): Promise<string[]> => {
-  const verified: string[] = [];
-
-  for (const recipient of recipients) {
-    const exactVerified = await isIdentityVerified(recipient);
-    if (exactVerified) {
-      verified.push(recipient);
-      continue;
-    }
-
-    const domain = getDomainIdentity(recipient);
-    if (!domain) continue;
-
-    const domainVerified = await isIdentityVerified(domain);
-    if (domainVerified) {
-      verified.push(recipient);
-    }
-  }
-
-  return verified;
+  return normalizeRecipients(raw.split(","));
 };
 
 const incidentToLine = (incident: IncidentRecord): string =>
@@ -85,16 +39,29 @@ const sendIncidentNotification = async (created: IncidentRecord[], escalated: In
     return;
   }
 
-  const recipients = parseRecipients(env.alertEmailRecipients);
-  if (recipients.length === 0) {
-    console.info("incident_email_skipped_no_recipients");
+  const recipientStore = createNotificationRecipientStore();
+  if (!recipientStore) {
+    console.warn("incident_email_skipped_missing_db");
     return;
   }
 
-  const verifiedRecipients = await resolveVerifiedRecipients(recipients);
-  if (verifiedRecipients.length === 0) {
-    console.info("incident_email_skipped_no_verified_recipients", {
-      recipients
+  let rawRecipients = await recipientStore.listActiveEmails("incident", "ops");
+  if (rawRecipients.length === 0) {
+    console.info("incident_email_skipped_no_recipients_db");
+    const fallback = parseRecipients(env.alertEmailRecipients);
+    if (fallback.length > 0) {
+      console.warn("incident_email_recipients_fallback_env_deprecated", { candidate_count: fallback.length });
+      rawRecipients = fallback;
+    }
+  }
+
+  const resolved = await resolveRecipientsForDelivery(rawRecipients);
+  const deliverableRecipients = resolved.recipients;
+
+  if (deliverableRecipients.length === 0) {
+    console.info("incident_email_skipped_no_deliverable_recipients", {
+      is_sandbox: resolved.isSandbox,
+      candidate_count: rawRecipients.length
     });
     return;
   }
@@ -124,7 +91,7 @@ const sendIncidentNotification = async (created: IncidentRecord[], escalated: In
       .sendEmail({
         FromEmailAddress: sender,
         Destination: {
-          ToAddresses: verifiedRecipients
+          ToAddresses: deliverableRecipients
         },
         Content: {
           Simple: {
@@ -145,7 +112,7 @@ const sendIncidentNotification = async (created: IncidentRecord[], escalated: In
   } catch (error) {
     console.error("incident_email_send_failed", {
       message: (error as Error).message,
-      recipients: verifiedRecipients
+      recipients_count: deliverableRecipients.length
     });
   }
 };

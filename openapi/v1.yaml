@@ -1342,6 +1342,113 @@ paths:
           $ref: '#/components/responses/Conflict'
         '422':
           $ref: '#/components/responses/ValidationError'
+  /v1/config/notifications/recipients:
+    get:
+      tags: [Config]
+      summary: Listar recipients de notificaciones (digest/incidentes)
+      parameters:
+        - name: kind
+          in: query
+          required: true
+          schema:
+            $ref: '#/components/schemas/NotificationRecipientKind'
+        - name: scope
+          in: query
+          schema:
+            type: string
+        - name: include_inactive
+          in: query
+          schema:
+            type: boolean
+            default: false
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 500
+            default: 200
+      responses:
+        '200':
+          description: Recipients configurados
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotificationRecipientListResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+    post:
+      tags: [Config]
+      summary: Crear recipient de notificaciones
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateNotificationRecipientRequest'
+      responses:
+        '201':
+          description: Recipient creado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotificationRecipient'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+  /v1/config/notifications/recipients/{id}:
+    patch:
+      tags: [Config]
+      summary: Actualizar recipient de notificaciones
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateNotificationRecipientRequest'
+      responses:
+        '200':
+          description: Recipient actualizado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotificationRecipient'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+  /v1/config/notifications/status:
+    get:
+      tags: [Config]
+      summary: Estado SES (sandbox/produccion + sender verificado)
+      responses:
+        '200':
+          description: Estado SES y sender
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotificationEmailStatusResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
   /v1/config/audit:
     get:
       tags: [Audit]
@@ -3322,6 +3429,93 @@ components:
           minimum: 0
           maximum: 1
         is_active:
+          type: boolean
+    NotificationRecipientKind:
+      type: string
+      enum: [digest, incident]
+    NotificationRecipient:
+      type: object
+      required: [id, kind, scope, email_masked, is_active, created_at, updated_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        kind:
+          $ref: '#/components/schemas/NotificationRecipientKind'
+        scope:
+          type: string
+        email:
+          type: string
+          nullable: true
+        email_masked:
+          type: string
+        is_active:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    NotificationRecipientListResponse:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/NotificationRecipient'
+    CreateNotificationRecipientRequest:
+      type: object
+      required: [kind, email]
+      properties:
+        kind:
+          $ref: '#/components/schemas/NotificationRecipientKind'
+        scope:
+          type: string
+          default: ops
+        email:
+          type: string
+        is_active:
+          type: boolean
+          default: true
+    UpdateNotificationRecipientRequest:
+      type: object
+      properties:
+        scope:
+          type: string
+        email:
+          type: string
+        is_active:
+          type: boolean
+    NotificationEmailStatusResponse:
+      type: object
+      required: [production_access_enabled, sending_enabled, send_quota, sender_email, sender_verification_status, sender_verified_for_sending]
+      properties:
+        production_access_enabled:
+          type: boolean
+        sending_enabled:
+          type: boolean
+        send_quota:
+          type: object
+          required: [max_24_hour_send, max_send_rate, sent_last_24_hours]
+          properties:
+            max_24_hour_send:
+              type: number
+              nullable: true
+            max_send_rate:
+              type: number
+              nullable: true
+            sent_last_24_hours:
+              type: number
+              nullable: true
+        sender_email:
+          type: string
+          nullable: true
+        sender_verification_status:
+          type: string
+          nullable: true
+        sender_verified_for_sending:
           type: boolean
     AuditItem:
       type: object

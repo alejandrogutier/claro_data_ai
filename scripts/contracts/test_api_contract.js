@@ -790,6 +790,78 @@ const ensureSourceScoringSurface = async (apiBase, viewerToken, adminToken) => {
   assertCondition(Array.isArray(auditForSourceWeight.json?.items), "source-scoring audit filter should return items");
 };
 
+const ensureNotificationRecipientsSurface = async (apiBase, viewerToken, analystToken, adminToken) => {
+  const viewerDenied = await request({
+    method: "GET",
+    url: `${apiBase}/v1/config/notifications/recipients?kind=digest`,
+    token: viewerToken
+  });
+  assertStatus(viewerDenied.status, 403, "GET /v1/config/notifications/recipients viewer denied");
+
+  const statusAsAnalyst = await request({
+    method: "GET",
+    url: `${apiBase}/v1/config/notifications/status`,
+    token: analystToken
+  });
+  assertStatus(statusAsAnalyst.status, 200, "GET /v1/config/notifications/status analyst");
+  assertCondition(typeof statusAsAnalyst.json?.production_access_enabled === "boolean", "notifications.status missing production_access_enabled");
+  assertCondition(typeof statusAsAnalyst.json?.sending_enabled === "boolean", "notifications.status missing sending_enabled");
+  assertCondition(statusAsAnalyst.json?.send_quota && typeof statusAsAnalyst.json.send_quota === "object", "notifications.status missing send_quota");
+
+  const scope = `contract-${Date.now()}`;
+  const email = `contract-recipient-${Date.now()}@claro.local`;
+
+  const createRecipient = await request({
+    method: "POST",
+    url: `${apiBase}/v1/config/notifications/recipients`,
+    token: adminToken,
+    body: {
+      kind: "digest",
+      scope,
+      email,
+      is_active: true
+    }
+  });
+  assertStatus(createRecipient.status, 201, "POST /v1/config/notifications/recipients admin");
+  const recipientId = createRecipient.json?.id;
+  assertCondition(typeof recipientId === "string" && UUID_REGEX.test(recipientId), "notification recipient id invalid");
+
+  const patchRecipient = await request({
+    method: "PATCH",
+    url: `${apiBase}/v1/config/notifications/recipients/${recipientId}`,
+    token: adminToken,
+    body: {
+      is_active: false
+    }
+  });
+  assertStatus(patchRecipient.status, 200, "PATCH /v1/config/notifications/recipients/{id} admin");
+
+  const listAsAnalyst = await request({
+    method: "GET",
+    url: `${apiBase}/v1/config/notifications/recipients?kind=digest&scope=${encodeURIComponent(scope)}&include_inactive=true&limit=50`,
+    token: analystToken
+  });
+  assertStatus(listAsAnalyst.status, 200, "GET /v1/config/notifications/recipients analyst");
+  assertCondition(Array.isArray(listAsAnalyst.json?.items), "notification recipients must return items[]");
+
+  const found = (listAsAnalyst.json?.items ?? []).find((item) => item.id === recipientId);
+  assertCondition(Boolean(found), "notification recipient not returned in analyst list");
+  assertCondition(found.email === null, "analyst must see email as null");
+  assertCondition(typeof found.email_masked === "string" && found.email_masked.includes("@"), "analyst must see email_masked");
+
+  const auditForRecipients = await request({
+    method: "GET",
+    url: `${apiBase}/v1/config/audit?limit=50&resource_type=NotificationRecipient`,
+    token: viewerToken
+  });
+  assertStatus(auditForRecipients.status, 200, "GET /v1/config/audit?resource_type=NotificationRecipient");
+  assertCondition(Array.isArray(auditForRecipients.json?.items), "notification recipients audit filter should return items");
+  assertCondition(
+    auditForRecipients.json.items.some((item) => item.action === "notification_recipient_created"),
+    "notification_recipient_created audit action missing"
+  );
+};
+
 const ensureAnalysisAsyncSurface = async (apiBase, viewerToken, analystToken) => {
   const viewerDenied = await request({
     method: "POST",
@@ -974,6 +1046,7 @@ const main = async () => {
 
   await ensureConfigSurface(apiBase, viewerToken, analystToken, adminToken);
   await ensureSourceScoringSurface(apiBase, viewerToken, adminToken);
+  await ensureNotificationRecipientsSurface(apiBase, viewerToken, analystToken, adminToken);
   await ensureAnalysisAsyncSurface(apiBase, viewerToken, analystToken);
 
   const contentItem = await ensureContentItem(apiBase, analystToken, viewerToken, term);

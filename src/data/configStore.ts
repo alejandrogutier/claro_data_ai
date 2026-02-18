@@ -1,5 +1,6 @@
 import { randomUUID } from "crypto";
 import { AppStoreError } from "./appStore";
+import type { UserRole } from "../core/auth";
 import {
   RdsDataClient,
   fieldBoolean,
@@ -17,12 +18,15 @@ import {
 } from "./rdsData";
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const DEFAULT_CONNECTOR_PROVIDERS = ["newsapi", "gnews", "mediastack", "hootsuite", "awario", "tiktok"] as const;
 const TAXONOMY_KINDS = ["categories", "business_lines", "macro_regions", "campaigns"] as const;
+const NOTIFICATION_RECIPIENT_KINDS = ["digest", "incident"] as const;
 
 export type ConnectorRunStatus = "queued" | "running" | "completed" | "failed";
 export type ConnectorHealth = "unknown" | "healthy" | "degraded" | "offline";
 export type TaxonomyKind = (typeof TAXONOMY_KINDS)[number];
+export type NotificationRecipientKind = (typeof NOTIFICATION_RECIPIENT_KINDS)[number];
 
 type AuditCursorPayload = {
   created_at: string;
@@ -88,6 +92,36 @@ export type SourceWeightUpdateInput = {
 
 export type SourceWeightListFilters = {
   provider?: string;
+  includeInactive?: boolean;
+};
+
+export type NotificationRecipientRecord = {
+  id: string;
+  kind: NotificationRecipientKind;
+  scope: string;
+  email: string | null;
+  emailMasked: string;
+  isActive: boolean;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
+export type NotificationRecipientCreateInput = {
+  kind: NotificationRecipientKind;
+  scope?: string;
+  email: string;
+  isActive?: boolean;
+};
+
+export type NotificationRecipientUpdateInput = {
+  scope?: string;
+  email?: string;
+  isActive?: boolean;
+};
+
+export type NotificationRecipientListFilters = {
+  kind: NotificationRecipientKind;
+  scope?: string;
   includeInactive?: boolean;
 };
 
@@ -378,6 +412,59 @@ const normalizeSourceName = (value: string | null | undefined): string | null =>
   return normalized.length > 0 ? normalized : null;
 };
 
+const toNotificationRecipientKind = (value: string | null): NotificationRecipientKind | null => {
+  if (!value) return null;
+  if (NOTIFICATION_RECIPIENT_KINDS.includes(value as NotificationRecipientKind)) return value as NotificationRecipientKind;
+  return null;
+};
+
+const maskEmail = (email: string): string => {
+  const normalized = email.trim().toLowerCase();
+  const parts = normalized.split("@");
+  if (parts.length !== 2 || !parts[0] || !parts[1]) return "***";
+
+  const [local, domain] = parts;
+  const start = local.slice(0, 1);
+  const end = local.length > 1 ? local.slice(-1) : "";
+  return `${start}***${end}@${domain}`;
+};
+
+const normalizeNotificationScope = (value: string): string | null => {
+  const normalized = value.trim().toLowerCase();
+  if (!normalized) return null;
+  return normalized.slice(0, 64);
+};
+
+const normalizeNotificationEmail = (value: string): string | null => {
+  const normalized = value.trim().toLowerCase();
+  if (!normalized || normalized.length > 320) return null;
+  if (!EMAIL_REGEX.test(normalized)) return null;
+  return normalized;
+};
+
+const parseNotificationRecipientRow = (row: SqlRow | undefined): NotificationRecipientRecord | null => {
+  const id = fieldString(row, 0);
+  const kind = toNotificationRecipientKind(fieldString(row, 1));
+  const scope = fieldString(row, 2);
+  const email = fieldString(row, 3);
+  const isActive = fieldBoolean(row, 4);
+  const createdAt = fieldDate(row, 5);
+  const updatedAt = fieldDate(row, 6);
+
+  if (!id || !kind || !scope || !email || isActive === null || !createdAt || !updatedAt) return null;
+
+  return {
+    id,
+    kind,
+    scope,
+    email,
+    emailMasked: maskEmail(email),
+    isActive,
+    createdAt,
+    updatedAt
+  };
+};
+
 const parseOwnedAccountRow = (row: SqlRow | undefined): OwnedAccountRecord | null => {
   const id = fieldString(row, 0);
   const platform = fieldString(row, 1);
@@ -553,6 +640,31 @@ class ConfigStore {
     return parseSourceWeightRow(response.records?.[0]);
   }
 
+  private async getNotificationRecipientById(
+    id: string,
+    transactionId?: string
+  ): Promise<NotificationRecipientRecord | null> {
+    const response = await this.rds.execute(
+      `
+        SELECT
+          "id"::text,
+          "kind"::text,
+          "scope",
+          "email",
+          "isActive",
+          "createdAt",
+          "updatedAt"
+        FROM "public"."NotificationRecipient"
+        WHERE "id" = CAST(:id AS UUID)
+        LIMIT 1
+      `,
+      [sqlUuid("id", id)],
+      { transactionId }
+    );
+
+    return parseNotificationRecipientRow(response.records?.[0]);
+  }
+
   private async findSourceWeightByIdentity(
     provider: string,
     sourceName: string | null,
@@ -575,6 +687,36 @@ class ConfigStore {
       [
         sqlString("provider", provider),
         sqlString("source_name", sourceName),
+        sqlUuid("exclude_id", excludeId ?? null)
+      ],
+      { transactionId }
+    );
+
+    return fieldString(response.records?.[0], 0);
+  }
+
+  private async findNotificationRecipientByIdentity(
+    kind: NotificationRecipientKind,
+    scope: string,
+    email: string,
+    excludeId?: string,
+    transactionId?: string
+  ): Promise<string | null> {
+    const response = await this.rds.execute(
+      `
+        SELECT "id"::text
+        FROM "public"."NotificationRecipient"
+        WHERE
+          "kind" = CAST(:kind AS "public"."NotificationRecipientKind")
+          AND "scope" = :scope
+          AND "email" = :email
+          AND (CAST(:exclude_id AS UUID) IS NULL OR "id" <> CAST(:exclude_id AS UUID))
+        LIMIT 1
+      `,
+      [
+        sqlString("kind", kind),
+        sqlString("scope", scope),
+        sqlString("email", email),
         sqlUuid("exclude_id", excludeId ?? null)
       ],
       { transactionId }
@@ -1122,6 +1264,244 @@ class ConfigStore {
       await this.rds.rollbackTransaction(tx).catch(() => undefined);
       if (isUniqueViolation(error)) {
         throw new AppStoreError("conflict", "Source weight already exists for provider/source_name");
+      }
+      throw error;
+    }
+  }
+
+  async listNotificationRecipients(
+    filters: NotificationRecipientListFilters,
+    limit = 200,
+    role: UserRole
+  ): Promise<NotificationRecipientRecord[]> {
+    const safeLimit = Math.min(500, Math.max(1, limit));
+
+    if (!NOTIFICATION_RECIPIENT_KINDS.includes(filters.kind)) {
+      throw new AppStoreError("validation", "kind must be digest or incident");
+    }
+
+    const conditions: string[] = ['nr."kind" = CAST(:kind AS "public"."NotificationRecipientKind")'];
+    const params: SqlParameter[] = [sqlString("kind", filters.kind), sqlLong("limit", safeLimit)];
+
+    if (!filters.includeInactive) {
+      conditions.push('nr."isActive" = TRUE');
+    }
+
+    if (filters.scope) {
+      conditions.push('nr."scope" = :scope');
+      params.push(sqlString("scope", filters.scope.trim().toLowerCase()));
+    }
+
+    const whereClause = `WHERE ${conditions.join(" AND ")}`;
+
+    const response = await this.rds.execute(
+      `
+        SELECT
+          nr."id"::text,
+          nr."kind"::text,
+          nr."scope",
+          nr."email",
+          nr."isActive",
+          nr."createdAt",
+          nr."updatedAt"
+        FROM "public"."NotificationRecipient" nr
+        ${whereClause}
+        ORDER BY nr."scope" ASC, nr."email" ASC, nr."id" ASC
+        LIMIT :limit
+      `,
+      params
+    );
+
+    const items = (response.records ?? [])
+      .map(parseNotificationRecipientRow)
+      .filter((item): item is NotificationRecipientRecord => item !== null);
+
+    if (role !== "Admin") {
+      return items.map((item) => ({
+        ...item,
+        email: null
+      }));
+    }
+
+    return items;
+  }
+
+  async createNotificationRecipient(
+    input: NotificationRecipientCreateInput,
+    actorUserId: string,
+    requestId?: string
+  ): Promise<NotificationRecipientRecord> {
+    if (!NOTIFICATION_RECIPIENT_KINDS.includes(input.kind)) {
+      throw new AppStoreError("validation", "kind must be digest or incident");
+    }
+
+    const scope = normalizeNotificationScope(input.scope ?? "ops");
+    const email = normalizeNotificationEmail(input.email);
+
+    if (!scope) {
+      throw new AppStoreError("validation", "scope is required");
+    }
+    if (!email) {
+      throw new AppStoreError("validation", "email is invalid");
+    }
+
+    const tx = await this.rds.beginTransaction();
+
+    try {
+      const existingId = await this.findNotificationRecipientByIdentity(input.kind, scope, email, undefined, tx);
+      if (existingId) {
+        throw new AppStoreError("conflict", "Notification recipient already exists for kind+scope+email");
+      }
+
+      const response = await this.rds.execute(
+        `
+          INSERT INTO "public"."NotificationRecipient"
+            ("id", "kind", "scope", "email", "isActive", "updatedByUserId", "createdAt", "updatedAt")
+          VALUES
+            (CAST(:id AS UUID), CAST(:kind AS "public"."NotificationRecipientKind"), :scope, :email, :is_active, CAST(:updated_by_user_id AS UUID), NOW(), NOW())
+          RETURNING
+            "id"::text,
+            "kind"::text,
+            "scope",
+            "email",
+            "isActive",
+            "createdAt",
+            "updatedAt"
+        `,
+        [
+          sqlUuid("id", randomUUID()),
+          sqlString("kind", input.kind),
+          sqlString("scope", scope),
+          sqlString("email", email),
+          sqlBoolean("is_active", input.isActive ?? true),
+          sqlUuid("updated_by_user_id", actorUserId)
+        ],
+        { transactionId: tx }
+      );
+
+      const created = parseNotificationRecipientRow(response.records?.[0]);
+      if (!created) {
+        throw new Error("Failed to parse created notification recipient");
+      }
+
+      await this.appendAudit(
+        {
+          actorUserId,
+          action: "notification_recipient_created",
+          resourceType: "NotificationRecipient",
+          resourceId: created.id,
+          requestId,
+          after: created
+        },
+        tx
+      );
+
+      await this.rds.commitTransaction(tx);
+      return created;
+    } catch (error) {
+      await this.rds.rollbackTransaction(tx).catch(() => undefined);
+      if (isUniqueViolation(error)) {
+        throw new AppStoreError("conflict", "Notification recipient already exists for kind+scope+email");
+      }
+      throw error;
+    }
+  }
+
+  async updateNotificationRecipient(
+    id: string,
+    input: NotificationRecipientUpdateInput,
+    actorUserId: string,
+    requestId?: string
+  ): Promise<NotificationRecipientRecord> {
+    const tx = await this.rds.beginTransaction();
+
+    try {
+      const before = await this.getNotificationRecipientById(id, tx);
+      if (!before) {
+        throw new AppStoreError("not_found", "Notification recipient not found");
+      }
+
+      let nextScope = before.scope;
+      if (input.scope !== undefined) {
+        const normalized = normalizeNotificationScope(input.scope);
+        if (!normalized) {
+          throw new AppStoreError("validation", "scope is invalid");
+        }
+        nextScope = normalized;
+      }
+
+      let nextEmail = before.email ?? "";
+      if (input.email !== undefined) {
+        const normalized = normalizeNotificationEmail(input.email);
+        if (!normalized) {
+          throw new AppStoreError("validation", "email is invalid");
+        }
+        nextEmail = normalized;
+      }
+
+      if (nextScope && nextEmail) {
+        const identityConflict = await this.findNotificationRecipientByIdentity(before.kind, nextScope, nextEmail, id, tx);
+        if (identityConflict) {
+          throw new AppStoreError("conflict", "Notification recipient already exists for kind+scope+email");
+        }
+      }
+
+      const setParts: string[] = ['"updatedAt" = NOW()', '"updatedByUserId" = CAST(:updated_by_user_id AS UUID)'];
+      const params: SqlParameter[] = [sqlUuid("id", id), sqlUuid("updated_by_user_id", actorUserId)];
+
+      if (input.scope !== undefined) {
+        setParts.push('"scope" = :scope');
+        params.push(sqlString("scope", nextScope));
+      }
+
+      if (input.email !== undefined) {
+        setParts.push('"email" = :email');
+        params.push(sqlString("email", nextEmail));
+      }
+
+      if (input.isActive !== undefined) {
+        setParts.push('"isActive" = :is_active');
+        params.push(sqlBoolean("is_active", input.isActive));
+      }
+
+      if (setParts.length === 2) {
+        throw new AppStoreError("conflict", "No changes requested for notification recipient");
+      }
+
+      await this.rds.execute(
+        `
+          UPDATE "public"."NotificationRecipient"
+          SET ${setParts.join(", ")}
+          WHERE "id" = CAST(:id AS UUID)
+        `,
+        params,
+        { transactionId: tx }
+      );
+
+      const after = await this.getNotificationRecipientById(id, tx);
+      if (!after) {
+        throw new Error("Failed to load updated notification recipient");
+      }
+
+      await this.appendAudit(
+        {
+          actorUserId,
+          action: "notification_recipient_updated",
+          resourceType: "NotificationRecipient",
+          resourceId: after.id,
+          requestId,
+          before,
+          after
+        },
+        tx
+      );
+
+      await this.rds.commitTransaction(tx);
+      return after;
+    } catch (error) {
+      await this.rds.rollbackTransaction(tx).catch(() => undefined);
+      if (isUniqueViolation(error)) {
+        throw new AppStoreError("conflict", "Notification recipient already exists for kind+scope+email");
       }
       throw error;
     }

@@ -76,6 +76,11 @@ enum AnalysisRunScope {
   custom
 }
 
+enum NotificationRecipientKind {
+  digest
+  incident
+}
+
 model User {
   id              String               @id @default(uuid()) @db.Uuid
   email           String               @unique
@@ -90,6 +95,7 @@ model User {
   exportJobs           ExportJob[]
   analysisRuns         AnalysisRun[]    @relation("AnalysisRunRequester")
   sourceWeightsUpdated SourceWeight[]   @relation("SourceWeightUpdater")
+  notificationRecipientsUpdated NotificationRecipient[] @relation("NotificationRecipientUpdater")
   connectorSyncRuns    ConnectorSyncRun[]
   ownedIncidents       Incident[]       @relation("IncidentOwner")
   incidentNotes        IncidentNote[]   @relation("IncidentNoteAuthor")
@@ -302,6 +308,21 @@ model SourceWeight {
 
   @@unique([provider, sourceName])
   @@index([provider])
+}
+
+model NotificationRecipient {
+  id              String                   @id @default(uuid()) @db.Uuid
+  kind            NotificationRecipientKind
+  scope           String
+  email           String
+  isActive        Boolean                  @default(true)
+  updatedByUserId String?                  @db.Uuid
+  createdAt       DateTime                 @default(now())
+  updatedAt       DateTime                 @updatedAt
+  updatedByUser   User?                    @relation("NotificationRecipientUpdater", fields: [updatedByUserId], references: [id], onDelete: SetNull)
+
+  @@unique([kind, scope, email])
+  @@index([kind, scope, isActive])
 }
 
 model AuditLog {

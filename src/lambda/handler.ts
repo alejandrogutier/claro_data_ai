@@ -38,17 +38,21 @@ import {
 import {
   createConfigAccount,
   createConfigCompetitor,
+  createNotificationRecipient,
   createTaxonomy,
   exportConfigAudit,
   listConfigAccounts,
   listConfigAudit,
   listConfigCompetitors,
+  getNotificationStatus,
+  listNotificationRecipients,
   listSourceScoringWeights,
   listConnectors,
   listConnectorRuns,
   listTaxonomies,
   patchConfigAccount,
   patchConfigCompetitor,
+  patchNotificationRecipient,
   patchSourceScoringWeight,
   patchConnector,
   patchTaxonomy,
@@ -111,6 +115,10 @@ const roleRules: RoleRule[] = [
   { pattern: /^PATCH \/v1\/config\/taxonomies\/[^/]+\/[^/]+$/, requiredRole: "Admin" },
   { pattern: /^GET \/v1\/config\/audit$/, requiredRole: "Viewer" },
   { pattern: /^POST \/v1\/config\/audit\/export$/, requiredRole: "Analyst" },
+  { pattern: /^GET \/v1\/config\/notifications\/recipients$/, requiredRole: "Analyst" },
+  { pattern: /^POST \/v1\/config\/notifications\/recipients$/, requiredRole: "Admin" },
+  { pattern: /^PATCH \/v1\/config\/notifications\/recipients\/[^/]+$/, requiredRole: "Admin" },
+  { pattern: /^GET \/v1\/config\/notifications\/status$/, requiredRole: "Analyst" },
   { pattern: /^GET \/v1\/config\/source-scoring\/weights$/, requiredRole: "Viewer" },
   { pattern: /^POST \/v1\/config\/source-scoring\/weights$/, requiredRole: "Admin" },
   { pattern: /^PATCH \/v1\/config\/source-scoring\/weights\/[^/]+$/, requiredRole: "Admin" }
@@ -213,6 +221,10 @@ export const main = async (event: APIGatewayProxyEventV2) => {
   if (key.match(/^PATCH \/v1\/config\/taxonomies\/[^/]+\/[^/]+$/)) return patchTaxonomy(event);
   if (key === "GET /v1/config/audit") return listConfigAudit(event);
   if (key === "POST /v1/config/audit/export") return exportConfigAudit(event);
+  if (key === "GET /v1/config/notifications/recipients") return listNotificationRecipients(event);
+  if (key === "POST /v1/config/notifications/recipients") return createNotificationRecipient(event);
+  if (key.match(/^PATCH \/v1\/config\/notifications\/recipients\/[^/]+$/)) return patchNotificationRecipient(event);
+  if (key === "GET /v1/config/notifications/status") return getNotificationStatus(event);
   if (key === "GET /v1/config/source-scoring/weights") return listSourceScoringWeights(event);
   if (key === "POST /v1/config/source-scoring/weights") return createSourceScoringWeight(event);
   if (key.match(/^PATCH \/v1\/config\/source-scoring\/weights\/[^/]+$/)) return patchSourceScoringWeight(event);

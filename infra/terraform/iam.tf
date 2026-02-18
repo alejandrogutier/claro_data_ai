@@ -59,6 +59,16 @@ resource "aws_iam_role_policy" "lambda_secrets_access" {
           "s3:PutObjectTagging"
         ]
         Resource = ["${aws_s3_bucket.exports.arn}/*"]
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "ses:GetAccount",
+          "ses:GetEmailIdentity",
+          "sesv2:GetAccount",
+          "sesv2:GetEmailIdentity"
+        ]
+        Resource = ["*"]
       }
     ]
   })
@@ -215,7 +225,10 @@ resource "aws_iam_role_policy" "lambda_incident_access" {
         Action = [
           "ses:SendEmail",
           "ses:SendRawEmail",
+          "ses:GetAccount",
+          "ses:GetEmailIdentity",
           "ses:GetIdentityVerificationAttributes",
+          "sesv2:GetAccount",
           "sesv2:GetEmailIdentity",
           "sesv2:SendEmail"
         ]
@@ -275,7 +288,10 @@ resource "aws_iam_role_policy" "lambda_digest_access" {
         Action = [
           "ses:SendEmail",
           "ses:SendRawEmail",
+          "ses:GetAccount",
+          "ses:GetEmailIdentity",
           "ses:GetIdentityVerificationAttributes",
+          "sesv2:GetAccount",
           "sesv2:GetEmailIdentity",
           "sesv2:SendEmail"
         ]
@@ -336,7 +352,10 @@ resource "aws_iam_role_policy" "lambda_report_access" {
         Action = [
           "ses:SendEmail",
           "ses:SendRawEmail",
+          "ses:GetAccount",
+          "ses:GetEmailIdentity",
           "ses:GetIdentityVerificationAttributes",
+          "sesv2:GetAccount",
           "sesv2:GetEmailIdentity",
           "sesv2:SendEmail"
         ]

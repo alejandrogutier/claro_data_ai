@@ -917,6 +917,10 @@ resource "aws_apigatewayv2_route" "private_routes" {
     "POST /v1/config/source-scoring/weights",
     "PATCH /v1/config/source-scoring/weights/{id}",
     "GET /v1/config/audit",
+    "GET /v1/config/notifications/recipients",
+    "POST /v1/config/notifications/recipients",
+    "PATCH /v1/config/notifications/recipients/{id}",
+    "GET /v1/config/notifications/status",
     "POST /v1/config/audit/export"
   ])
 

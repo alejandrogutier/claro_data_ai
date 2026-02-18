@@ -4,10 +4,10 @@ import { env } from "../config/env";
 import { createAppStore, type ContentFilters } from "../data/appStore";
 import { createIncidentStore } from "../data/incidentStore";
 import { createReportStore, type ReportRunDetail } from "../data/reportStore";
+import { resolveRecipientsForDelivery } from "../email/sesDelivery";
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const ACTIVE_INCIDENT_STATUSES = new Set(["open", "acknowledged", "in_progress"]);
-const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 const sqs = new AWS.SQS({ region: env.awsRegion });
 const sesv2 = new AWS.SESV2({ region: env.awsRegion });
@@ -26,8 +26,6 @@ type NarrativeInput = {
   activeIncidents: Awaited<ReturnType<NonNullable<ReturnType<typeof createIncidentStore>>["listIncidents"]>>["items"];
   topContent: Awaited<ReturnType<NonNullable<ReturnType<typeof createAppStore>>["listContent"]>>["items"];
 };
-
-const identityCache = new Map<string, boolean>();
 
 const clamp = (value: number, min: number, max: number): number => Math.max(min, Math.min(max, value));
 
@@ -185,55 +183,6 @@ const buildSummary = (input: NarrativeInput): Record<string, unknown> => {
   };
 };
 
-const getDomainIdentity = (email: string): string | null => {
-  const parts = email.split("@");
-  if (parts.length !== 2 || !parts[1]) return null;
-  return parts[1].toLowerCase();
-};
-
-const isIdentityVerified = async (identity: string): Promise<boolean> => {
-  if (identityCache.has(identity)) {
-    return identityCache.get(identity) ?? false;
-  }
-
-  try {
-    const response = await sesv2
-      .getEmailIdentity({
-        EmailIdentity: identity
-      })
-      .promise();
-
-    const verified = response.VerifiedForSendingStatus === true;
-    identityCache.set(identity, verified);
-    return verified;
-  } catch {
-    identityCache.set(identity, false);
-    return false;
-  }
-};
-
-const resolveVerifiedRecipients = async (recipients: string[]): Promise<string[]> => {
-  const verified: string[] = [];
-
-  for (const recipient of recipients) {
-    const exactVerified = await isIdentityVerified(recipient);
-    if (exactVerified) {
-      verified.push(recipient);
-      continue;
-    }
-
-    const domain = getDomainIdentity(recipient);
-    if (!domain) continue;
-
-    const domainVerified = await isIdentityVerified(domain);
-    if (domainVerified) {
-      verified.push(recipient);
-    }
-  }
-
-  return [...new Set(verified)];
-};
-
 const sendReportEmail = async (
   detail: ReportRunDetail,
   confidence: number,
@@ -250,20 +199,14 @@ const sendReportEmail = async (
     return;
   }
 
-  const candidateRecipients = detail.schedule.recipients
-    .map((value) => value.trim().toLowerCase())
-    .filter((value) => EMAIL_REGEX.test(value));
+  const resolved = await resolveRecipientsForDelivery(detail.schedule.recipients);
+  const deliverableRecipients = resolved.recipients;
 
-  if (candidateRecipients.length === 0) {
-    console.info("report_email_skipped_no_recipients", { report_run_id: detail.run.id });
-    return;
-  }
-
-  const verifiedRecipients = await resolveVerifiedRecipients(candidateRecipients);
-  if (verifiedRecipients.length === 0) {
-    console.info("report_email_skipped_no_verified_recipients", {
+  if (deliverableRecipients.length === 0) {
+    console.info("report_email_skipped_no_deliverable_recipients", {
       report_run_id: detail.run.id,
-      recipients: candidateRecipients
+      is_sandbox: resolved.isSandbox,
+      candidate_count: detail.schedule.recipients.length
     });
     return;
   }
@@ -287,7 +230,7 @@ const sendReportEmail = async (
       .sendEmail({
         FromEmailAddress: sender,
         Destination: {
-          ToAddresses: verifiedRecipients
+          ToAddresses: deliverableRecipients
         },
         Content: {
           Simple: {
@@ -309,7 +252,7 @@ const sendReportEmail = async (
     console.error("report_email_send_failed", {
       report_run_id: detail.run.id,
       message: (error as Error).message,
-      recipients: verifiedRecipients
+      recipients_count: deliverableRecipients.length
     });
   }
 };

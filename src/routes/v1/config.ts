@@ -5,6 +5,7 @@ import { env } from "../../config/env";
 import { getAuthPrincipal, getRole, hasRole, type UserRole } from "../../core/auth";
 import { getPathWithoutStage, getRequestId, json, parseBody } from "../../core/http";
 import { AppStoreError, createAppStore } from "../../data/appStore";
+import { getNotificationEmailStatus } from "../../email/sesDelivery";
 import {
   createConfigStore,
   isTaxonomyKind,
@@ -13,6 +14,11 @@ import {
   type CompetitorRecord,
   type ConnectorRecord,
   type ConnectorSyncRunRecord,
+  type NotificationRecipientCreateInput,
+  type NotificationRecipientKind,
+  type NotificationRecipientListFilters,
+  type NotificationRecipientRecord,
+  type NotificationRecipientUpdateInput,
   type OwnedAccountRecord,
   type SourceWeightRecord,
   type SourceWeightUpdateInput,
@@ -76,6 +82,19 @@ type TaxonomyBody = {
 type AuditExportBody = {
   filters?: Record<string, unknown>;
   limit?: unknown;
+};
+
+type NotificationRecipientCreateBody = {
+  kind?: unknown;
+  scope?: unknown;
+  email?: unknown;
+  is_active?: unknown;
+};
+
+type NotificationRecipientPatchBody = {
+  scope?: unknown;
+  email?: unknown;
+  is_active?: unknown;
 };
 
 const parseLimit = (value: string | undefined, fallback: number, max: number): number | null => {
@@ -182,6 +201,17 @@ const toApiSourceWeight = (item: SourceWeightRecord) => ({
   updated_at: item.updatedAt.toISOString()
 });
 
+const toApiNotificationRecipient = (item: NotificationRecipientRecord) => ({
+  id: item.id,
+  kind: item.kind,
+  scope: item.scope,
+  email: item.email,
+  email_masked: item.emailMasked,
+  is_active: item.isActive,
+  created_at: item.createdAt.toISOString(),
+  updated_at: item.updatedAt.toISOString()
+});
+
 const toApiAccount = (item: OwnedAccountRecord) => ({
   id: item.id,
   plataforma: item.platform,
@@ -262,6 +292,30 @@ const getTaxonomyPathParams = (
     kind: rawKind,
     id: maybeId
   };
+};
+
+const normalizeNotificationKind = (value: string | undefined): NotificationRecipientKind | null => {
+  if (!value) return null;
+  const normalized = value.trim().toLowerCase();
+  if (normalized === "digest" || normalized === "incident") {
+    return normalized as NotificationRecipientKind;
+  }
+  return null;
+};
+
+const normalizeScopeQuery = (value: string | undefined): string | null => {
+  if (!value) return null;
+  const scope = normalizeString(value, 1, 64);
+  return scope ? scope.toLowerCase() : null;
+};
+
+const normalizeEmail = (value: unknown): string | null => {
+  const email = normalizeString(value, 3, 320);
+  if (!email) return null;
+  const normalized = email.trim().toLowerCase();
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  if (!emailRegex.test(normalized)) return null;
+  return normalized;
 };
 
 const assertStores = () => {
@@ -616,6 +670,183 @@ export const patchSourceScoringWeight = async (event: APIGatewayProxyEventV2) =>
     return json(200, toApiSourceWeight(updated));
   } catch (error) {
     return mapStoreError(error);
+  }
+};
+
+export const listNotificationRecipients = async (event: APIGatewayProxyEventV2) => {
+  const role = getRole(event);
+  if (!hasRole(role, "Analyst")) {
+    return json(403, { error: "forbidden", message: "Rol Analyst requerido para listar recipients" });
+  }
+
+  const query = event.queryStringParameters ?? {};
+  const kind = normalizeNotificationKind(query.kind);
+  if (!kind) {
+    return json(422, { error: "validation_error", message: "kind debe ser digest|incident" });
+  }
+
+  const scope = normalizeScopeQuery(query.scope);
+  if (query.scope && !scope) {
+    return json(422, { error: "validation_error", message: "scope invalido" });
+  }
+
+  const includeInactive = query.include_inactive === "true";
+  const limit = parseLimit(query.limit, 200, 500);
+  if (limit === null) {
+    return json(422, { error: "validation_error", message: "limit debe ser entero entre 1 y 500" });
+  }
+
+  const stores = assertStores();
+  if (stores.error) return stores.error;
+
+  try {
+    const filters: NotificationRecipientListFilters = {
+      kind,
+      scope: scope ?? undefined,
+      includeInactive
+    };
+    const items = await stores.store.listNotificationRecipients(filters, limit, role);
+    return json(200, { items: items.map(toApiNotificationRecipient) });
+  } catch (error) {
+    return mapStoreError(error);
+  }
+};
+
+export const createNotificationRecipient = async (event: APIGatewayProxyEventV2) => {
+  const role = getRole(event);
+  if (!hasRole(role, "Admin")) {
+    return json(403, { error: "forbidden", message: "Solo Admin puede crear recipients" });
+  }
+
+  const body = parseBody<NotificationRecipientCreateBody>(event);
+  if (!body) {
+    return json(400, { error: "invalid_json", message: "Body JSON invalido" });
+  }
+
+  const kind = normalizeNotificationKind(typeof body.kind === "string" ? body.kind : undefined);
+  if (!kind) {
+    return json(422, { error: "validation_error", message: "kind debe ser digest|incident" });
+  }
+
+  const email = normalizeEmail(body.email);
+  if (!email) {
+    return json(422, { error: "validation_error", message: "email invalido" });
+  }
+
+  const scopeRaw = body.scope === undefined ? null : normalizeString(body.scope, 1, 64);
+  if (body.scope !== undefined && !scopeRaw) {
+    return json(422, { error: "validation_error", message: "scope invalido" });
+  }
+  const scope = (scopeRaw ?? "ops").toLowerCase();
+
+  const isActive = body.is_active === undefined ? true : body.is_active;
+  if (typeof isActive !== "boolean") {
+    return json(422, { error: "validation_error", message: "is_active debe ser boolean" });
+  }
+
+  const stores = assertStores();
+  if (stores.error) return stores.error;
+
+  try {
+    const principal = getAuthPrincipal(event);
+    const actorUserId = await stores.appStore.upsertUserFromPrincipal(principal);
+
+    const payload: NotificationRecipientCreateInput = {
+      kind,
+      scope,
+      email,
+      isActive
+    };
+
+    const created = await stores.store.createNotificationRecipient(payload, actorUserId, getRequestId(event));
+    return json(201, toApiNotificationRecipient(created));
+  } catch (error) {
+    return mapStoreError(error);
+  }
+};
+
+export const patchNotificationRecipient = async (event: APIGatewayProxyEventV2) => {
+  const role = getRole(event);
+  if (!hasRole(role, "Admin")) {
+    return json(403, { error: "forbidden", message: "Solo Admin puede actualizar recipients" });
+  }
+
+  const recipientId = getIdFromPath(event, /^\/v1\/config\/notifications\/recipients\/([^/]+)$/);
+  if (!recipientId || !UUID_REGEX.test(recipientId)) {
+    return json(422, { error: "validation_error", message: "id invalido" });
+  }
+
+  const body = parseBody<NotificationRecipientPatchBody>(event);
+  if (!body) {
+    return json(400, { error: "invalid_json", message: "Body JSON invalido" });
+  }
+
+  const patch: NotificationRecipientUpdateInput = {};
+
+  if (body.scope !== undefined) {
+    const scope = normalizeString(body.scope, 1, 64);
+    if (!scope) {
+      return json(422, { error: "validation_error", message: "scope invalido" });
+    }
+    patch.scope = scope.toLowerCase();
+  }
+
+  if (body.email !== undefined) {
+    const email = normalizeEmail(body.email);
+    if (!email) {
+      return json(422, { error: "validation_error", message: "email invalido" });
+    }
+    patch.email = email;
+  }
+
+  if (body.is_active !== undefined) {
+    if (typeof body.is_active !== "boolean") {
+      return json(422, { error: "validation_error", message: "is_active debe ser boolean" });
+    }
+    patch.isActive = body.is_active;
+  }
+
+  if (Object.keys(patch).length === 0) {
+    return json(422, { error: "validation_error", message: "No hay campos para actualizar" });
+  }
+
+  const stores = assertStores();
+  if (stores.error) return stores.error;
+
+  try {
+    const principal = getAuthPrincipal(event);
+    const actorUserId = await stores.appStore.upsertUserFromPrincipal(principal);
+    const updated = await stores.store.updateNotificationRecipient(recipientId, patch, actorUserId, getRequestId(event));
+    return json(200, toApiNotificationRecipient(updated));
+  } catch (error) {
+    return mapStoreError(error);
+  }
+};
+
+export const getNotificationStatus = async (event: APIGatewayProxyEventV2) => {
+  const role = getRole(event);
+  if (!hasRole(role, "Analyst")) {
+    return json(403, { error: "forbidden", message: "Rol Analyst requerido para ver estado de SES" });
+  }
+
+  try {
+    const senderEmail = env.reportEmailSender || env.alertEmailSender || null;
+    const status = await getNotificationEmailStatus(senderEmail);
+
+    return json(200, {
+      production_access_enabled: status.productionAccessEnabled,
+      sending_enabled: status.sendingEnabled,
+      send_quota: {
+        max_24_hour_send: status.sendQuota.max24HourSend,
+        max_send_rate: status.sendQuota.maxSendRate,
+        sent_last_24_hours: status.sendQuota.sentLast24Hours
+      },
+      sender_email: status.senderEmail,
+      sender_verification_status: status.senderVerificationStatus,
+      sender_verified_for_sending: status.senderVerifiedForSending
+    });
+  } catch (error) {
+    return json(500, { error: "internal_error", message: (error as Error).message });
   }
 };
 
