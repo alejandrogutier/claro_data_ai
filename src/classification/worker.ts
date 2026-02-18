@@ -125,6 +125,36 @@ const normalizeString = (value: unknown, maxLen: number): string | null => {
   return trimmed.length > maxLen ? trimmed.slice(0, maxLen) : trimmed;
 };
 
+const normalizeSentimiento = (value: unknown): "positivo" | "neutro" | "negativo" | null => {
+  if (typeof value !== "string") return null;
+
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+
+  const simplified = trimmed
+    .toLowerCase()
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z]+/g, " ")
+    .trim();
+
+  if (!simplified) return null;
+
+  const tokens = simplified.split(/\s+/).filter(Boolean);
+  const hasPos = tokens.some((t) => t.startsWith("positiv"));
+  const hasNeg = tokens.some((t) => t.startsWith("negativ"));
+  const hasNeu = tokens.some((t) => t.startsWith("neutr") || t.startsWith("neutral"));
+  const hasMixed = tokens.some((t) => t.startsWith("mixt") || t.startsWith("mixed"));
+
+  // When the model hedges (e.g., "positivo/negativo" or "mixed"), default to neutral.
+  if (hasMixed || (hasPos && hasNeg) || (hasNeu && (hasPos || hasNeg))) return "neutro";
+  if (hasPos) return "positivo";
+  if (hasNeg) return "negativo";
+  if (hasNeu) return "neutro";
+
+  return null;
+};
+
 const validateOutput = (payload: Record<string, unknown>): {
   categoria: string;
   sentimiento: "positivo" | "neutro" | "negativo";
@@ -137,11 +167,10 @@ const validateOutput = (payload: Record<string, unknown>): {
     throw new Error("model_missing_categoria");
   }
 
-  const sentimientoRaw = normalizeString(payload.sentimiento, 20)?.toLowerCase() ?? "";
-  const sentimiento =
-    sentimientoRaw === "positivo" ? "positivo" : sentimientoRaw === "neutro" ? "neutro" : sentimientoRaw === "negativo" ? "negativo" : null;
+  const sentimiento = normalizeSentimiento(payload.sentimiento);
   if (!sentimiento) {
-    throw new Error("model_invalid_sentimiento");
+    const raw = typeof payload.sentimiento === "string" ? payload.sentimiento : JSON.stringify(payload.sentimiento);
+    throw new Error(`model_invalid_sentimiento:${raw ?? "null"}`);
   }
 
   const etiquetasRaw = payload.etiquetas;
@@ -348,4 +377,3 @@ export const main = async (event: SQSEvent) => {
     });
   }
 };
-
