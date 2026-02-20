@@ -12,6 +12,7 @@ Provisionar la base AWS de `claro_data` para V1 en una sola region (`us-east-1`)
 - API Gateway HTTP + Lambda base
 - SQS + DLQ
 - Step Functions + EventBridge (15 min)
+- Scheduler social diario 08:00 America/Bogota (ETL S3 organic)
 - Aurora PostgreSQL Serverless v2
 - Secrets Manager
 - SES identidad remitente
@@ -40,6 +41,9 @@ terraform apply -var-file=terraform.tfvars
   - `claro-data-prod/aws-credentials`
   - `claro-data-prod/database`
 - Artefacto Lambda local: `build/lambda-api.zip`.
+- Origen social configurable:
+  - `social_raw_bucket_name` (default: `claro-dataslayer-dump`)
+  - `social_raw_prefix` (default: `raw/organic/`)
 
 ## Tags obligatorios
 Aplicar en todos los recursos:

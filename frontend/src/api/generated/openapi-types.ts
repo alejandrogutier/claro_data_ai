@@ -351,6 +351,1125 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/monitor/social/overview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Resumen social analytics V2 (no oficial) */
+        get: {
+            parameters: {
+                query?: {
+                    preset?: components["schemas"]["SocialDatePreset"];
+                    window_days?: 7 | 30 | 90;
+                    from?: string;
+                    to?: string;
+                    /** @description Canal o lista CSV de canales (`facebook,instagram,...`) */
+                    channel?: string;
+                    /** @description Cuenta o lista CSV de cuentas */
+                    account?: string;
+                    /** @description Tipo de post o lista CSV de tipos (`unknown` para vacios) */
+                    post_type?: string;
+                    trend_granularity?: components["schemas"]["SocialTrendGranularity"];
+                    sentiment?: components["schemas"]["SocialSentiment"];
+                    /** @description Campaña o lista CSV de campañas */
+                    campaign?: string;
+                    /** @description Estrategia o lista CSV de estrategias */
+                    strategy?: string;
+                    /** @description Hashtag o lista CSV de hashtags (con o sin */
+                    hashtag?: string;
+                    comparison_mode?: components["schemas"]["SocialComparisonMode"];
+                    comparison_days?: number;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Resumen KPI social */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["MonitorSocialOverviewResponse"];
+                    };
+                };
+                401: components["responses"]["Unauthorized"];
+                403: components["responses"]["Forbidden"];
+                422: components["responses"]["ValidationError"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/monitor/social/accounts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Ranking de cuentas social analytics V2 */
+        get: {
+            parameters: {
+                query?: {
+                    preset?: components["schemas"]["SocialDatePreset"];
+                    window_days?: 7 | 30 | 90;
+                    from?: string;
+                    to?: string;
+                    /** @description Canal o lista CSV de canales (`facebook,instagram,...`) */
+                    channel?: string;
+                    /** @description Cuenta o lista CSV de cuentas */
+                    account?: string;
+                    /** @description Tipo de post o lista CSV de tipos (`unknown` para vacios) */
+                    post_type?: string;
+                    sentiment?: components["schemas"]["SocialSentiment"];
+                    /** @description Campaña o lista CSV de campañas */
+                    campaign?: string;
+                    /** @description Estrategia o lista CSV de estrategias */
+                    strategy?: string;
+                    /** @description Hashtag o lista CSV de hashtags (con o sin */
+                    hashtag?: string;
+                    comparison_mode?: components["schemas"]["SocialComparisonMode"];
+                    comparison_days?: number;
+                    min_posts?: number;
+                    min_exposure?: number;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Ranking de cuentas */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["MonitorSocialAccountsResponse"];
+                    };
+                };
+                401: components["responses"]["Unauthorized"];
+                403: components["responses"]["Forbidden"];
+                422: components["responses"]["ValidationError"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/monitor/social/posts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Listado paginado de posts social analytics V2 */
+        get: {
+            parameters: {
+                query?: {
+                    /** @description Cursor opaco para paginacion */
+                    cursor?: components["parameters"]["Cursor"];
+                    limit?: components["parameters"]["Limit"];
+                    preset?: components["schemas"]["SocialDatePreset"];
+                    window_days?: 7 | 30 | 90;
+                    from?: string;
+                    to?: string;
+                    /** @description Canal o lista CSV de canales (`facebook,instagram,...`) */
+                    channel?: string;
+                    /** @description Cuenta o lista CSV de cuentas */
+                    account?: string;
+                    /** @description Tipo de post o lista CSV de tipos (`unknown` para vacios) */
+                    post_type?: string;
+                    sentiment?: components["schemas"]["SocialSentiment"];
+                    /** @description Campaña o lista CSV de campañas */
+                    campaign?: string;
+                    /** @description Estrategia o lista CSV de estrategias */
+                    strategy?: string;
+                    /** @description Hashtag o lista CSV de hashtags (con o sin */
+                    hashtag?: string;
+                    comparison_mode?: components["schemas"]["SocialComparisonMode"];
+                    comparison_days?: number;
+                    sort?: components["schemas"]["SocialPostSort"];
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Posts sociales */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["MonitorSocialPostsResponse"];
+                    };
+                };
+                401: components["responses"]["Unauthorized"];
+                403: components["responses"]["Forbidden"];
+                422: components["responses"]["ValidationError"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/monitor/social/risk": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Tendencias de riesgo y sentimiento social analytics V2 */
+        get: {
+            parameters: {
+                query?: {
+                    preset?: components["schemas"]["SocialDatePreset"];
+                    window_days?: 7 | 30 | 90;
+                    from?: string;
+                    to?: string;
+                    /** @description Canal o lista CSV de canales (`facebook,instagram,...`) */
+                    channel?: string;
+                    /** @description Cuenta o lista CSV de cuentas */
+                    account?: string;
+                    /** @description Tipo de post o lista CSV de tipos (`unknown` para vacios) */
+                    post_type?: string;
+                    /** @description Campaña o lista CSV de campañas */
+                    campaign?: string;
+                    /** @description Estrategia o lista CSV de estrategias */
+                    strategy?: string;
+                    /** @description Hashtag o lista CSV de hashtags (con o sin */
+                    hashtag?: string;
+                    comparison_mode?: components["schemas"]["SocialComparisonMode"];
+                    comparison_days?: number;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Riesgo social */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["MonitorSocialRiskResponse"];
+                    };
+                };
+                401: components["responses"]["Unauthorized"];
+                403: components["responses"]["Forbidden"];
+                422: components["responses"]["ValidationError"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/monitor/social/charts/heatmap": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Dataset heatmap dia x mes para metrica seleccionada */
+        get: {
+            parameters: {
+                query?: {
+                    preset?: components["schemas"]["SocialDatePreset"];
+                    window_days?: 7 | 30 | 90;
+                    from?: string;
+                    to?: string;
+                    /** @description Canal o lista CSV de canales (`facebook,instagram,...`) */
+                    channel?: string;
+                    /** @description Cuenta o lista CSV de cuentas */
+                    account?: string;
+                    /** @description Tipo de post o lista CSV de tipos (`unknown` para vacios) */
+                    post_type?: string;
+                    /** @description Campaña o lista CSV de campañas */
+                    campaign?: string;
+                    /** @description Estrategia o lista CSV de estrategias */
+                    strategy?: string;
+                    /** @description Hashtag o lista CSV de hashtags (con o sin */
+                    hashtag?: string;
+                    comparison_mode?: components["schemas"]["SocialComparisonMode"];
+                    comparison_days?: number;
+                    metric?: components["schemas"]["SocialHeatmapMetric"];
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Dataset heatmap */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["MonitorSocialHeatmapResponse"];
+                    };
+                };
+                401: components["responses"]["Unauthorized"];
+                403: components["responses"]["Forbidden"];
+                422: components["responses"]["ValidationError"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/monitor/social/charts/scatter": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Dataset scatter ER vs exposicion por dimension */
+        get: {
+            parameters: {
+                query?: {
+                    preset?: components["schemas"]["SocialDatePreset"];
+                    window_days?: 7 | 30 | 90;
+                    from?: string;
+                    to?: string;
+                    /** @description Canal o lista CSV de canales (`facebook,instagram,...`) */
+                    channel?: string;
+                    /** @description Cuenta o lista CSV de cuentas */
+                    account?: string;
+                    /** @description Tipo de post o lista CSV de tipos (`unknown` para vacios) */
+                    post_type?: string;
+                    /** @description Campaña o lista CSV de campañas */
+                    campaign?: string;
+                    /** @description Estrategia o lista CSV de estrategias */
+                    strategy?: string;
+                    /** @description Hashtag o lista CSV de hashtags (con o sin */
+                    hashtag?: string;
+                    comparison_mode?: components["schemas"]["SocialComparisonMode"];
+                    comparison_days?: number;
+                    dimension?: components["schemas"]["SocialScatterDimension"];
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Dataset scatter */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["MonitorSocialScatterResponse"];
+                    };
+                };
+                401: components["responses"]["Unauthorized"];
+                403: components["responses"]["Forbidden"];
+                422: components["responses"]["ValidationError"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/monitor/social/charts/er-breakdown": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Dataset agregado ER por dimension analitica */
+        get: {
+            parameters: {
+                query?: {
+                    preset?: components["schemas"]["SocialDatePreset"];
+                    window_days?: 7 | 30 | 90;
+                    from?: string;
+                    to?: string;
+                    /** @description Canal o lista CSV de canales (`facebook,instagram,...`) */
+                    channel?: string;
+                    /** @description Cuenta o lista CSV de cuentas */
+                    account?: string;
+                    /** @description Tipo de post o lista CSV de tipos (`unknown` para vacios) */
+                    post_type?: string;
+                    /** @description Campaña o lista CSV de campañas */
+                    campaign?: string;
+                    /** @description Estrategia o lista CSV de estrategias */
+                    strategy?: string;
+                    /** @description Hashtag o lista CSV de hashtags (con o sin */
+                    hashtag?: string;
+                    comparison_mode?: components["schemas"]["SocialComparisonMode"];
+                    comparison_days?: number;
+                    dimension?: components["schemas"]["SocialErBreakdownDimension"];
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Dataset ER por dimension */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["MonitorSocialErBreakdownResponse"];
+                    };
+                };
+                401: components["responses"]["Unauthorized"];
+                403: components["responses"]["Forbidden"];
+                422: components["responses"]["ValidationError"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/monitor/social/targets/er": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Metas ER por canal para 2026 (auto + overrides) */
+        get: {
+            parameters: {
+                query?: {
+                    year?: number;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Metas ER por canal */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["MonitorSocialErTargetsResponse"];
+                    };
+                };
+                401: components["responses"]["Unauthorized"];
+                403: components["responses"]["Forbidden"];
+                422: components["responses"]["ValidationError"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Actualizar metas ER por canal (solo Admin) */
+        patch: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["PatchMonitorSocialErTargetsRequest"];
+                };
+            };
+            responses: {
+                /** @description Metas ER actualizadas */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["MonitorSocialErTargetsResponse"];
+                    };
+                };
+                401: components["responses"]["Unauthorized"];
+                403: components["responses"]["Forbidden"];
+                422: components["responses"]["ValidationError"];
+            };
+        };
+        trace?: never;
+    };
+    "/v1/monitor/social/hashtags/backfill": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Ejecutar backfill idempotente de hashtags historicos */
+        post: {
+            parameters: {
+                query?: {
+                    limit?: number;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Backfill aceptado */
+                202: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["MonitorSocialHashtagBackfillResponse"];
+                    };
+                };
+                401: components["responses"]["Unauthorized"];
+                403: components["responses"]["Forbidden"];
+                422: components["responses"]["ValidationError"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/monitor/social/etl-quality": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Calidad ETL y reconciliacion S3-DB */
+        get: {
+            parameters: {
+                query?: {
+                    limit?: components["parameters"]["Limit"];
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Calidad ETL social */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["MonitorSocialEtlQualityResponse"];
+                    };
+                };
+                401: components["responses"]["Unauthorized"];
+                403: components["responses"]["Forbidden"];
+                422: components["responses"]["ValidationError"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/monitor/social/export.xlsx": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Export Excel social analytics V2 */
+        get: {
+            parameters: {
+                query?: {
+                    preset?: components["schemas"]["SocialDatePreset"];
+                    window_days?: 7 | 30 | 90;
+                    from?: string;
+                    to?: string;
+                    /** @description Canal o lista CSV de canales (`facebook,instagram,...`) */
+                    channel?: string;
+                    /** @description Cuenta o lista CSV de cuentas */
+                    account?: string;
+                    /** @description Tipo de post o lista CSV de tipos (`unknown` para vacios) */
+                    post_type?: string;
+                    sentiment?: components["schemas"]["SocialSentiment"];
+                    /** @description Campaña o lista CSV de campañas */
+                    campaign?: string;
+                    /** @description Estrategia o lista CSV de estrategias */
+                    strategy?: string;
+                    /** @description Hashtag o lista CSV de hashtags (con o sin */
+                    hashtag?: string;
+                    comparison_mode?: components["schemas"]["SocialComparisonMode"];
+                    comparison_days?: number;
+                    sort?: components["schemas"]["SocialPostSort"];
+                    min_posts?: number;
+                    min_exposure?: number;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Archivo Excel */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": string;
+                    };
+                };
+                401: components["responses"]["Unauthorized"];
+                403: components["responses"]["Forbidden"];
+                422: components["responses"]["ValidationError"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/monitor/social/runs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Historial de corridas de sync social */
+        get: {
+            parameters: {
+                query?: {
+                    /** @description Cursor opaco para paginacion */
+                    cursor?: components["parameters"]["Cursor"];
+                    limit?: components["parameters"]["Limit"];
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Corridas sociales */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["MonitorSocialRunsResponse"];
+                    };
+                };
+                401: components["responses"]["Unauthorized"];
+                403: components["responses"]["Forbidden"];
+                422: components["responses"]["ValidationError"];
+            };
+        };
+        put?: never;
+        /** Disparar corrida manual async de sync social */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["CreateMonitorSocialRunRequest"];
+                };
+            };
+            responses: {
+                /** @description Corrida aceptada */
+                202: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["MonitorSocialRunAccepted"];
+                    };
+                };
+                401: components["responses"]["Unauthorized"];
+                403: components["responses"]["Forbidden"];
+                422: components["responses"]["ValidationError"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/monitor/social/settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Obtener configuracion social de umbrales y metas */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Configuracion social */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["MonitorSocialSettings"];
+                    };
+                };
+                401: components["responses"]["Unauthorized"];
+                403: components["responses"]["Forbidden"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Actualizar configuracion social (Admin) */
+        patch: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["PatchMonitorSocialSettingsRequest"];
+                };
+            };
+            responses: {
+                /** @description Configuracion actualizada */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["MonitorSocialSettings"];
+                    };
+                };
+                401: components["responses"]["Unauthorized"];
+                403: components["responses"]["Forbidden"];
+                422: components["responses"]["ValidationError"];
+            };
+        };
+        trace?: never;
+    };
+    "/v1/monitor/incidents": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Listado paginado de incidentes operativos */
+        get: {
+            parameters: {
+                query?: {
+                    /** @description Cursor opaco para paginacion */
+                    cursor?: components["parameters"]["Cursor"];
+                    limit?: components["parameters"]["Limit"];
+                    status?: components["schemas"]["IncidentStatus"];
+                    severity?: components["schemas"]["MonitorSeverity"];
+                    scope?: components["schemas"]["TermScope"];
+                    owner_user_id?: string;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Lista de incidentes */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["IncidentListResponse"];
+                    };
+                };
+                401: components["responses"]["Unauthorized"];
+                403: components["responses"]["Forbidden"];
+                422: components["responses"]["ValidationError"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/monitor/incidents/evaluate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Disparar evaluacion manual de incidentes */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Evaluacion encolada */
+                202: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["IncidentEvaluationAccepted"];
+                    };
+                };
+                401: components["responses"]["Unauthorized"];
+                403: components["responses"]["Forbidden"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/monitor/incidents/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Actualizar estado, owner y/o nota de un incidente */
+        patch: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: components["parameters"]["Id"];
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["PatchIncidentRequest"];
+                };
+            };
+            responses: {
+                /** @description Incidente actualizado */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["PatchIncidentResponse"];
+                    };
+                };
+                401: components["responses"]["Unauthorized"];
+                403: components["responses"]["Forbidden"];
+                404: components["responses"]["NotFound"];
+                409: components["responses"]["Conflict"];
+                422: components["responses"]["ValidationError"];
+            };
+        };
+        trace?: never;
+    };
+    "/v1/monitor/incidents/{id}/notes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Listar notas de incidente */
+        get: {
+            parameters: {
+                query?: {
+                    limit?: components["parameters"]["Limit"];
+                };
+                header?: never;
+                path: {
+                    id: components["parameters"]["Id"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Notas del incidente */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["IncidentNotesResponse"];
+                    };
+                };
+                401: components["responses"]["Unauthorized"];
+                403: components["responses"]["Forbidden"];
+                404: components["responses"]["NotFound"];
+                422: components["responses"]["ValidationError"];
+            };
+        };
+        put?: never;
+        /** Agregar nota de incidente */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: components["parameters"]["Id"];
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["CreateIncidentNoteRequest"];
+                };
+            };
+            responses: {
+                /** @description Nota creada */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["IncidentNote"];
+                    };
+                };
+                401: components["responses"]["Unauthorized"];
+                403: components["responses"]["Forbidden"];
+                404: components["responses"]["NotFound"];
+                422: components["responses"]["ValidationError"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/analyze/overview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Overview de analisis con variacion contra periodo anterior */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Resumen de analisis V1 (news-only, ventana fija de 7 dias) */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["AnalyzeOverviewResponse"];
+                    };
+                };
+                401: components["responses"]["Unauthorized"];
+                403: components["responses"]["Forbidden"];
+                /** @description Error interno */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/analyze/channel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Analisis por canal/proveedor */
+        get: {
+            parameters: {
+                query?: {
+                    limit?: components["parameters"]["Limit"];
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Desglose por canal/proveedor */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["AnalyzeChannelResponse"];
+                    };
+                };
+                401: components["responses"]["Unauthorized"];
+                403: components["responses"]["Forbidden"];
+                422: components["responses"]["ValidationError"];
+                /** @description Error interno */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/analyze/competitors": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Benchmark de competencia sobre set cerrado (scope=competencia) */
+        get: {
+            parameters: {
+                query?: {
+                    limit?: components["parameters"]["Limit"];
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Benchmark de competidores */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["AnalyzeCompetitorsResponse"];
+                    };
+                };
+                401: components["responses"]["Unauthorized"];
+                403: components["responses"]["Forbidden"];
+                422: components["responses"]["ValidationError"];
+                /** @description Error interno */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ErrorResponse"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/content/{id}/state": {
         parameters: {
             query?: never;
@@ -496,7 +1615,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Ejecutar analisis agregado */
+        /** Crear corrida async de analisis agregado */
         post: {
             parameters: {
                 query?: never;
@@ -510,7 +1629,7 @@ export interface paths {
                 };
             };
             responses: {
-                /** @description Analisis en proceso */
+                /** @description Corrida aceptada (nueva o reutilizada por idempotencia) */
                 202: {
                     headers: {
                         [name: string]: unknown;
@@ -519,6 +1638,9 @@ export interface paths {
                         "application/json": components["schemas"]["AnalysisRunAccepted"];
                     };
                 };
+                401: components["responses"]["Unauthorized"];
+                403: components["responses"]["Forbidden"];
+                422: components["responses"]["ValidationError"];
             };
         };
         delete?: never;
@@ -541,6 +1663,10 @@ export interface paths {
                     /** @description Cursor opaco para paginacion */
                     cursor?: components["parameters"]["Cursor"];
                     limit?: components["parameters"]["Limit"];
+                    status?: components["schemas"]["AnalysisRunStatus"];
+                    scope?: components["schemas"]["AnalysisRunScope"];
+                    from?: string;
+                    to?: string;
                 };
                 header?: never;
                 path?: never;
@@ -557,6 +1683,51 @@ export interface paths {
                         "application/json": components["schemas"]["AnalysisRunListResponse"];
                     };
                 };
+                401: components["responses"]["Unauthorized"];
+                403: components["responses"]["Forbidden"];
+                422: components["responses"]["ValidationError"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/analysis/runs/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Detalle de corrida async de analisis */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: components["parameters"]["Id"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Detalle de corrida */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["AnalysisRunDetailResponse"];
+                    };
+                };
+                401: components["responses"]["Unauthorized"];
+                403: components["responses"]["Forbidden"];
+                404: components["responses"]["NotFound"];
+                422: components["responses"]["ValidationError"];
             };
         };
         put?: never;
@@ -646,6 +1817,416 @@ export interface paths {
         };
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/reports/center": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Centro de reportes (historial de corridas) */
+        get: {
+            parameters: {
+                query?: {
+                    /** @description Cursor opaco para paginacion */
+                    cursor?: components["parameters"]["Cursor"];
+                    limit?: components["parameters"]["Limit"];
+                    status?: components["schemas"]["ReportRunStatus"];
+                    template_id?: string;
+                    from?: string;
+                    to?: string;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Lista paginada de corridas */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ReportRunListResponse"];
+                    };
+                };
+                401: components["responses"]["Unauthorized"];
+                403: components["responses"]["Forbidden"];
+                422: components["responses"]["ValidationError"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/reports/runs/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Detalle de corrida de reporte */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: components["parameters"]["Id"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Detalle de corrida */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ReportRunDetailResponse"];
+                    };
+                };
+                401: components["responses"]["Unauthorized"];
+                403: components["responses"]["Forbidden"];
+                404: components["responses"]["NotFound"];
+                422: components["responses"]["ValidationError"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/reports/runs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Ejecutar corrida manual de reporte por plantilla */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["CreateReportRunRequest"];
+                };
+            };
+            responses: {
+                /** @description Corrida aceptada */
+                202: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ReportRunAccepted"];
+                    };
+                };
+                401: components["responses"]["Unauthorized"];
+                403: components["responses"]["Forbidden"];
+                404: components["responses"]["NotFound"];
+                409: components["responses"]["Conflict"];
+                422: components["responses"]["ValidationError"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/reports/templates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Listar plantillas de reportes */
+        get: {
+            parameters: {
+                query?: {
+                    limit?: components["parameters"]["Limit"];
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Lista de plantillas */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ReportTemplatesResponse"];
+                    };
+                };
+                401: components["responses"]["Unauthorized"];
+                403: components["responses"]["Forbidden"];
+                422: components["responses"]["ValidationError"];
+            };
+        };
+        put?: never;
+        /** Crear plantilla de reporte */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["CreateReportTemplateRequest"];
+                };
+            };
+            responses: {
+                /** @description Plantilla creada */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ReportTemplate"];
+                    };
+                };
+                401: components["responses"]["Unauthorized"];
+                403: components["responses"]["Forbidden"];
+                409: components["responses"]["Conflict"];
+                422: components["responses"]["ValidationError"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/reports/templates/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Actualizar plantilla de reporte */
+        patch: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: components["parameters"]["Id"];
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["UpdateReportTemplateRequest"];
+                };
+            };
+            responses: {
+                /** @description Plantilla actualizada */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ReportTemplate"];
+                    };
+                };
+                401: components["responses"]["Unauthorized"];
+                403: components["responses"]["Forbidden"];
+                404: components["responses"]["NotFound"];
+                409: components["responses"]["Conflict"];
+                422: components["responses"]["ValidationError"];
+            };
+        };
+        trace?: never;
+    };
+    "/v1/reports/schedules": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Listar schedules de reportes */
+        get: {
+            parameters: {
+                query?: {
+                    limit?: number;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Lista de schedules */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ReportSchedulesResponse"];
+                    };
+                };
+                401: components["responses"]["Unauthorized"];
+                403: components["responses"]["Forbidden"];
+                422: components["responses"]["ValidationError"];
+            };
+        };
+        put?: never;
+        /** Crear schedule de reporte */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["CreateReportScheduleRequest"];
+                };
+            };
+            responses: {
+                /** @description Schedule creado */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ReportSchedule"];
+                    };
+                };
+                401: components["responses"]["Unauthorized"];
+                403: components["responses"]["Forbidden"];
+                404: components["responses"]["NotFound"];
+                409: components["responses"]["Conflict"];
+                422: components["responses"]["ValidationError"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/reports/schedules/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Actualizar schedule de reporte */
+        patch: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: components["parameters"]["Id"];
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["UpdateReportScheduleRequest"];
+                };
+            };
+            responses: {
+                /** @description Schedule actualizado */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ReportSchedule"];
+                    };
+                };
+                401: components["responses"]["Unauthorized"];
+                403: components["responses"]["Forbidden"];
+                404: components["responses"]["NotFound"];
+                409: components["responses"]["Conflict"];
+                422: components["responses"]["ValidationError"];
+            };
+        };
+        trace?: never;
+    };
+    "/v1/reports/schedules/{id}/run": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Disparar corrida manual para un schedule */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: components["parameters"]["Id"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Corrida aceptada */
+                202: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ReportScheduleRunAccepted"];
+                    };
+                };
+                401: components["responses"]["Unauthorized"];
+                403: components["responses"]["Forbidden"];
+                404: components["responses"]["NotFound"];
+                409: components["responses"]["Conflict"];
+                422: components["responses"]["ValidationError"];
+            };
+        };
         delete?: never;
         options?: never;
         head?: never;
@@ -1214,6 +2795,280 @@ export interface paths {
         };
         trace?: never;
     };
+    "/v1/config/source-scoring/weights": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Listar pesos configurables de source scoring */
+        get: {
+            parameters: {
+                query?: {
+                    provider?: string;
+                    include_inactive?: boolean;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Pesos configurados */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["SourceWeightListResponse"];
+                    };
+                };
+                401: components["responses"]["Unauthorized"];
+                403: components["responses"]["Forbidden"];
+                422: components["responses"]["ValidationError"];
+            };
+        };
+        put?: never;
+        /** Crear peso de source scoring */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["CreateSourceWeightRequest"];
+                };
+            };
+            responses: {
+                /** @description Peso creado */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["SourceWeight"];
+                    };
+                };
+                401: components["responses"]["Unauthorized"];
+                403: components["responses"]["Forbidden"];
+                409: components["responses"]["Conflict"];
+                422: components["responses"]["ValidationError"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/config/source-scoring/weights/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Actualizar peso de source scoring */
+        patch: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: components["parameters"]["Id"];
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["UpdateSourceWeightRequest"];
+                };
+            };
+            responses: {
+                /** @description Peso actualizado */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["SourceWeight"];
+                    };
+                };
+                401: components["responses"]["Unauthorized"];
+                403: components["responses"]["Forbidden"];
+                404: components["responses"]["NotFound"];
+                409: components["responses"]["Conflict"];
+                422: components["responses"]["ValidationError"];
+            };
+        };
+        trace?: never;
+    };
+    "/v1/config/notifications/recipients": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Listar recipients de notificaciones (digest/incidentes) */
+        get: {
+            parameters: {
+                query: {
+                    kind: components["schemas"]["NotificationRecipientKind"];
+                    scope?: string;
+                    include_inactive?: boolean;
+                    limit?: number;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Recipients configurados */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["NotificationRecipientListResponse"];
+                    };
+                };
+                401: components["responses"]["Unauthorized"];
+                403: components["responses"]["Forbidden"];
+                422: components["responses"]["ValidationError"];
+            };
+        };
+        put?: never;
+        /** Crear recipient de notificaciones */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["CreateNotificationRecipientRequest"];
+                };
+            };
+            responses: {
+                /** @description Recipient creado */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["NotificationRecipient"];
+                    };
+                };
+                401: components["responses"]["Unauthorized"];
+                403: components["responses"]["Forbidden"];
+                409: components["responses"]["Conflict"];
+                422: components["responses"]["ValidationError"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/config/notifications/recipients/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Actualizar recipient de notificaciones */
+        patch: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: components["parameters"]["Id"];
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["UpdateNotificationRecipientRequest"];
+                };
+            };
+            responses: {
+                /** @description Recipient actualizado */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["NotificationRecipient"];
+                    };
+                };
+                401: components["responses"]["Unauthorized"];
+                403: components["responses"]["Forbidden"];
+                404: components["responses"]["NotFound"];
+                409: components["responses"]["Conflict"];
+                422: components["responses"]["ValidationError"];
+            };
+        };
+        trace?: never;
+    };
+    "/v1/config/notifications/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Estado SES (sandbox/produccion + sender verificado) */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Estado SES y sender */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["NotificationEmailStatusResponse"];
+                    };
+                };
+                401: components["responses"]["Unauthorized"];
+                403: components["responses"]["Forbidden"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/config/audit": {
         parameters: {
             query?: never;
@@ -1321,6 +3176,14 @@ export interface components {
         ContentState: "active" | "archived" | "hidden";
         /** @enum {string} */
         TermScope: "claro" | "competencia";
+        /** @enum {string} */
+        AnalysisRunScope: "overview" | "channel" | "competitors" | "custom";
+        /** @enum {string} */
+        AnalysisRunStatus: "queued" | "running" | "completed" | "failed";
+        /** @enum {string} */
+        RunStatus: "queued" | "running" | "completed" | "failed";
+        /** @enum {string} */
+        TriggerType: "scheduled" | "manual";
         Term: {
             /** Format: uuid */
             id: string;
@@ -1484,10 +3347,32 @@ export interface components {
             reason?: string;
         };
         CreateAnalysisRunRequest: {
-            /** Format: uuid */
-            term_id?: string;
+            scope: components["schemas"]["AnalysisRunScope"];
+            /** @default news */
+            source_type: components["schemas"]["SourceType"];
+            /**
+             * @default manual
+             * @enum {string}
+             */
+            trigger_type: "manual" | "scheduled";
+            model_id?: string;
+            /** @default analysis-v1 */
+            prompt_version: string;
+            idempotency_key?: string | null;
+            filters?: {
+                /** Format: uuid */
+                term_id?: string;
+                provider?: string;
+                category?: string;
+                sentimiento?: string;
+                q?: string;
+                /** Format: date-time */
+                from?: string;
+                /** Format: date-time */
+                to?: string;
+            };
             content_ids?: string[];
-            /** @default 100 */
+            /** @default 120 */
             limit: number;
         };
         AnalysisRunAccepted: {
@@ -1495,23 +3380,62 @@ export interface components {
             analysis_run_id: string;
             /** @constant */
             status: "accepted";
+            reused: boolean;
+            input_count: number;
+            idempotency_key: string;
         };
         AnalysisRun: {
             /** Format: uuid */
             id: string;
-            /** Format: uuid */
-            term_id?: string;
+            scope: components["schemas"]["AnalysisRunScope"];
+            status: components["schemas"]["AnalysisRunStatus"];
             /** @enum {string} */
-            status: "queued" | "running" | "completed" | "failed";
-            output?: {
+            trigger_type: "manual" | "scheduled";
+            source_type: components["schemas"]["SourceType"];
+            input_count: number;
+            model_id: string;
+            prompt_version: string;
+            filters: {
                 [key: string]: unknown;
             };
+            output?: {
+                [key: string]: unknown;
+            } | null;
+            request_id?: string | null;
+            /** Format: uuid */
+            requested_by_user_id?: string | null;
+            requested_by_name?: string | null;
+            requested_by_email?: string | null;
+            idempotency_key?: string | null;
+            /** Format: date-time */
+            window_start: string;
+            /** Format: date-time */
+            window_end: string;
+            error_message?: string | null;
+            /** Format: date-time */
+            started_at?: string | null;
+            /** Format: date-time */
+            completed_at?: string | null;
             /** Format: date-time */
             created_at: string;
+            /** Format: date-time */
+            updated_at: string;
         };
         AnalysisRunListResponse: {
             items: components["schemas"]["AnalysisRun"][];
             page_info: components["schemas"]["PageInfo"];
+        };
+        AnalysisRunDetailResponse: {
+            run: components["schemas"]["AnalysisRun"];
+            input_summary: {
+                input_count: number;
+                sample_content_ids: string[];
+                sample_size: number;
+            };
+            output?: {
+                [key: string]: unknown;
+            } | null;
+            error?: string | null;
         };
         CreateCsvExportRequest: {
             filters?: {
@@ -1552,7 +3476,179 @@ export interface components {
             };
         };
         /** @enum {string} */
+        ReportRunStatus: "queued" | "running" | "completed" | "failed" | "pending_review";
+        /** @enum {string} */
+        ReportScheduleFrequency: "daily" | "weekly";
+        ReportTemplate: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            description?: string | null;
+            is_active: boolean;
+            sections?: {
+                [key: string]: unknown;
+            };
+            filters?: {
+                [key: string]: unknown;
+            };
+            confidence_threshold: number;
+            /** Format: uuid */
+            created_by_user_id?: string | null;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+        };
+        ReportSchedule: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            template_id: string;
+            template_name: string;
+            name: string;
+            enabled: boolean;
+            frequency: components["schemas"]["ReportScheduleFrequency"];
+            day_of_week?: number | null;
+            time_local: string;
+            timezone: string;
+            recipients?: string[];
+            /** Format: date-time */
+            next_run_at: string;
+            /** Format: date-time */
+            last_run_at?: string | null;
+            /** Format: uuid */
+            created_by_user_id?: string | null;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+        };
+        ReportRun: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            template_id: string;
+            template_name: string;
+            /** Format: uuid */
+            schedule_id?: string | null;
+            schedule_name?: string | null;
+            status: components["schemas"]["ReportRunStatus"];
+            /** Format: date-time */
+            window_start: string;
+            /** Format: date-time */
+            window_end: string;
+            source_type: components["schemas"]["SourceType"];
+            confidence?: number | null;
+            summary?: {
+                [key: string]: unknown;
+            };
+            recommendations?: string[];
+            blocked_reason?: string | null;
+            /** Format: uuid */
+            export_job_id?: string | null;
+            /** @enum {string|null} */
+            export_status?: "queued" | "running" | "completed" | "failed" | null;
+            /** Format: uri */
+            download_url?: string | null;
+            /** Format: uuid */
+            requested_by_user_id?: string | null;
+            requested_by_name?: string | null;
+            /** Format: email */
+            requested_by_email?: string | null;
+            idempotency_key?: string | null;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            started_at?: string | null;
+            /** Format: date-time */
+            completed_at?: string | null;
+            error_message?: string | null;
+        };
+        ReportRunListResponse: {
+            items: components["schemas"]["ReportRun"][];
+            page_info: components["schemas"]["PageInfo"];
+        };
+        ReportRunDetailResponse: {
+            run: components["schemas"]["ReportRun"];
+            template: components["schemas"]["ReportTemplate"];
+            schedule?: components["schemas"]["ReportSchedule"] | null;
+        };
+        ReportTemplatesResponse: {
+            items: components["schemas"]["ReportTemplate"][];
+        };
+        ReportSchedulesResponse: {
+            items: components["schemas"]["ReportSchedule"][];
+        };
+        CreateReportRunRequest: {
+            /** Format: uuid */
+            template_id: string;
+        };
+        ReportRunAccepted: {
+            /** Format: uuid */
+            report_run_id: string;
+            /** @constant */
+            status: "queued";
+        };
+        ReportScheduleRunAccepted: {
+            /** Format: uuid */
+            report_run_id: string;
+            /** Format: uuid */
+            schedule_id: string;
+            /** @constant */
+            status: "queued";
+        };
+        CreateReportTemplateRequest: {
+            name: string;
+            description?: string;
+            /** @default true */
+            is_active: boolean;
+            sections?: {
+                [key: string]: unknown;
+            };
+            filters?: {
+                [key: string]: unknown;
+            };
+            /** @default 0.65 */
+            confidence_threshold: number;
+        };
+        UpdateReportTemplateRequest: {
+            name?: string;
+            description?: string | null;
+            is_active?: boolean;
+            sections?: {
+                [key: string]: unknown;
+            };
+            filters?: {
+                [key: string]: unknown;
+            };
+            confidence_threshold?: number;
+        };
+        CreateReportScheduleRequest: {
+            /** Format: uuid */
+            template_id: string;
+            name: string;
+            /** @default true */
+            enabled: boolean;
+            frequency: components["schemas"]["ReportScheduleFrequency"];
+            day_of_week?: number | null;
+            time_local: string;
+            /** @default America/Bogota */
+            timezone: string;
+            recipients?: string[];
+        };
+        UpdateReportScheduleRequest: {
+            name?: string;
+            enabled?: boolean;
+            frequency?: components["schemas"]["ReportScheduleFrequency"];
+            day_of_week?: number | null;
+            time_local?: string;
+            timezone?: string;
+            recipients?: string[];
+        };
+        /** @enum {string} */
         MonitorSeverity: "SEV1" | "SEV2" | "SEV3" | "SEV4";
+        /** @enum {string} */
+        IncidentStatus: "open" | "acknowledged" | "in_progress" | "resolved" | "dismissed";
         MonitorScopeKpi: {
             items: number;
             classified_items: number;
@@ -1596,6 +3692,680 @@ export interface components {
                 competencia: components["schemas"]["MonitorScopeKpi"];
             };
             diagnostics: components["schemas"]["MonitorDiagnostics"];
+        };
+        /** @enum {string} */
+        SocialChannel: "facebook" | "instagram" | "linkedin" | "tiktok";
+        /** @enum {string} */
+        SocialSentiment: "positive" | "negative" | "neutral" | "unknown";
+        /** @enum {string} */
+        SocialDatePreset: "all" | "y2024" | "y2025" | "ytd" | "90d" | "30d" | "7d" | "last_quarter" | "custom";
+        /** @enum {string} */
+        SocialComparisonMode: "weekday_aligned_week" | "exact_days" | "same_period_last_year";
+        /** @enum {string} */
+        SocialHeatmapMetric: "er" | "engagement_total" | "likes" | "comments" | "shares" | "views" | "view_rate";
+        /** @enum {string} */
+        SocialScatterDimension: "post_type" | "channel" | "account" | "campaign" | "strategy" | "hashtag";
+        /** @enum {string} */
+        SocialErBreakdownDimension: "hashtag" | "word" | "post_type" | "publish_frequency" | "weekday";
+        /** @enum {string} */
+        SocialTrendGranularity: "auto" | "day" | "week" | "month";
+        /** @enum {string} */
+        SocialPostSort: "published_at_desc" | "exposure_desc" | "engagement_desc";
+        /** @enum {string} */
+        SocialReconciliationStatus: "ok" | "warning" | "error" | "unknown";
+        /** @enum {string} */
+        SocialSyncPhase: "ingest" | "classify" | "aggregate" | "reconcile" | "alerts";
+        /** @enum {string} */
+        SocialSyncPhaseState: "pending" | "running" | "completed" | "failed" | "skipped";
+        SocialRunCounters: {
+            objects_discovered: number;
+            objects_processed: number;
+            objects_skipped: number;
+            rows_parsed: number;
+            rows_persisted: number;
+            rows_classified: number;
+            rows_pending_classification: number;
+            rows_unknown_sentiment: number;
+            malformed_rows: number;
+            anomalous_object_keys: number;
+        };
+        MonitorSocialKpis: {
+            posts: number;
+            exposure_total: number;
+            engagement_total: number;
+            er_global: number;
+            classified_items: number;
+            positivos: number;
+            negativos: number;
+            neutrales: number;
+            sentimiento_neto: number;
+            riesgo_activo: number;
+            shs: number;
+            focus_account: string | null;
+            focus_account_sov: number;
+        };
+        MonitorSocialDelta: {
+            posts: number;
+            exposure_total: number;
+            engagement_total: number;
+            er_global: number;
+            sentimiento_neto: number;
+            riesgo_activo: number;
+            shs: number;
+            focus_account_sov: number;
+        };
+        MonitorSocialComparison: {
+            mode_applied: components["schemas"]["SocialComparisonMode"];
+            /** Format: date-time */
+            current_window_start: string;
+            /** Format: date-time */
+            current_window_end: string;
+            /** Format: date-time */
+            previous_window_start: string;
+            /** Format: date-time */
+            previous_window_end: string;
+            label: string;
+        };
+        MonitorSocialPreviousPeriod: {
+            posts: number;
+            exposure_total: number;
+            engagement_total: number;
+            er_global: number;
+            sentimiento_neto: number;
+            riesgo_activo: number;
+            shs: number;
+            focus_account_sov: number;
+        };
+        MonitorSocialErTargetProgressItem: {
+            channel: components["schemas"]["SocialChannel"];
+            baseline_2025_er: number;
+            target_2026_er: number;
+            current_er: number;
+            gap: number;
+            progress_pct: number;
+            /** @enum {string} */
+            source: "auto" | "manual";
+        };
+        MonitorSocialTargetProgress: {
+            quarterly_sov_target_pp: number;
+            quarterly_sov_delta_pp: number;
+            quarterly_sov_progress_pct: number;
+            target_shs: number;
+            shs_gap: number;
+            shs_progress_pct: number;
+            er_by_channel: components["schemas"]["MonitorSocialErTargetProgressItem"][];
+        };
+        MonitorSocialTrendItem: {
+            date: string;
+            posts: number;
+            exposure_total: number;
+            engagement_total: number;
+            er_global: number;
+            sentimiento_neto: number;
+            riesgo_activo: number;
+        };
+        MonitorSocialTrendSeriesItem: {
+            /** Format: date-time */
+            bucket_start: string;
+            /** Format: date-time */
+            bucket_end: string;
+            bucket_label: string;
+            posts: number;
+            exposure_total: number;
+            engagement_total: number;
+            er_global: number;
+            sentimiento_neto: number;
+            riesgo_activo: number;
+            shs: number;
+        };
+        MonitorSocialByChannelItem: {
+            channel: components["schemas"]["SocialChannel"];
+            posts: number;
+            exposure_total: number;
+            engagement_total: number;
+            er_global: number;
+            sentimiento_neto: number;
+            riesgo_activo: number;
+            sov_interno: number;
+        };
+        MonitorSocialByAccountItem: {
+            account_name: string;
+            channel_mix: components["schemas"]["SocialChannel"][];
+            posts: number;
+            exposure_total: number;
+            engagement_total: number;
+            er_global: number;
+            sentimiento_neto: number;
+            riesgo_activo: number;
+            sov_interno: number;
+        };
+        MonitorSocialDiagnostics: {
+            insufficient_data: boolean;
+            unclassified_items: number;
+            unknown_sentiment_items: number;
+            last_run_status: string | null;
+            processed_objects: number;
+            anomalous_object_keys: number;
+            rows_pending_classification: number;
+            /** Format: date-time */
+            window_start: string;
+            /** Format: date-time */
+            window_end: string;
+        };
+        MonitorSocialCoverage: {
+            /** Format: date-time */
+            db_min_date: string | null;
+            /** Format: date-time */
+            db_max_date: string | null;
+            /** Format: date-time */
+            s3_min_date: string | null;
+            /** Format: date-time */
+            s3_max_date: string | null;
+        };
+        MonitorSocialSettings: {
+            /** Format: uuid */
+            id: string;
+            key: string;
+            focus_account: string | null;
+            target_quarterly_sov_pp: number;
+            target_shs: number;
+            risk_threshold: number;
+            sentiment_drop_threshold: number;
+            er_drop_threshold: number;
+            alert_cooldown_minutes: number;
+            metadata: {
+                [key: string]: unknown;
+            };
+            /** Format: uuid */
+            updated_by_user_id: string | null;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+        };
+        MonitorSocialOverviewResponse: {
+            /** Format: date-time */
+            generated_at: string;
+            /** Format: date-time */
+            last_etl_at: string | null;
+            /** @constant */
+            official: false;
+            preset: components["schemas"]["SocialDatePreset"];
+            window_days: number;
+            /** Format: date-time */
+            window_start: string;
+            /** Format: date-time */
+            window_end: string;
+            comparison: components["schemas"]["MonitorSocialComparison"];
+            trend_granularity_applied: components["schemas"]["SocialTrendGranularity"];
+            kpis: components["schemas"]["MonitorSocialKpis"];
+            previous_period: components["schemas"]["MonitorSocialPreviousPeriod"];
+            delta_vs_previous: components["schemas"]["MonitorSocialDelta"];
+            target_progress: components["schemas"]["MonitorSocialTargetProgress"];
+            trend_series: components["schemas"]["MonitorSocialTrendSeriesItem"][];
+            trend_daily: components["schemas"]["MonitorSocialTrendItem"][];
+            by_channel: components["schemas"]["MonitorSocialByChannelItem"][];
+            by_account: components["schemas"]["MonitorSocialByAccountItem"][];
+            diagnostics: components["schemas"]["MonitorSocialDiagnostics"];
+            coverage: components["schemas"]["MonitorSocialCoverage"];
+            reconciliation_status: components["schemas"]["SocialReconciliationStatus"];
+            settings: components["schemas"]["MonitorSocialSettings"];
+        };
+        MonitorSocialAccountItem: {
+            account_name: string;
+            channel_mix: components["schemas"]["SocialChannel"][];
+            posts: number;
+            exposure_total: number;
+            engagement_total: number;
+            er_ponderado: number;
+            sentimiento_neto: number;
+            riesgo_activo: number;
+            sov_interno: number;
+            delta_exposure: number;
+            delta_engagement: number;
+            delta_er: number;
+            meets_threshold: boolean;
+        };
+        MonitorSocialAccountsResponse: {
+            /** Format: date-time */
+            generated_at: string;
+            /** Format: date-time */
+            last_etl_at: string | null;
+            preset: components["schemas"]["SocialDatePreset"];
+            /** Format: date-time */
+            window_start: string;
+            /** Format: date-time */
+            window_end: string;
+            min_posts: number;
+            min_exposure: number;
+            items: components["schemas"]["MonitorSocialAccountItem"][];
+        };
+        MonitorSocialRiskTrendItem: {
+            date: string;
+            clasificados: number;
+            positivos: number;
+            negativos: number;
+            neutrales: number;
+            sentimiento_neto: number;
+            riesgo_activo: number;
+        };
+        MonitorSocialRiskChannelItem: {
+            channel: components["schemas"]["SocialChannel"];
+            clasificados: number;
+            negativos: number;
+            riesgo_activo: number;
+        };
+        MonitorSocialRiskAccountItem: {
+            account_name: string;
+            clasificados: number;
+            negativos: number;
+            riesgo_activo: number;
+        };
+        MonitorSocialAlertItem: {
+            /** Format: uuid */
+            id: string;
+            severity: components["schemas"]["MonitorSeverity"];
+            status: components["schemas"]["IncidentStatus"];
+            risk_score: number;
+            classified_items: number;
+            /** Format: date-time */
+            updated_at: string;
+            /** Format: date-time */
+            cooldown_until: string | null;
+        };
+        MonitorSocialRiskResponse: {
+            /** Format: date-time */
+            generated_at: string;
+            /** Format: date-time */
+            last_etl_at: string | null;
+            preset: components["schemas"]["SocialDatePreset"];
+            /** Format: date-time */
+            window_start: string;
+            /** Format: date-time */
+            window_end: string;
+            sentiment_trend: components["schemas"]["MonitorSocialRiskTrendItem"][];
+            by_channel: components["schemas"]["MonitorSocialRiskChannelItem"][];
+            by_account: components["schemas"]["MonitorSocialRiskAccountItem"][];
+            alerts: components["schemas"]["MonitorSocialAlertItem"][];
+        };
+        MonitorSocialPostItem: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            content_item_id: string;
+            channel: components["schemas"]["SocialChannel"];
+            account_name: string;
+            external_post_id: string;
+            post_url: string;
+            post_type: string | null;
+            /** Format: date-time */
+            published_at: string | null;
+            title: string;
+            text: string | null;
+            sentiment: components["schemas"]["SocialSentiment"];
+            sentiment_raw: string | null;
+            sentiment_confidence: number | null;
+            exposure: number;
+            engagement_total: number;
+            impressions: number;
+            reach: number;
+            clicks: number;
+            likes: number;
+            comments: number;
+            shares: number;
+            views: number;
+            source_score: number;
+            campaign: string | null;
+            strategies: string[];
+            hashtags: string[];
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+        };
+        MonitorSocialPostsResponse: {
+            items: components["schemas"]["MonitorSocialPostItem"][];
+            page_info: components["schemas"]["PageInfo"];
+        };
+        MonitorSocialHeatmapPoint: {
+            month: number;
+            weekday: number;
+            value: number;
+            posts: number;
+        };
+        MonitorSocialHeatmapResponse: {
+            /** Format: date-time */
+            generated_at: string;
+            metric: components["schemas"]["SocialHeatmapMetric"];
+            items: components["schemas"]["MonitorSocialHeatmapPoint"][];
+        };
+        MonitorSocialScatterItem: {
+            label: string;
+            exposure_total: number;
+            engagement_total: number;
+            er_global: number;
+            posts: number;
+        };
+        MonitorSocialScatterResponse: {
+            /** Format: date-time */
+            generated_at: string;
+            dimension: components["schemas"]["SocialScatterDimension"];
+            items: components["schemas"]["MonitorSocialScatterItem"][];
+        };
+        MonitorSocialErBreakdownItem: {
+            label: string;
+            posts: number;
+            exposure_total: number;
+            engagement_total: number;
+            er_global: number;
+        };
+        MonitorSocialErBreakdownResponse: {
+            /** Format: date-time */
+            generated_at: string;
+            dimension: components["schemas"]["SocialErBreakdownDimension"];
+            items: components["schemas"]["MonitorSocialErBreakdownItem"][];
+        };
+        MonitorSocialErTargetsResponse: {
+            /** Format: date-time */
+            generated_at: string;
+            /** Format: date-time */
+            last_etl_at: string | null;
+            year: number;
+            items: components["schemas"]["MonitorSocialErTargetProgressItem"][];
+        };
+        PatchMonitorSocialErTargetItem: {
+            channel: components["schemas"]["SocialChannel"];
+            /** @enum {string} */
+            source: "auto" | "manual";
+            target_2026_er?: number;
+            override_reason?: string;
+        };
+        PatchMonitorSocialErTargetsRequest: {
+            year?: number;
+            targets: components["schemas"]["PatchMonitorSocialErTargetItem"][];
+        };
+        MonitorSocialHashtagBackfillResponse: {
+            /** @enum {string} */
+            status: "accepted";
+            updated_rows: number;
+        };
+        MonitorSocialReconciliationItem: {
+            channel: components["schemas"]["SocialChannel"];
+            s3Rows: number;
+            dbRows: number;
+            deltaRows: number;
+            /** Format: date-time */
+            s3MinDate: string | null;
+            /** Format: date-time */
+            s3MaxDate: string | null;
+            /** Format: date-time */
+            dbMinDate: string | null;
+            /** Format: date-time */
+            dbMaxDate: string | null;
+            status: components["schemas"]["SocialReconciliationStatus"];
+            /** Format: uuid */
+            runId: string;
+            /** Format: date-time */
+            createdAt: string;
+        };
+        MonitorSocialRunItem: {
+            /** Format: uuid */
+            id: string;
+            trigger_type: components["schemas"]["TriggerType"];
+            status: components["schemas"]["RunStatus"];
+            request_id: string | null;
+            /** Format: date-time */
+            queued_at: string;
+            /** Format: date-time */
+            started_at: string | null;
+            /** Format: date-time */
+            finished_at: string | null;
+            current_phase: components["schemas"]["SocialSyncPhase"];
+            phase_status: {
+                [key: string]: unknown;
+            } | null;
+            counters: components["schemas"]["SocialRunCounters"];
+            metrics: {
+                [key: string]: unknown;
+            };
+            error_message: string | null;
+            /** Format: date-time */
+            created_at: string;
+        };
+        MonitorSocialRunsResponse: {
+            items: components["schemas"]["MonitorSocialRunItem"][];
+            page_info: components["schemas"]["PageInfo"];
+        };
+        MonitorSocialEtlQualityResponse: {
+            /** Format: date-time */
+            generated_at: string;
+            /** Format: date-time */
+            last_etl_at: string | null;
+            coverage: {
+                /** Format: date-time */
+                db_min_date: string | null;
+                /** Format: date-time */
+                db_max_date: string | null;
+                /** Format: date-time */
+                s3_min_date: string | null;
+                /** Format: date-time */
+                s3_max_date: string | null;
+            };
+            reconciliation_status: components["schemas"]["SocialReconciliationStatus"];
+            reconciliation_by_channel: components["schemas"]["MonitorSocialReconciliationItem"][];
+            runs: {
+                /** Format: uuid */
+                id: string;
+                triggerType: components["schemas"]["TriggerType"];
+                status: components["schemas"]["RunStatus"];
+                /** Format: date-time */
+                queuedAt: string;
+                /** Format: date-time */
+                startedAt: string | null;
+                /** Format: date-time */
+                finishedAt: string | null;
+                currentPhase: components["schemas"]["SocialSyncPhase"];
+                counters: components["schemas"]["SocialRunCounters"];
+                malformedRows: number;
+                errorMessage: string | null;
+            }[];
+        };
+        CreateMonitorSocialRunRequest: {
+            /** @default false */
+            force: boolean;
+            bucket?: string;
+            prefix?: string;
+        };
+        MonitorSocialRunAccepted: {
+            /** @constant */
+            status: "accepted";
+            /** Format: uuid */
+            run_id: string;
+            /** Format: date-time */
+            queued_at: string;
+        };
+        PatchMonitorSocialSettingsRequest: {
+            focus_account?: string | null;
+            target_quarterly_sov_pp?: number;
+            target_shs?: number;
+            risk_threshold?: number;
+            sentiment_drop_threshold?: number;
+            er_drop_threshold?: number;
+            alert_cooldown_minutes?: number;
+            metadata?: {
+                [key: string]: unknown;
+            };
+        };
+        AnalyzeOverviewDelta: {
+            items: number;
+            classified_items: number;
+            sentimiento_neto: number;
+            bhs: number;
+            riesgo_activo: number;
+            sov_claro: number;
+            sov_competencia: number;
+        };
+        AnalyzeOverviewResponse: {
+            /** Format: date-time */
+            generated_at: string;
+            /** @constant */
+            window_days: 7;
+            /** @constant */
+            source_type: "news";
+            /** @constant */
+            formula_version: "analysis-v1";
+            totals: components["schemas"]["MonitorTotalsKpi"];
+            previous_totals: components["schemas"]["MonitorTotalsKpi"];
+            delta: components["schemas"]["AnalyzeOverviewDelta"];
+            by_scope: {
+                claro: components["schemas"]["MonitorScopeKpi"];
+                competencia: components["schemas"]["MonitorScopeKpi"];
+            };
+            diagnostics: components["schemas"]["MonitorDiagnostics"];
+        };
+        AnalyzeCategoryCount: {
+            value: string;
+            count: number;
+        };
+        AnalyzeChannelItem: {
+            provider: string;
+            items: number;
+            classified_items: number;
+            positivos: number;
+            negativos: number;
+            neutrales: number;
+            sentimiento_neto: number;
+            riesgo_activo: number;
+            quality_score: number;
+            bhs: number;
+            severidad: components["schemas"]["MonitorSeverity"];
+            top_categories: components["schemas"]["AnalyzeCategoryCount"][];
+            insufficient_data: boolean;
+        };
+        AnalyzeChannelResponse: {
+            /** Format: date-time */
+            generated_at: string;
+            /** @constant */
+            window_days: 7;
+            /** @constant */
+            source_type: "news";
+            /** @constant */
+            formula_version: "analysis-v1";
+            totals: {
+                providers: number;
+                items: number;
+                classified_items: number;
+            };
+            items: components["schemas"]["AnalyzeChannelItem"][];
+        };
+        AnalyzeScopeBenchmark: {
+            items: number;
+            classified_items: number;
+            positivos: number;
+            negativos: number;
+            neutrales: number;
+            sentimiento_neto: number;
+            riesgo_activo: number;
+            quality_score: number;
+            bhs: number;
+            severidad: components["schemas"]["MonitorSeverity"];
+            sov: number;
+            insufficient_data: boolean;
+        };
+        AnalyzeCompetitorItem: components["schemas"]["AnalyzeScopeBenchmark"] & {
+            /** Format: uuid */
+            term_id: string;
+            term_name: string;
+        };
+        AnalyzeCompetitorsResponse: {
+            /** Format: date-time */
+            generated_at: string;
+            /** @constant */
+            window_days: 7;
+            /** @constant */
+            source_type: "news";
+            /** @constant */
+            formula_version: "analysis-v1";
+            baseline_claro: components["schemas"]["AnalyzeScopeBenchmark"];
+            competitors: components["schemas"]["AnalyzeCompetitorItem"][];
+            totals: {
+                competitor_terms: number;
+                items: number;
+                classified_items: number;
+            };
+        };
+        IncidentOwner: {
+            /** Format: uuid */
+            user_id: string;
+            name?: string | null;
+            email?: string | null;
+            role?: string | null;
+        };
+        Incident: {
+            /** Format: uuid */
+            id: string;
+            scope: components["schemas"]["TermScope"];
+            severity: components["schemas"]["MonitorSeverity"];
+            status: components["schemas"]["IncidentStatus"];
+            risk_score: number;
+            classified_items: number;
+            /** Format: uuid */
+            owner_user_id?: string | null;
+            owner?: components["schemas"]["IncidentOwner"] | null;
+            /** Format: date-time */
+            sla_due_at: string;
+            sla_remaining_minutes: number;
+            /** Format: date-time */
+            cooldown_until: string;
+            signal_version: string;
+            payload: {
+                [key: string]: unknown;
+            };
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+            /** Format: date-time */
+            resolved_at?: string | null;
+        };
+        IncidentListResponse: {
+            items: components["schemas"]["Incident"][];
+            page_info: components["schemas"]["PageInfo"];
+        };
+        PatchIncidentRequest: {
+            status?: components["schemas"]["IncidentStatus"];
+            /** Format: uuid */
+            owner_user_id?: string | null;
+            note?: string;
+        };
+        IncidentNote: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            incident_id: string;
+            /** Format: uuid */
+            author_user_id: string;
+            author: components["schemas"]["IncidentOwner"];
+            note: string;
+            /** Format: date-time */
+            created_at: string;
+        };
+        PatchIncidentResponse: {
+            incident: components["schemas"]["Incident"];
+            note?: components["schemas"]["IncidentNote"] | null;
+        };
+        IncidentNotesResponse: {
+            items: components["schemas"]["IncidentNote"][];
+        };
+        CreateIncidentNoteRequest: {
+            note: string;
+        };
+        IncidentEvaluationAccepted: {
+            /** @constant */
+            status: "queued";
+            /** @enum {string} */
+            trigger_type: "manual";
+            message_id?: string | null;
         };
         MetaResponse: {
             providers?: components["schemas"]["MetaCountItem"][];
@@ -1793,6 +4563,80 @@ export interface components {
             metadata?: {
                 [key: string]: unknown;
             };
+        };
+        SourceWeight: {
+            /** Format: uuid */
+            id: string;
+            provider: string;
+            source_name?: string | null;
+            weight: number;
+            is_active: boolean;
+            /** Format: uuid */
+            updated_by_user_id?: string | null;
+            updated_by_name?: string | null;
+            updated_by_email?: string | null;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+        };
+        SourceWeightListResponse: {
+            items: components["schemas"]["SourceWeight"][];
+        };
+        CreateSourceWeightRequest: {
+            provider: string;
+            source_name?: string | null;
+            weight: number;
+            /** @default true */
+            is_active: boolean;
+        };
+        UpdateSourceWeightRequest: {
+            source_name?: string | null;
+            weight?: number;
+            is_active?: boolean;
+        };
+        /** @enum {string} */
+        NotificationRecipientKind: "digest" | "incident";
+        NotificationRecipient: {
+            /** Format: uuid */
+            id: string;
+            kind: components["schemas"]["NotificationRecipientKind"];
+            scope: string;
+            email?: string | null;
+            email_masked: string;
+            is_active: boolean;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+        };
+        NotificationRecipientListResponse: {
+            items: components["schemas"]["NotificationRecipient"][];
+        };
+        CreateNotificationRecipientRequest: {
+            kind: components["schemas"]["NotificationRecipientKind"];
+            /** @default ops */
+            scope: string;
+            email: string;
+            /** @default true */
+            is_active: boolean;
+        };
+        UpdateNotificationRecipientRequest: {
+            scope?: string;
+            email?: string;
+            is_active?: boolean;
+        };
+        NotificationEmailStatusResponse: {
+            production_access_enabled: boolean;
+            sending_enabled: boolean;
+            send_quota: {
+                max_24_hour_send: number | null;
+                max_send_rate: number | null;
+                sent_last_24_hours: number | null;
+            };
+            sender_email: string | null;
+            sender_verification_status: string | null;
+            sender_verified_for_sending: boolean;
         };
         AuditItem: {
             /** Format: uuid */

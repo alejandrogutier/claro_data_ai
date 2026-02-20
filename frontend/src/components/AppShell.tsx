@@ -18,11 +18,42 @@ export const AppShell = () => {
           <NavLink to="/app/monitor/overview" className="nav-link">
             Overview
           </NavLink>
+          <NavLink to="/app/monitor/social-overview" className="nav-link">
+            Social Overview
+          </NavLink>
           <NavLink to="/app/monitor/feed-claro" className="nav-link">
             Feed Claro
           </NavLink>
           <NavLink to="/app/monitor/feed-competencia" className="nav-link">
             Feed Competencia
+          </NavLink>
+          <NavLink to="/app/monitor/incidents" className="nav-link">
+            Incidentes
+          </NavLink>
+
+          <p className="nav-group-title">Analisis</p>
+          <NavLink to="/app/analyze/overview" className="nav-link">
+            Overview Marca
+          </NavLink>
+          <NavLink to="/app/analyze/channel" className="nav-link">
+            Por Canal
+          </NavLink>
+          <NavLink to="/app/analyze/competitors" className="nav-link">
+            Benchmark Competencia
+          </NavLink>
+          <NavLink to="/app/analyze/runs" className="nav-link">
+            Runs Async
+          </NavLink>
+
+          <p className="nav-group-title">Reportes</p>
+          <NavLink to="/app/reports/center" className="nav-link">
+            Centro de Reportes
+          </NavLink>
+          <NavLink to="/app/reports/templates" className="nav-link">
+            Plantillas
+          </NavLink>
+          <NavLink to="/app/reports/schedules" className="nav-link">
+            Programacion
           </NavLink>
 
           <p className="nav-group-title">Configuracion</p>
@@ -41,11 +72,14 @@ export const AppShell = () => {
           <NavLink to="/app/config/taxonomy" className="nav-link">
             Taxonomias
           </NavLink>
-          <NavLink to="/app/config/alerts" className="nav-link">
-            Alertas
+          <NavLink to="/app/config/source-scoring" className="nav-link">
+            Source Scoring
           </NavLink>
-          <NavLink to="/app/config/report-templates" className="nav-link">
-            Reportes
+          <NavLink to="/app/config/alerts" className="nav-link">
+            Notificaciones
+          </NavLink>
+          <NavLink to="/app/config/social" className="nav-link">
+            Social
           </NavLink>
           <NavLink to="/app/config/audit" className="nav-link">
             Auditoria

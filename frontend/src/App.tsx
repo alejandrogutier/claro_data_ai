@@ -3,14 +3,24 @@ import { RequireAuth } from "./auth/RequireAuth";
 import { AppShell } from "./components/AppShell";
 import { AuthCallbackPage } from "./pages/AuthCallbackPage";
 import { AccountsPage } from "./pages/AccountsPage";
-import { AlertsPage } from "./pages/AlertsPage";
+import { AnalyzeChannelPage } from "./pages/AnalyzeChannelPage";
+import { AnalyzeCompetitorsPage } from "./pages/AnalyzeCompetitorsPage";
+import { AnalyzeOverviewPage } from "./pages/AnalyzeOverviewPage";
+import { AnalyzeRunsPage } from "./pages/AnalyzeRunsPage";
 import { AuditPage } from "./pages/AuditPage";
 import { CompetitorsPage } from "./pages/CompetitorsPage";
 import { ConnectorsPage } from "./pages/ConnectorsPage";
+import { IncidentsPage } from "./pages/IncidentsPage";
 import { LoginPage } from "./pages/LoginPage";
 import { MonitorFeedPage } from "./pages/MonitorFeedPage";
 import { MonitorOverviewPage } from "./pages/MonitorOverviewPage";
+import { MonitorSocialOverviewPage } from "./pages/MonitorSocialOverviewPage";
+import { ReportsCenterPage } from "./pages/ReportsCenterPage";
+import { ReportsSchedulesPage } from "./pages/ReportsSchedulesPage";
 import { ReportTemplatesPage } from "./pages/ReportTemplatesPage";
+import { NotificationRecipientsPage } from "./pages/NotificationRecipientsPage";
+import { SocialSettingsPage } from "./pages/SocialSettingsPage";
+import { SourceScoringPage } from "./pages/SourceScoringPage";
 import { TaxonomyPage } from "./pages/TaxonomyPage";
 import { TermsPage } from "./pages/TermsPage";
 
@@ -35,6 +45,7 @@ export const App = () => {
         <Route path="terms" element={<Navigate to="/app/config/queries" replace />} />
 
         <Route path="monitor/overview" element={<MonitorOverviewPage />} />
+        <Route path="monitor/social-overview" element={<MonitorSocialOverviewPage />} />
         <Route
           path="monitor/feed-claro"
           element={
@@ -55,14 +66,28 @@ export const App = () => {
             />
           }
         />
+        <Route path="monitor/incidents" element={<IncidentsPage />} />
+
+        <Route path="analyze" element={<Navigate to="/app/analyze/overview" replace />} />
+        <Route path="analyze/overview" element={<AnalyzeOverviewPage />} />
+        <Route path="analyze/channel" element={<AnalyzeChannelPage />} />
+        <Route path="analyze/competitors" element={<AnalyzeCompetitorsPage />} />
+        <Route path="analyze/runs" element={<AnalyzeRunsPage />} />
+
+        <Route path="reports" element={<Navigate to="/app/reports/center" replace />} />
+        <Route path="reports/center" element={<ReportsCenterPage />} />
+        <Route path="reports/templates" element={<ReportTemplatesPage />} />
+        <Route path="reports/schedules" element={<ReportsSchedulesPage />} />
 
         <Route path="config/connectors" element={<ConnectorsPage />} />
         <Route path="config/accounts" element={<AccountsPage />} />
         <Route path="config/competitors" element={<CompetitorsPage />} />
         <Route path="config/queries" element={<TermsPage />} />
         <Route path="config/taxonomy" element={<TaxonomyPage />} />
-        <Route path="config/alerts" element={<AlertsPage />} />
-        <Route path="config/report-templates" element={<ReportTemplatesPage />} />
+        <Route path="config/source-scoring" element={<SourceScoringPage />} />
+        <Route path="config/alerts" element={<NotificationRecipientsPage />} />
+        <Route path="config/social" element={<SocialSettingsPage />} />
+        <Route path="config/report-templates" element={<Navigate to="/app/reports/templates" replace />} />
         <Route path="config/audit" element={<AuditPage />} />
       </Route>
 

@@ -15,8 +15,10 @@ tags:
   - name: Ingestion
   - name: Content
   - name: Feed
+  - name: Monitor
   - name: Analysis
   - name: Exports
+  - name: Reports
   - name: Meta
   - name: Connectors
   - name: Config
@@ -251,6 +253,1054 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+  /v1/monitor/social/overview:
+    get:
+      tags: [Monitor]
+      summary: Resumen social analytics V2 (no oficial)
+      parameters:
+        - name: preset
+          in: query
+          schema:
+            $ref: '#/components/schemas/SocialDatePreset'
+        - name: window_days
+          in: query
+          schema:
+            type: integer
+            enum: [7, 30, 90]
+        - name: from
+          in: query
+          schema:
+            type: string
+            format: date-time
+        - name: to
+          in: query
+          schema:
+            type: string
+            format: date-time
+        - name: channel
+          in: query
+          schema:
+            type: string
+          description: Canal o lista CSV de canales (`facebook,instagram,...`)
+        - name: account
+          in: query
+          schema:
+            type: string
+          description: Cuenta o lista CSV de cuentas
+        - name: post_type
+          in: query
+          schema:
+            type: string
+          description: Tipo de post o lista CSV de tipos (`unknown` para vacios)
+        - name: trend_granularity
+          in: query
+          schema:
+            $ref: '#/components/schemas/SocialTrendGranularity'
+        - name: sentiment
+          in: query
+          schema:
+            $ref: '#/components/schemas/SocialSentiment'
+        - name: campaign
+          in: query
+          schema:
+            type: string
+          description: Campaña o lista CSV de campañas
+        - name: strategy
+          in: query
+          schema:
+            type: string
+          description: Estrategia o lista CSV de estrategias
+        - name: hashtag
+          in: query
+          schema:
+            type: string
+          description: Hashtag o lista CSV de hashtags (con o sin #)
+        - name: comparison_mode
+          in: query
+          schema:
+            $ref: '#/components/schemas/SocialComparisonMode'
+        - name: comparison_days
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 366
+      responses:
+        '200':
+          description: Resumen KPI social
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MonitorSocialOverviewResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+  /v1/monitor/social/accounts:
+    get:
+      tags: [Monitor]
+      summary: Ranking de cuentas social analytics V2
+      parameters:
+        - name: preset
+          in: query
+          schema:
+            $ref: '#/components/schemas/SocialDatePreset'
+        - name: window_days
+          in: query
+          schema:
+            type: integer
+            enum: [7, 30, 90]
+        - name: from
+          in: query
+          schema:
+            type: string
+            format: date-time
+        - name: to
+          in: query
+          schema:
+            type: string
+            format: date-time
+        - name: channel
+          in: query
+          schema:
+            type: string
+          description: Canal o lista CSV de canales (`facebook,instagram,...`)
+        - name: account
+          in: query
+          schema:
+            type: string
+          description: Cuenta o lista CSV de cuentas
+        - name: post_type
+          in: query
+          schema:
+            type: string
+          description: Tipo de post o lista CSV de tipos (`unknown` para vacios)
+        - name: sentiment
+          in: query
+          schema:
+            $ref: '#/components/schemas/SocialSentiment'
+        - name: campaign
+          in: query
+          schema:
+            type: string
+          description: Campaña o lista CSV de campañas
+        - name: strategy
+          in: query
+          schema:
+            type: string
+          description: Estrategia o lista CSV de estrategias
+        - name: hashtag
+          in: query
+          schema:
+            type: string
+          description: Hashtag o lista CSV de hashtags (con o sin #)
+        - name: comparison_mode
+          in: query
+          schema:
+            $ref: '#/components/schemas/SocialComparisonMode'
+        - name: comparison_days
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 366
+        - name: min_posts
+          in: query
+          schema:
+            type: integer
+            default: 5
+        - name: min_exposure
+          in: query
+          schema:
+            type: integer
+            default: 5000
+      responses:
+        '200':
+          description: Ranking de cuentas
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MonitorSocialAccountsResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+  /v1/monitor/social/posts:
+    get:
+      tags: [Monitor]
+      summary: Listado paginado de posts social analytics V2
+      parameters:
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+        - name: preset
+          in: query
+          schema:
+            $ref: '#/components/schemas/SocialDatePreset'
+        - name: window_days
+          in: query
+          schema:
+            type: integer
+            enum: [7, 30, 90]
+        - name: from
+          in: query
+          schema:
+            type: string
+            format: date-time
+        - name: to
+          in: query
+          schema:
+            type: string
+            format: date-time
+        - name: channel
+          in: query
+          schema:
+            type: string
+          description: Canal o lista CSV de canales (`facebook,instagram,...`)
+        - name: account
+          in: query
+          schema:
+            type: string
+          description: Cuenta o lista CSV de cuentas
+        - name: post_type
+          in: query
+          schema:
+            type: string
+          description: Tipo de post o lista CSV de tipos (`unknown` para vacios)
+        - name: sentiment
+          in: query
+          schema:
+            $ref: '#/components/schemas/SocialSentiment'
+        - name: campaign
+          in: query
+          schema:
+            type: string
+          description: Campaña o lista CSV de campañas
+        - name: strategy
+          in: query
+          schema:
+            type: string
+          description: Estrategia o lista CSV de estrategias
+        - name: hashtag
+          in: query
+          schema:
+            type: string
+          description: Hashtag o lista CSV de hashtags (con o sin #)
+        - name: comparison_mode
+          in: query
+          schema:
+            $ref: '#/components/schemas/SocialComparisonMode'
+        - name: comparison_days
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 366
+        - name: sort
+          in: query
+          schema:
+            $ref: '#/components/schemas/SocialPostSort'
+      responses:
+        '200':
+          description: Posts sociales
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MonitorSocialPostsResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+  /v1/monitor/social/risk:
+    get:
+      tags: [Monitor]
+      summary: Tendencias de riesgo y sentimiento social analytics V2
+      parameters:
+        - name: preset
+          in: query
+          schema:
+            $ref: '#/components/schemas/SocialDatePreset'
+        - name: window_days
+          in: query
+          schema:
+            type: integer
+            enum: [7, 30, 90]
+        - name: from
+          in: query
+          schema:
+            type: string
+            format: date-time
+        - name: to
+          in: query
+          schema:
+            type: string
+            format: date-time
+        - name: channel
+          in: query
+          schema:
+            type: string
+          description: Canal o lista CSV de canales (`facebook,instagram,...`)
+        - name: account
+          in: query
+          schema:
+            type: string
+          description: Cuenta o lista CSV de cuentas
+        - name: post_type
+          in: query
+          schema:
+            type: string
+          description: Tipo de post o lista CSV de tipos (`unknown` para vacios)
+        - name: campaign
+          in: query
+          schema:
+            type: string
+          description: Campaña o lista CSV de campañas
+        - name: strategy
+          in: query
+          schema:
+            type: string
+          description: Estrategia o lista CSV de estrategias
+        - name: hashtag
+          in: query
+          schema:
+            type: string
+          description: Hashtag o lista CSV de hashtags (con o sin #)
+        - name: comparison_mode
+          in: query
+          schema:
+            $ref: '#/components/schemas/SocialComparisonMode'
+        - name: comparison_days
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 366
+      responses:
+        '200':
+          description: Riesgo social
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MonitorSocialRiskResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+  /v1/monitor/social/charts/heatmap:
+    get:
+      tags: [Monitor]
+      summary: Dataset heatmap dia x mes para metrica seleccionada
+      parameters:
+        - name: preset
+          in: query
+          schema:
+            $ref: '#/components/schemas/SocialDatePreset'
+        - name: window_days
+          in: query
+          schema:
+            type: integer
+            enum: [7, 30, 90]
+        - name: from
+          in: query
+          schema:
+            type: string
+            format: date-time
+        - name: to
+          in: query
+          schema:
+            type: string
+            format: date-time
+        - name: channel
+          in: query
+          schema:
+            type: string
+          description: Canal o lista CSV de canales (`facebook,instagram,...`)
+        - name: account
+          in: query
+          schema:
+            type: string
+          description: Cuenta o lista CSV de cuentas
+        - name: post_type
+          in: query
+          schema:
+            type: string
+          description: Tipo de post o lista CSV de tipos (`unknown` para vacios)
+        - name: campaign
+          in: query
+          schema:
+            type: string
+          description: Campaña o lista CSV de campañas
+        - name: strategy
+          in: query
+          schema:
+            type: string
+          description: Estrategia o lista CSV de estrategias
+        - name: hashtag
+          in: query
+          schema:
+            type: string
+          description: Hashtag o lista CSV de hashtags (con o sin #)
+        - name: comparison_mode
+          in: query
+          schema:
+            $ref: '#/components/schemas/SocialComparisonMode'
+        - name: comparison_days
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 366
+        - name: metric
+          in: query
+          schema:
+            $ref: '#/components/schemas/SocialHeatmapMetric'
+      responses:
+        '200':
+          description: Dataset heatmap
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MonitorSocialHeatmapResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+  /v1/monitor/social/charts/scatter:
+    get:
+      tags: [Monitor]
+      summary: Dataset scatter ER vs exposicion por dimension
+      parameters:
+        - name: preset
+          in: query
+          schema:
+            $ref: '#/components/schemas/SocialDatePreset'
+        - name: window_days
+          in: query
+          schema:
+            type: integer
+            enum: [7, 30, 90]
+        - name: from
+          in: query
+          schema:
+            type: string
+            format: date-time
+        - name: to
+          in: query
+          schema:
+            type: string
+            format: date-time
+        - name: channel
+          in: query
+          schema:
+            type: string
+          description: Canal o lista CSV de canales (`facebook,instagram,...`)
+        - name: account
+          in: query
+          schema:
+            type: string
+          description: Cuenta o lista CSV de cuentas
+        - name: post_type
+          in: query
+          schema:
+            type: string
+          description: Tipo de post o lista CSV de tipos (`unknown` para vacios)
+        - name: campaign
+          in: query
+          schema:
+            type: string
+          description: Campaña o lista CSV de campañas
+        - name: strategy
+          in: query
+          schema:
+            type: string
+          description: Estrategia o lista CSV de estrategias
+        - name: hashtag
+          in: query
+          schema:
+            type: string
+          description: Hashtag o lista CSV de hashtags (con o sin #)
+        - name: comparison_mode
+          in: query
+          schema:
+            $ref: '#/components/schemas/SocialComparisonMode'
+        - name: comparison_days
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 366
+        - name: dimension
+          in: query
+          schema:
+            $ref: '#/components/schemas/SocialScatterDimension'
+      responses:
+        '200':
+          description: Dataset scatter
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MonitorSocialScatterResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+  /v1/monitor/social/charts/er-breakdown:
+    get:
+      tags: [Monitor]
+      summary: Dataset agregado ER por dimension analitica
+      parameters:
+        - name: preset
+          in: query
+          schema:
+            $ref: '#/components/schemas/SocialDatePreset'
+        - name: window_days
+          in: query
+          schema:
+            type: integer
+            enum: [7, 30, 90]
+        - name: from
+          in: query
+          schema:
+            type: string
+            format: date-time
+        - name: to
+          in: query
+          schema:
+            type: string
+            format: date-time
+        - name: channel
+          in: query
+          schema:
+            type: string
+          description: Canal o lista CSV de canales (`facebook,instagram,...`)
+        - name: account
+          in: query
+          schema:
+            type: string
+          description: Cuenta o lista CSV de cuentas
+        - name: post_type
+          in: query
+          schema:
+            type: string
+          description: Tipo de post o lista CSV de tipos (`unknown` para vacios)
+        - name: campaign
+          in: query
+          schema:
+            type: string
+          description: Campaña o lista CSV de campañas
+        - name: strategy
+          in: query
+          schema:
+            type: string
+          description: Estrategia o lista CSV de estrategias
+        - name: hashtag
+          in: query
+          schema:
+            type: string
+          description: Hashtag o lista CSV de hashtags (con o sin #)
+        - name: comparison_mode
+          in: query
+          schema:
+            $ref: '#/components/schemas/SocialComparisonMode'
+        - name: comparison_days
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 366
+        - name: dimension
+          in: query
+          schema:
+            $ref: '#/components/schemas/SocialErBreakdownDimension'
+      responses:
+        '200':
+          description: Dataset ER por dimension
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MonitorSocialErBreakdownResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+  /v1/monitor/social/targets/er:
+    get:
+      tags: [Monitor]
+      summary: Metas ER por canal para 2026 (auto + overrides)
+      parameters:
+        - name: year
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 2100
+      responses:
+        '200':
+          description: Metas ER por canal
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MonitorSocialErTargetsResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+    patch:
+      tags: [Monitor]
+      summary: Actualizar metas ER por canal (solo Admin)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchMonitorSocialErTargetsRequest'
+      responses:
+        '200':
+          description: Metas ER actualizadas
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MonitorSocialErTargetsResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+  /v1/monitor/social/hashtags/backfill:
+    post:
+      tags: [Monitor]
+      summary: Ejecutar backfill idempotente de hashtags historicos
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 50000
+            default: 5000
+      responses:
+        '202':
+          description: Backfill aceptado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MonitorSocialHashtagBackfillResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+  /v1/monitor/social/etl-quality:
+    get:
+      tags: [Monitor]
+      summary: Calidad ETL y reconciliacion S3-DB
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Calidad ETL social
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MonitorSocialEtlQualityResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+  /v1/monitor/social/export.xlsx:
+    get:
+      tags: [Monitor]
+      summary: Export Excel social analytics V2
+      parameters:
+        - name: preset
+          in: query
+          schema:
+            $ref: '#/components/schemas/SocialDatePreset'
+        - name: window_days
+          in: query
+          schema:
+            type: integer
+            enum: [7, 30, 90]
+        - name: from
+          in: query
+          schema:
+            type: string
+            format: date-time
+        - name: to
+          in: query
+          schema:
+            type: string
+            format: date-time
+        - name: channel
+          in: query
+          schema:
+            type: string
+          description: Canal o lista CSV de canales (`facebook,instagram,...`)
+        - name: account
+          in: query
+          schema:
+            type: string
+          description: Cuenta o lista CSV de cuentas
+        - name: post_type
+          in: query
+          schema:
+            type: string
+          description: Tipo de post o lista CSV de tipos (`unknown` para vacios)
+        - name: sentiment
+          in: query
+          schema:
+            $ref: '#/components/schemas/SocialSentiment'
+        - name: campaign
+          in: query
+          schema:
+            type: string
+          description: Campaña o lista CSV de campañas
+        - name: strategy
+          in: query
+          schema:
+            type: string
+          description: Estrategia o lista CSV de estrategias
+        - name: hashtag
+          in: query
+          schema:
+            type: string
+          description: Hashtag o lista CSV de hashtags (con o sin #)
+        - name: comparison_mode
+          in: query
+          schema:
+            $ref: '#/components/schemas/SocialComparisonMode'
+        - name: comparison_days
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 366
+        - name: sort
+          in: query
+          schema:
+            $ref: '#/components/schemas/SocialPostSort'
+        - name: min_posts
+          in: query
+          schema:
+            type: integer
+            default: 5
+        - name: min_exposure
+          in: query
+          schema:
+            type: integer
+            default: 5000
+      responses:
+        '200':
+          description: Archivo Excel
+          content:
+            application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
+              schema:
+                type: string
+                format: binary
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+  /v1/monitor/social/runs:
+    get:
+      tags: [Monitor]
+      summary: Historial de corridas de sync social
+      parameters:
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Corridas sociales
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MonitorSocialRunsResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+    post:
+      tags: [Monitor]
+      summary: Disparar corrida manual async de sync social
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateMonitorSocialRunRequest'
+      responses:
+        '202':
+          description: Corrida aceptada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MonitorSocialRunAccepted'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+  /v1/monitor/social/settings:
+    get:
+      tags: [Monitor]
+      summary: Obtener configuracion social de umbrales y metas
+      responses:
+        '200':
+          description: Configuracion social
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MonitorSocialSettings'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    patch:
+      tags: [Monitor]
+      summary: Actualizar configuracion social (Admin)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchMonitorSocialSettingsRequest'
+      responses:
+        '200':
+          description: Configuracion actualizada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MonitorSocialSettings'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+  /v1/monitor/incidents:
+    get:
+      tags: [Monitor]
+      summary: Listado paginado de incidentes operativos
+      parameters:
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+        - name: status
+          in: query
+          schema:
+            $ref: '#/components/schemas/IncidentStatus'
+        - name: severity
+          in: query
+          schema:
+            $ref: '#/components/schemas/MonitorSeverity'
+        - name: scope
+          in: query
+          schema:
+            $ref: '#/components/schemas/TermScope'
+        - name: owner_user_id
+          in: query
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Lista de incidentes
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IncidentListResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+  /v1/monitor/incidents/evaluate:
+    post:
+      tags: [Monitor]
+      summary: Disparar evaluacion manual de incidentes
+      responses:
+        '202':
+          description: Evaluacion encolada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IncidentEvaluationAccepted'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /v1/monitor/incidents/{id}:
+    patch:
+      tags: [Monitor]
+      summary: Actualizar estado, owner y/o nota de un incidente
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchIncidentRequest'
+      responses:
+        '200':
+          description: Incidente actualizado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PatchIncidentResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+  /v1/monitor/incidents/{id}/notes:
+    get:
+      tags: [Monitor]
+      summary: Listar notas de incidente
+      parameters:
+        - $ref: '#/components/parameters/Id'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Notas del incidente
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IncidentNotesResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+    post:
+      tags: [Monitor]
+      summary: Agregar nota de incidente
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateIncidentNoteRequest'
+      responses:
+        '201':
+          description: Nota creada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IncidentNote'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+  /v1/analyze/overview:
+    get:
+      tags: [Analysis]
+      summary: Overview de analisis con variacion contra periodo anterior
+      responses:
+        '200':
+          description: Resumen de analisis V1 (news-only, ventana fija de 7 dias)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AnalyzeOverviewResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          description: Error interno
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /v1/analyze/channel:
+    get:
+      tags: [Analysis]
+      summary: Analisis por canal/proveedor
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Desglose por canal/proveedor
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AnalyzeChannelResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '500':
+          description: Error interno
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /v1/analyze/competitors:
+    get:
+      tags: [Analysis]
+      summary: Benchmark de competencia sobre set cerrado (scope=competencia)
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Benchmark de competidores
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AnalyzeCompetitorsResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '500':
+          description: Error interno
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
   /v1/content/{id}/state:
     patch:
       tags: [Content]
@@ -333,7 +1383,7 @@ paths:
   /v1/analysis/runs:
     post:
       tags: [Analysis]
-      summary: Ejecutar analisis agregado
+      summary: Crear corrida async de analisis agregado
       requestBody:
         required: true
         content:
@@ -342,11 +1392,17 @@ paths:
               $ref: '#/components/schemas/CreateAnalysisRunRequest'
       responses:
         '202':
-          description: Analisis en proceso
+          description: Corrida aceptada (nueva o reutilizada por idempotencia)
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/AnalysisRunAccepted'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/ValidationError'
   /v1/analysis/history:
     get:
       tags: [Analysis]
@@ -354,6 +1410,24 @@ paths:
       parameters:
         - $ref: '#/components/parameters/Cursor'
         - $ref: '#/components/parameters/Limit'
+        - name: status
+          in: query
+          schema:
+            $ref: '#/components/schemas/AnalysisRunStatus'
+        - name: scope
+          in: query
+          schema:
+            $ref: '#/components/schemas/AnalysisRunScope'
+        - name: from
+          in: query
+          schema:
+            type: string
+            format: date-time
+        - name: to
+          in: query
+          schema:
+            type: string
+            format: date-time
       responses:
         '200':
           description: Historial paginado
@@ -361,6 +1435,33 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/AnalysisRunListResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+  /v1/analysis/runs/{id}:
+    get:
+      tags: [Analysis]
+      summary: Detalle de corrida async de analisis
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      responses:
+        '200':
+          description: Detalle de corrida
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AnalysisRunDetailResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationError'
   /v1/exports/csv:
     post:
       tags: [Exports]
@@ -403,6 +1504,268 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+  /v1/reports/center:
+    get:
+      tags: [Reports]
+      summary: Centro de reportes (historial de corridas)
+      parameters:
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+        - name: status
+          in: query
+          schema:
+            $ref: '#/components/schemas/ReportRunStatus'
+        - name: template_id
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: from
+          in: query
+          schema:
+            type: string
+            format: date-time
+        - name: to
+          in: query
+          schema:
+            type: string
+            format: date-time
+      responses:
+        '200':
+          description: Lista paginada de corridas
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReportRunListResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+  /v1/reports/runs/{id}:
+    get:
+      tags: [Reports]
+      summary: Detalle de corrida de reporte
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      responses:
+        '200':
+          description: Detalle de corrida
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReportRunDetailResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+  /v1/reports/runs:
+    post:
+      tags: [Reports]
+      summary: Ejecutar corrida manual de reporte por plantilla
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateReportRunRequest'
+      responses:
+        '202':
+          description: Corrida aceptada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReportRunAccepted'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+  /v1/reports/templates:
+    get:
+      tags: [Reports]
+      summary: Listar plantillas de reportes
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Lista de plantillas
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReportTemplatesResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+    post:
+      tags: [Reports]
+      summary: Crear plantilla de reporte
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateReportTemplateRequest'
+      responses:
+        '201':
+          description: Plantilla creada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReportTemplate'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+  /v1/reports/templates/{id}:
+    patch:
+      tags: [Reports]
+      summary: Actualizar plantilla de reporte
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateReportTemplateRequest'
+      responses:
+        '200':
+          description: Plantilla actualizada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReportTemplate'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+  /v1/reports/schedules:
+    get:
+      tags: [Reports]
+      summary: Listar schedules de reportes
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 300
+            default: 100
+      responses:
+        '200':
+          description: Lista de schedules
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReportSchedulesResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+    post:
+      tags: [Reports]
+      summary: Crear schedule de reporte
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateReportScheduleRequest'
+      responses:
+        '201':
+          description: Schedule creado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReportSchedule'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+  /v1/reports/schedules/{id}:
+    patch:
+      tags: [Reports]
+      summary: Actualizar schedule de reporte
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateReportScheduleRequest'
+      responses:
+        '200':
+          description: Schedule actualizado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReportSchedule'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+  /v1/reports/schedules/{id}/run:
+    post:
+      tags: [Reports]
+      summary: Disparar corrida manual para un schedule
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      responses:
+        '202':
+          description: Corrida aceptada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReportScheduleRunAccepted'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
         '422':
           $ref: '#/components/responses/ValidationError'
   /v1/meta:
@@ -747,6 +2110,193 @@ paths:
           $ref: '#/components/responses/Conflict'
         '422':
           $ref: '#/components/responses/ValidationError'
+  /v1/config/source-scoring/weights:
+    get:
+      tags: [Config]
+      summary: Listar pesos configurables de source scoring
+      parameters:
+        - name: provider
+          in: query
+          schema:
+            type: string
+        - name: include_inactive
+          in: query
+          schema:
+            type: boolean
+            default: false
+      responses:
+        '200':
+          description: Pesos configurados
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SourceWeightListResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+    post:
+      tags: [Config]
+      summary: Crear peso de source scoring
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateSourceWeightRequest'
+      responses:
+        '201':
+          description: Peso creado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SourceWeight'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+  /v1/config/source-scoring/weights/{id}:
+    patch:
+      tags: [Config]
+      summary: Actualizar peso de source scoring
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateSourceWeightRequest'
+      responses:
+        '200':
+          description: Peso actualizado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SourceWeight'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+  /v1/config/notifications/recipients:
+    get:
+      tags: [Config]
+      summary: Listar recipients de notificaciones (digest/incidentes)
+      parameters:
+        - name: kind
+          in: query
+          required: true
+          schema:
+            $ref: '#/components/schemas/NotificationRecipientKind'
+        - name: scope
+          in: query
+          schema:
+            type: string
+        - name: include_inactive
+          in: query
+          schema:
+            type: boolean
+            default: false
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 500
+            default: 200
+      responses:
+        '200':
+          description: Recipients configurados
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotificationRecipientListResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+    post:
+      tags: [Config]
+      summary: Crear recipient de notificaciones
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateNotificationRecipientRequest'
+      responses:
+        '201':
+          description: Recipient creado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotificationRecipient'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+  /v1/config/notifications/recipients/{id}:
+    patch:
+      tags: [Config]
+      summary: Actualizar recipient de notificaciones
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateNotificationRecipientRequest'
+      responses:
+        '200':
+          description: Recipient actualizado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotificationRecipient'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+  /v1/config/notifications/status:
+    get:
+      tags: [Config]
+      summary: Estado SES (sandbox/produccion + sender verificado)
+      responses:
+        '200':
+          description: Estado SES y sender
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotificationEmailStatusResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
   /v1/config/audit:
     get:
       tags: [Audit]
@@ -906,6 +2456,18 @@ components:
     TermScope:
       type: string
       enum: [claro, competencia]
+    AnalysisRunScope:
+      type: string
+      enum: [overview, channel, competitors, custom]
+    AnalysisRunStatus:
+      type: string
+      enum: [queued, running, completed, failed]
+    RunStatus:
+      type: string
+      enum: [queued, running, completed, failed]
+    TriggerType:
+      type: string
+      enum: [scheduled, manual]
     Term:
       type: object
       required: [id, name, scope, is_active, created_at]
@@ -1225,10 +2787,48 @@ components:
           type: string
     CreateAnalysisRunRequest:
       type: object
+      required: [scope]
       properties:
-        term_id:
+        scope:
+          $ref: '#/components/schemas/AnalysisRunScope'
+        source_type:
+          $ref: '#/components/schemas/SourceType'
+          default: news
+        trigger_type:
           type: string
-          format: uuid
+          enum: [manual, scheduled]
+          default: manual
+        model_id:
+          type: string
+          minLength: 8
+        prompt_version:
+          type: string
+          default: analysis-v1
+        idempotency_key:
+          type: string
+          maxLength: 200
+          nullable: true
+        filters:
+          type: object
+          properties:
+            term_id:
+              type: string
+              format: uuid
+            provider:
+              type: string
+            category:
+              type: string
+            sentimiento:
+              type: string
+            q:
+              type: string
+            from:
+              type: string
+              format: date-time
+            to:
+              type: string
+              format: date-time
+          additionalProperties: false
         content_ids:
           type: array
           items:
@@ -1237,11 +2837,11 @@ components:
         limit:
           type: integer
           minimum: 1
-          maximum: 200
-          default: 100
+          maximum: 500
+          default: 120
     AnalysisRunAccepted:
       type: object
-      required: [analysis_run_id, status]
+      required: [analysis_run_id, status, reused, input_count, idempotency_key]
       properties:
         analysis_run_id:
           type: string
@@ -1249,23 +2849,92 @@ components:
         status:
           type: string
           const: accepted
+        reused:
+          type: boolean
+        input_count:
+          type: integer
+          minimum: 0
+        idempotency_key:
+          type: string
     AnalysisRun:
       type: object
-      required: [id, status, created_at]
+      required:
+        - id
+        - scope
+        - status
+        - trigger_type
+        - source_type
+        - input_count
+        - model_id
+        - prompt_version
+        - filters
+        - window_start
+        - window_end
+        - created_at
+        - updated_at
       properties:
         id:
           type: string
           format: uuid
-        term_id:
-          type: string
-          format: uuid
+        scope:
+          $ref: '#/components/schemas/AnalysisRunScope'
         status:
+          $ref: '#/components/schemas/AnalysisRunStatus'
+        trigger_type:
           type: string
-          enum: [queued, running, completed, failed]
+          enum: [manual, scheduled]
+        source_type:
+          $ref: '#/components/schemas/SourceType'
+        input_count:
+          type: integer
+        model_id:
+          type: string
+        prompt_version:
+          type: string
+        filters:
+          type: object
+          additionalProperties: true
         output:
           type: object
           additionalProperties: true
+          nullable: true
+        request_id:
+          type: string
+          nullable: true
+        requested_by_user_id:
+          type: string
+          format: uuid
+          nullable: true
+        requested_by_name:
+          type: string
+          nullable: true
+        requested_by_email:
+          type: string
+          nullable: true
+        idempotency_key:
+          type: string
+          nullable: true
+        window_start:
+          type: string
+          format: date-time
+        window_end:
+          type: string
+          format: date-time
+        error_message:
+          type: string
+          nullable: true
+        started_at:
+          type: string
+          format: date-time
+          nullable: true
+        completed_at:
+          type: string
+          format: date-time
+          nullable: true
         created_at:
+          type: string
+          format: date-time
+        updated_at:
           type: string
           format: date-time
     AnalysisRunListResponse:
@@ -1278,6 +2947,32 @@ components:
             $ref: '#/components/schemas/AnalysisRun'
         page_info:
           $ref: '#/components/schemas/PageInfo'
+    AnalysisRunDetailResponse:
+      type: object
+      required: [run, input_summary]
+      properties:
+        run:
+          $ref: '#/components/schemas/AnalysisRun'
+        input_summary:
+          type: object
+          required: [input_count, sample_content_ids, sample_size]
+          properties:
+            input_count:
+              type: integer
+            sample_content_ids:
+              type: array
+              items:
+                type: string
+                format: uuid
+            sample_size:
+              type: integer
+        output:
+          type: object
+          additionalProperties: true
+          nullable: true
+        error:
+          type: string
+          nullable: true
     CreateCsvExportRequest:
       type: object
       properties:
@@ -1342,9 +3037,360 @@ components:
         filters:
           type: object
           additionalProperties: true
+    ReportRunStatus:
+      type: string
+      enum: [queued, running, completed, failed, pending_review]
+    ReportScheduleFrequency:
+      type: string
+      enum: [daily, weekly]
+    ReportTemplate:
+      type: object
+      required: [id, name, is_active, confidence_threshold, created_at, updated_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        description:
+          type: string
+          nullable: true
+        is_active:
+          type: boolean
+        sections:
+          type: object
+          additionalProperties: true
+        filters:
+          type: object
+          additionalProperties: true
+        confidence_threshold:
+          type: number
+          minimum: 0
+          maximum: 1
+        created_by_user_id:
+          type: string
+          format: uuid
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    ReportSchedule:
+      type: object
+      required: [id, template_id, template_name, name, enabled, frequency, time_local, timezone, next_run_at, created_at, updated_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        template_id:
+          type: string
+          format: uuid
+        template_name:
+          type: string
+        name:
+          type: string
+        enabled:
+          type: boolean
+        frequency:
+          $ref: '#/components/schemas/ReportScheduleFrequency'
+        day_of_week:
+          type: integer
+          minimum: 0
+          maximum: 6
+          nullable: true
+        time_local:
+          type: string
+          pattern: '^\\d{2}:\\d{2}$'
+        timezone:
+          type: string
+        recipients:
+          type: array
+          items:
+            type: string
+            format: email
+        next_run_at:
+          type: string
+          format: date-time
+        last_run_at:
+          type: string
+          format: date-time
+          nullable: true
+        created_by_user_id:
+          type: string
+          format: uuid
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    ReportRun:
+      type: object
+      required: [id, template_id, template_name, status, window_start, window_end, source_type, created_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        template_id:
+          type: string
+          format: uuid
+        template_name:
+          type: string
+        schedule_id:
+          type: string
+          format: uuid
+          nullable: true
+        schedule_name:
+          type: string
+          nullable: true
+        status:
+          $ref: '#/components/schemas/ReportRunStatus'
+        window_start:
+          type: string
+          format: date-time
+        window_end:
+          type: string
+          format: date-time
+        source_type:
+          $ref: '#/components/schemas/SourceType'
+        confidence:
+          type: number
+          minimum: 0
+          maximum: 1
+          nullable: true
+        summary:
+          type: object
+          additionalProperties: true
+        recommendations:
+          type: array
+          items:
+            type: string
+        blocked_reason:
+          type: string
+          nullable: true
+        export_job_id:
+          type: string
+          format: uuid
+          nullable: true
+        export_status:
+          type: string
+          enum: [queued, running, completed, failed]
+          nullable: true
+        download_url:
+          type: string
+          format: uri
+          nullable: true
+        requested_by_user_id:
+          type: string
+          format: uuid
+          nullable: true
+        requested_by_name:
+          type: string
+          nullable: true
+        requested_by_email:
+          type: string
+          format: email
+          nullable: true
+        idempotency_key:
+          type: string
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        started_at:
+          type: string
+          format: date-time
+          nullable: true
+        completed_at:
+          type: string
+          format: date-time
+          nullable: true
+        error_message:
+          type: string
+          nullable: true
+    ReportRunListResponse:
+      type: object
+      required: [items, page_info]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ReportRun'
+        page_info:
+          $ref: '#/components/schemas/PageInfo'
+    ReportRunDetailResponse:
+      type: object
+      required: [run, template]
+      properties:
+        run:
+          $ref: '#/components/schemas/ReportRun'
+        template:
+          $ref: '#/components/schemas/ReportTemplate'
+        schedule:
+          oneOf:
+            - $ref: '#/components/schemas/ReportSchedule'
+            - type: 'null'
+    ReportTemplatesResponse:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ReportTemplate'
+    ReportSchedulesResponse:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ReportSchedule'
+    CreateReportRunRequest:
+      type: object
+      required: [template_id]
+      properties:
+        template_id:
+          type: string
+          format: uuid
+    ReportRunAccepted:
+      type: object
+      required: [report_run_id, status]
+      properties:
+        report_run_id:
+          type: string
+          format: uuid
+        status:
+          type: string
+          const: queued
+    ReportScheduleRunAccepted:
+      type: object
+      required: [report_run_id, schedule_id, status]
+      properties:
+        report_run_id:
+          type: string
+          format: uuid
+        schedule_id:
+          type: string
+          format: uuid
+        status:
+          type: string
+          const: queued
+    CreateReportTemplateRequest:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+          minLength: 3
+          maxLength: 120
+        description:
+          type: string
+          maxLength: 600
+        is_active:
+          type: boolean
+          default: true
+        sections:
+          type: object
+          additionalProperties: true
+        filters:
+          type: object
+          additionalProperties: true
+        confidence_threshold:
+          type: number
+          minimum: 0
+          maximum: 1
+          default: 0.65
+    UpdateReportTemplateRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 3
+          maxLength: 120
+        description:
+          type: string
+          maxLength: 600
+          nullable: true
+        is_active:
+          type: boolean
+        sections:
+          type: object
+          additionalProperties: true
+        filters:
+          type: object
+          additionalProperties: true
+        confidence_threshold:
+          type: number
+          minimum: 0
+          maximum: 1
+    CreateReportScheduleRequest:
+      type: object
+      required: [template_id, name, frequency, time_local]
+      properties:
+        template_id:
+          type: string
+          format: uuid
+        name:
+          type: string
+          minLength: 3
+          maxLength: 120
+        enabled:
+          type: boolean
+          default: true
+        frequency:
+          $ref: '#/components/schemas/ReportScheduleFrequency'
+        day_of_week:
+          type: integer
+          minimum: 0
+          maximum: 6
+          nullable: true
+        time_local:
+          type: string
+          pattern: '^\\d{2}:\\d{2}$'
+        timezone:
+          type: string
+          default: America/Bogota
+        recipients:
+          type: array
+          items:
+            type: string
+            format: email
+    UpdateReportScheduleRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 3
+          maxLength: 120
+        enabled:
+          type: boolean
+        frequency:
+          $ref: '#/components/schemas/ReportScheduleFrequency'
+        day_of_week:
+          type: integer
+          minimum: 0
+          maximum: 6
+          nullable: true
+        time_local:
+          type: string
+          pattern: '^\\d{2}:\\d{2}$'
+        timezone:
+          type: string
+        recipients:
+          type: array
+          items:
+            type: string
+            format: email
     MonitorSeverity:
       type: string
       enum: [SEV1, SEV2, SEV3, SEV4]
+    IncidentStatus:
+      type: string
+      enum: [open, acknowledged, in_progress, resolved, dismissed]
     MonitorScopeKpi:
       type: object
       required:
@@ -1430,6 +3476,1505 @@ components:
               $ref: '#/components/schemas/MonitorScopeKpi'
         diagnostics:
           $ref: '#/components/schemas/MonitorDiagnostics'
+    SocialChannel:
+      type: string
+      enum: [facebook, instagram, linkedin, tiktok]
+    SocialSentiment:
+      type: string
+      enum: [positive, negative, neutral, unknown]
+    SocialDatePreset:
+      type: string
+      enum: [all, y2024, y2025, ytd, 90d, 30d, 7d, last_quarter, custom]
+    SocialComparisonMode:
+      type: string
+      enum: [weekday_aligned_week, exact_days, same_period_last_year]
+    SocialHeatmapMetric:
+      type: string
+      enum: [er, engagement_total, likes, comments, shares, views, view_rate]
+    SocialScatterDimension:
+      type: string
+      enum: [post_type, channel, account, campaign, strategy, hashtag]
+    SocialErBreakdownDimension:
+      type: string
+      enum: [hashtag, word, post_type, publish_frequency, weekday]
+    SocialTrendGranularity:
+      type: string
+      enum: [auto, day, week, month]
+    SocialPostSort:
+      type: string
+      enum: [published_at_desc, exposure_desc, engagement_desc]
+    SocialReconciliationStatus:
+      type: string
+      enum: [ok, warning, error, unknown]
+    SocialSyncPhase:
+      type: string
+      enum: [ingest, classify, aggregate, reconcile, alerts]
+    SocialSyncPhaseState:
+      type: string
+      enum: [pending, running, completed, failed, skipped]
+    SocialRunCounters:
+      type: object
+      required:
+        [
+          objects_discovered,
+          objects_processed,
+          objects_skipped,
+          rows_parsed,
+          rows_persisted,
+          rows_classified,
+          rows_pending_classification,
+          rows_unknown_sentiment,
+          malformed_rows,
+          anomalous_object_keys
+        ]
+      properties:
+        objects_discovered:
+          type: integer
+        objects_processed:
+          type: integer
+        objects_skipped:
+          type: integer
+        rows_parsed:
+          type: integer
+        rows_persisted:
+          type: integer
+        rows_classified:
+          type: integer
+        rows_pending_classification:
+          type: integer
+        rows_unknown_sentiment:
+          type: integer
+        malformed_rows:
+          type: integer
+        anomalous_object_keys:
+          type: integer
+    MonitorSocialKpis:
+      type: object
+      required:
+        [
+          posts,
+          exposure_total,
+          engagement_total,
+          er_global,
+          classified_items,
+          positivos,
+          negativos,
+          neutrales,
+          sentimiento_neto,
+          riesgo_activo,
+          shs,
+          focus_account,
+          focus_account_sov
+        ]
+      properties:
+        posts:
+          type: integer
+        exposure_total:
+          type: number
+        engagement_total:
+          type: number
+        er_global:
+          type: number
+        classified_items:
+          type: integer
+        positivos:
+          type: integer
+        negativos:
+          type: integer
+        neutrales:
+          type: integer
+        sentimiento_neto:
+          type: number
+        riesgo_activo:
+          type: number
+        shs:
+          type: number
+        focus_account:
+          type: string
+          nullable: true
+        focus_account_sov:
+          type: number
+    MonitorSocialDelta:
+      type: object
+      required:
+        [posts, exposure_total, engagement_total, er_global, sentimiento_neto, riesgo_activo, shs, focus_account_sov]
+      properties:
+        posts:
+          type: number
+        exposure_total:
+          type: number
+        engagement_total:
+          type: number
+        er_global:
+          type: number
+        sentimiento_neto:
+          type: number
+        riesgo_activo:
+          type: number
+        shs:
+          type: number
+        focus_account_sov:
+          type: number
+    MonitorSocialComparison:
+      type: object
+      required: [mode_applied, current_window_start, current_window_end, previous_window_start, previous_window_end, label]
+      properties:
+        mode_applied:
+          $ref: '#/components/schemas/SocialComparisonMode'
+        current_window_start:
+          type: string
+          format: date-time
+        current_window_end:
+          type: string
+          format: date-time
+        previous_window_start:
+          type: string
+          format: date-time
+        previous_window_end:
+          type: string
+          format: date-time
+        label:
+          type: string
+    MonitorSocialPreviousPeriod:
+      type: object
+      required: [posts, exposure_total, engagement_total, er_global, sentimiento_neto, riesgo_activo, shs, focus_account_sov]
+      properties:
+        posts:
+          type: number
+        exposure_total:
+          type: number
+        engagement_total:
+          type: number
+        er_global:
+          type: number
+        sentimiento_neto:
+          type: number
+        riesgo_activo:
+          type: number
+        shs:
+          type: number
+        focus_account_sov:
+          type: number
+    MonitorSocialErTargetProgressItem:
+      type: object
+      required: [channel, baseline_2025_er, target_2026_er, current_er, gap, progress_pct, source]
+      properties:
+        channel:
+          $ref: '#/components/schemas/SocialChannel'
+        baseline_2025_er:
+          type: number
+        target_2026_er:
+          type: number
+        current_er:
+          type: number
+        gap:
+          type: number
+        progress_pct:
+          type: number
+        source:
+          type: string
+          enum: [auto, manual]
+    MonitorSocialTargetProgress:
+      type: object
+      required:
+        [quarterly_sov_target_pp, quarterly_sov_delta_pp, quarterly_sov_progress_pct, target_shs, shs_gap, shs_progress_pct, er_by_channel]
+      properties:
+        quarterly_sov_target_pp:
+          type: number
+        quarterly_sov_delta_pp:
+          type: number
+        quarterly_sov_progress_pct:
+          type: number
+        target_shs:
+          type: number
+        shs_gap:
+          type: number
+        shs_progress_pct:
+          type: number
+        er_by_channel:
+          type: array
+          items:
+            $ref: '#/components/schemas/MonitorSocialErTargetProgressItem'
+    MonitorSocialTrendItem:
+      type: object
+      required: [date, posts, exposure_total, engagement_total, er_global, sentimiento_neto, riesgo_activo]
+      properties:
+        date:
+          type: string
+        posts:
+          type: integer
+        exposure_total:
+          type: number
+        engagement_total:
+          type: number
+        er_global:
+          type: number
+        sentimiento_neto:
+          type: number
+        riesgo_activo:
+          type: number
+    MonitorSocialTrendSeriesItem:
+      type: object
+      required: [bucket_start, bucket_end, bucket_label, posts, exposure_total, engagement_total, er_global, sentimiento_neto, riesgo_activo, shs]
+      properties:
+        bucket_start:
+          type: string
+          format: date-time
+        bucket_end:
+          type: string
+          format: date-time
+        bucket_label:
+          type: string
+        posts:
+          type: integer
+        exposure_total:
+          type: number
+        engagement_total:
+          type: number
+        er_global:
+          type: number
+        sentimiento_neto:
+          type: number
+        riesgo_activo:
+          type: number
+        shs:
+          type: number
+    MonitorSocialByChannelItem:
+      type: object
+      required: [channel, posts, exposure_total, engagement_total, er_global, sentimiento_neto, riesgo_activo, sov_interno]
+      properties:
+        channel:
+          $ref: '#/components/schemas/SocialChannel'
+        posts:
+          type: integer
+        exposure_total:
+          type: number
+        engagement_total:
+          type: number
+        er_global:
+          type: number
+        sentimiento_neto:
+          type: number
+        riesgo_activo:
+          type: number
+        sov_interno:
+          type: number
+    MonitorSocialByAccountItem:
+      type: object
+      required:
+        [account_name, channel_mix, posts, exposure_total, engagement_total, er_global, sentimiento_neto, riesgo_activo, sov_interno]
+      properties:
+        account_name:
+          type: string
+        channel_mix:
+          type: array
+          items:
+            $ref: '#/components/schemas/SocialChannel'
+        posts:
+          type: integer
+        exposure_total:
+          type: number
+        engagement_total:
+          type: number
+        er_global:
+          type: number
+        sentimiento_neto:
+          type: number
+        riesgo_activo:
+          type: number
+        sov_interno:
+          type: number
+    MonitorSocialDiagnostics:
+      type: object
+      required:
+        [
+          insufficient_data,
+          unclassified_items,
+          unknown_sentiment_items,
+          last_run_status,
+          processed_objects,
+          anomalous_object_keys,
+          rows_pending_classification,
+          window_start,
+          window_end
+        ]
+      properties:
+        insufficient_data:
+          type: boolean
+        unclassified_items:
+          type: integer
+        unknown_sentiment_items:
+          type: integer
+        last_run_status:
+          type: string
+          nullable: true
+        processed_objects:
+          type: integer
+        anomalous_object_keys:
+          type: integer
+        rows_pending_classification:
+          type: integer
+        window_start:
+          type: string
+          format: date-time
+        window_end:
+          type: string
+          format: date-time
+    MonitorSocialCoverage:
+      type: object
+      required: [db_min_date, db_max_date, s3_min_date, s3_max_date]
+      properties:
+        db_min_date:
+          type: string
+          format: date-time
+          nullable: true
+        db_max_date:
+          type: string
+          format: date-time
+          nullable: true
+        s3_min_date:
+          type: string
+          format: date-time
+          nullable: true
+        s3_max_date:
+          type: string
+          format: date-time
+          nullable: true
+    MonitorSocialSettings:
+      type: object
+      required:
+        [
+          id,
+          key,
+          focus_account,
+          target_quarterly_sov_pp,
+          target_shs,
+          risk_threshold,
+          sentiment_drop_threshold,
+          er_drop_threshold,
+          alert_cooldown_minutes,
+          metadata,
+          updated_by_user_id,
+          created_at,
+          updated_at
+        ]
+      properties:
+        id:
+          type: string
+          format: uuid
+        key:
+          type: string
+        focus_account:
+          type: string
+          nullable: true
+        target_quarterly_sov_pp:
+          type: number
+        target_shs:
+          type: number
+        risk_threshold:
+          type: number
+        sentiment_drop_threshold:
+          type: number
+        er_drop_threshold:
+          type: number
+        alert_cooldown_minutes:
+          type: integer
+        metadata:
+          type: object
+          additionalProperties: true
+        updated_by_user_id:
+          type: string
+          format: uuid
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    MonitorSocialOverviewResponse:
+      type: object
+      required:
+        [
+          generated_at,
+          last_etl_at,
+          official,
+          preset,
+          window_days,
+          window_start,
+          window_end,
+          comparison,
+          trend_granularity_applied,
+          kpis,
+          previous_period,
+          delta_vs_previous,
+          target_progress,
+          trend_series,
+          trend_daily,
+          by_channel,
+          by_account,
+          diagnostics,
+          coverage,
+          reconciliation_status,
+          settings
+        ]
+      properties:
+        generated_at:
+          type: string
+          format: date-time
+        last_etl_at:
+          type: string
+          format: date-time
+          nullable: true
+        official:
+          type: boolean
+          const: false
+        preset:
+          $ref: '#/components/schemas/SocialDatePreset'
+        window_days:
+          type: integer
+        window_start:
+          type: string
+          format: date-time
+        window_end:
+          type: string
+          format: date-time
+        comparison:
+          $ref: '#/components/schemas/MonitorSocialComparison'
+        trend_granularity_applied:
+          $ref: '#/components/schemas/SocialTrendGranularity'
+        kpis:
+          $ref: '#/components/schemas/MonitorSocialKpis'
+        previous_period:
+          $ref: '#/components/schemas/MonitorSocialPreviousPeriod'
+        delta_vs_previous:
+          $ref: '#/components/schemas/MonitorSocialDelta'
+        target_progress:
+          $ref: '#/components/schemas/MonitorSocialTargetProgress'
+        trend_series:
+          type: array
+          items:
+            $ref: '#/components/schemas/MonitorSocialTrendSeriesItem'
+        trend_daily:
+          type: array
+          items:
+            $ref: '#/components/schemas/MonitorSocialTrendItem'
+        by_channel:
+          type: array
+          items:
+            $ref: '#/components/schemas/MonitorSocialByChannelItem'
+        by_account:
+          type: array
+          items:
+            $ref: '#/components/schemas/MonitorSocialByAccountItem'
+        diagnostics:
+          $ref: '#/components/schemas/MonitorSocialDiagnostics'
+        coverage:
+          $ref: '#/components/schemas/MonitorSocialCoverage'
+        reconciliation_status:
+          $ref: '#/components/schemas/SocialReconciliationStatus'
+        settings:
+          $ref: '#/components/schemas/MonitorSocialSettings'
+    MonitorSocialAccountItem:
+      type: object
+      required:
+        [
+          account_name,
+          channel_mix,
+          posts,
+          exposure_total,
+          engagement_total,
+          er_ponderado,
+          sentimiento_neto,
+          riesgo_activo,
+          sov_interno,
+          delta_exposure,
+          delta_engagement,
+          delta_er,
+          meets_threshold
+        ]
+      properties:
+        account_name:
+          type: string
+        channel_mix:
+          type: array
+          items:
+            $ref: '#/components/schemas/SocialChannel'
+        posts:
+          type: integer
+        exposure_total:
+          type: number
+        engagement_total:
+          type: number
+        er_ponderado:
+          type: number
+        sentimiento_neto:
+          type: number
+        riesgo_activo:
+          type: number
+        sov_interno:
+          type: number
+        delta_exposure:
+          type: number
+        delta_engagement:
+          type: number
+        delta_er:
+          type: number
+        meets_threshold:
+          type: boolean
+    MonitorSocialAccountsResponse:
+      type: object
+      required: [generated_at, last_etl_at, preset, window_start, window_end, min_posts, min_exposure, items]
+      properties:
+        generated_at:
+          type: string
+          format: date-time
+        last_etl_at:
+          type: string
+          format: date-time
+          nullable: true
+        preset:
+          $ref: '#/components/schemas/SocialDatePreset'
+        window_start:
+          type: string
+          format: date-time
+        window_end:
+          type: string
+          format: date-time
+        min_posts:
+          type: integer
+        min_exposure:
+          type: integer
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/MonitorSocialAccountItem'
+    MonitorSocialRiskTrendItem:
+      type: object
+      required: [date, clasificados, positivos, negativos, neutrales, sentimiento_neto, riesgo_activo]
+      properties:
+        date:
+          type: string
+        clasificados:
+          type: integer
+        positivos:
+          type: integer
+        negativos:
+          type: integer
+        neutrales:
+          type: integer
+        sentimiento_neto:
+          type: number
+        riesgo_activo:
+          type: number
+    MonitorSocialRiskChannelItem:
+      type: object
+      required: [channel, clasificados, negativos, riesgo_activo]
+      properties:
+        channel:
+          $ref: '#/components/schemas/SocialChannel'
+        clasificados:
+          type: integer
+        negativos:
+          type: integer
+        riesgo_activo:
+          type: number
+    MonitorSocialRiskAccountItem:
+      type: object
+      required: [account_name, clasificados, negativos, riesgo_activo]
+      properties:
+        account_name:
+          type: string
+        clasificados:
+          type: integer
+        negativos:
+          type: integer
+        riesgo_activo:
+          type: number
+    MonitorSocialAlertItem:
+      type: object
+      required: [id, severity, status, risk_score, classified_items, updated_at, cooldown_until]
+      properties:
+        id:
+          type: string
+          format: uuid
+        severity:
+          $ref: '#/components/schemas/MonitorSeverity'
+        status:
+          $ref: '#/components/schemas/IncidentStatus'
+        risk_score:
+          type: number
+        classified_items:
+          type: integer
+        updated_at:
+          type: string
+          format: date-time
+        cooldown_until:
+          type: string
+          format: date-time
+          nullable: true
+    MonitorSocialRiskResponse:
+      type: object
+      required: [generated_at, last_etl_at, preset, window_start, window_end, sentiment_trend, by_channel, by_account, alerts]
+      properties:
+        generated_at:
+          type: string
+          format: date-time
+        last_etl_at:
+          type: string
+          format: date-time
+          nullable: true
+        preset:
+          $ref: '#/components/schemas/SocialDatePreset'
+        window_start:
+          type: string
+          format: date-time
+        window_end:
+          type: string
+          format: date-time
+        sentiment_trend:
+          type: array
+          items:
+            $ref: '#/components/schemas/MonitorSocialRiskTrendItem'
+        by_channel:
+          type: array
+          items:
+            $ref: '#/components/schemas/MonitorSocialRiskChannelItem'
+        by_account:
+          type: array
+          items:
+            $ref: '#/components/schemas/MonitorSocialRiskAccountItem'
+        alerts:
+          type: array
+          items:
+            $ref: '#/components/schemas/MonitorSocialAlertItem'
+    MonitorSocialPostItem:
+      type: object
+      required:
+        [
+          id,
+          content_item_id,
+          channel,
+          account_name,
+          external_post_id,
+          post_url,
+          post_type,
+          published_at,
+          title,
+          text,
+          sentiment,
+          sentiment_raw,
+          sentiment_confidence,
+          exposure,
+          engagement_total,
+          impressions,
+          reach,
+          clicks,
+          likes,
+          comments,
+          shares,
+          views,
+          source_score,
+          campaign,
+          strategies,
+          hashtags,
+          created_at,
+          updated_at
+        ]
+      properties:
+        id:
+          type: string
+          format: uuid
+        content_item_id:
+          type: string
+          format: uuid
+        channel:
+          $ref: '#/components/schemas/SocialChannel'
+        account_name:
+          type: string
+        external_post_id:
+          type: string
+        post_url:
+          type: string
+        post_type:
+          type: string
+          nullable: true
+        published_at:
+          type: string
+          format: date-time
+          nullable: true
+        title:
+          type: string
+        text:
+          type: string
+          nullable: true
+        sentiment:
+          $ref: '#/components/schemas/SocialSentiment'
+        sentiment_raw:
+          type: string
+          nullable: true
+        sentiment_confidence:
+          type: number
+          nullable: true
+        exposure:
+          type: number
+        engagement_total:
+          type: number
+        impressions:
+          type: number
+        reach:
+          type: number
+        clicks:
+          type: number
+        likes:
+          type: number
+        comments:
+          type: number
+        shares:
+          type: number
+        views:
+          type: number
+        source_score:
+          type: number
+        campaign:
+          type: string
+          nullable: true
+        strategies:
+          type: array
+          items:
+            type: string
+        hashtags:
+          type: array
+          items:
+            type: string
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    MonitorSocialPostsResponse:
+      type: object
+      required: [items, page_info]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/MonitorSocialPostItem'
+        page_info:
+          $ref: '#/components/schemas/PageInfo'
+    MonitorSocialHeatmapPoint:
+      type: object
+      required: [month, weekday, value, posts]
+      properties:
+        month:
+          type: integer
+          minimum: 1
+          maximum: 12
+        weekday:
+          type: integer
+          minimum: 1
+          maximum: 7
+        value:
+          type: number
+        posts:
+          type: integer
+    MonitorSocialHeatmapResponse:
+      type: object
+      required: [generated_at, metric, items]
+      properties:
+        generated_at:
+          type: string
+          format: date-time
+        metric:
+          $ref: '#/components/schemas/SocialHeatmapMetric'
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/MonitorSocialHeatmapPoint'
+    MonitorSocialScatterItem:
+      type: object
+      required: [label, exposure_total, engagement_total, er_global, posts]
+      properties:
+        label:
+          type: string
+        exposure_total:
+          type: number
+        engagement_total:
+          type: number
+        er_global:
+          type: number
+        posts:
+          type: integer
+    MonitorSocialScatterResponse:
+      type: object
+      required: [generated_at, dimension, items]
+      properties:
+        generated_at:
+          type: string
+          format: date-time
+        dimension:
+          $ref: '#/components/schemas/SocialScatterDimension'
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/MonitorSocialScatterItem'
+    MonitorSocialErBreakdownItem:
+      type: object
+      required: [label, posts, exposure_total, engagement_total, er_global]
+      properties:
+        label:
+          type: string
+        posts:
+          type: integer
+        exposure_total:
+          type: number
+        engagement_total:
+          type: number
+        er_global:
+          type: number
+    MonitorSocialErBreakdownResponse:
+      type: object
+      required: [generated_at, dimension, items]
+      properties:
+        generated_at:
+          type: string
+          format: date-time
+        dimension:
+          $ref: '#/components/schemas/SocialErBreakdownDimension'
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/MonitorSocialErBreakdownItem'
+    MonitorSocialErTargetsResponse:
+      type: object
+      required: [generated_at, last_etl_at, year, items]
+      properties:
+        generated_at:
+          type: string
+          format: date-time
+        last_etl_at:
+          type: string
+          format: date-time
+          nullable: true
+        year:
+          type: integer
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/MonitorSocialErTargetProgressItem'
+    PatchMonitorSocialErTargetItem:
+      type: object
+      required: [channel, source]
+      properties:
+        channel:
+          $ref: '#/components/schemas/SocialChannel'
+        source:
+          type: string
+          enum: [auto, manual]
+        target_2026_er:
+          type: number
+        override_reason:
+          type: string
+          maxLength: 220
+    PatchMonitorSocialErTargetsRequest:
+      type: object
+      required: [targets]
+      properties:
+        year:
+          type: integer
+          minimum: 1
+          maximum: 2100
+        targets:
+          type: array
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/PatchMonitorSocialErTargetItem'
+    MonitorSocialHashtagBackfillResponse:
+      type: object
+      required: [status, updated_rows]
+      properties:
+        status:
+          type: string
+          enum: [accepted]
+        updated_rows:
+          type: integer
+    MonitorSocialReconciliationItem:
+      type: object
+      required: [channel, s3Rows, dbRows, deltaRows, s3MinDate, s3MaxDate, dbMinDate, dbMaxDate, status, runId, createdAt]
+      properties:
+        channel:
+          $ref: '#/components/schemas/SocialChannel'
+        s3Rows:
+          type: number
+        dbRows:
+          type: number
+        deltaRows:
+          type: number
+        s3MinDate:
+          type: string
+          format: date-time
+          nullable: true
+        s3MaxDate:
+          type: string
+          format: date-time
+          nullable: true
+        dbMinDate:
+          type: string
+          format: date-time
+          nullable: true
+        dbMaxDate:
+          type: string
+          format: date-time
+          nullable: true
+        status:
+          $ref: '#/components/schemas/SocialReconciliationStatus'
+        runId:
+          type: string
+          format: uuid
+        createdAt:
+          type: string
+          format: date-time
+    MonitorSocialRunItem:
+      type: object
+      required:
+        [
+          id,
+          trigger_type,
+          status,
+          request_id,
+          queued_at,
+          started_at,
+          finished_at,
+          current_phase,
+          phase_status,
+          counters,
+          metrics,
+          error_message,
+          created_at
+        ]
+      properties:
+        id:
+          type: string
+          format: uuid
+        trigger_type:
+          $ref: '#/components/schemas/TriggerType'
+        status:
+          $ref: '#/components/schemas/RunStatus'
+        request_id:
+          type: string
+          nullable: true
+        queued_at:
+          type: string
+          format: date-time
+        started_at:
+          type: string
+          format: date-time
+          nullable: true
+        finished_at:
+          type: string
+          format: date-time
+          nullable: true
+        current_phase:
+          $ref: '#/components/schemas/SocialSyncPhase'
+          nullable: true
+        phase_status:
+          type: object
+          additionalProperties: true
+          nullable: true
+        counters:
+          $ref: '#/components/schemas/SocialRunCounters'
+        metrics:
+          type: object
+          additionalProperties: true
+        error_message:
+          type: string
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+    MonitorSocialRunsResponse:
+      type: object
+      required: [items, page_info]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/MonitorSocialRunItem'
+        page_info:
+          $ref: '#/components/schemas/PageInfo'
+    MonitorSocialEtlQualityResponse:
+      type: object
+      required: [generated_at, last_etl_at, coverage, reconciliation_status, reconciliation_by_channel, runs]
+      properties:
+        generated_at:
+          type: string
+          format: date-time
+        last_etl_at:
+          type: string
+          format: date-time
+          nullable: true
+        coverage:
+          type: object
+          required: [db_min_date, db_max_date, s3_min_date, s3_max_date]
+          properties:
+            db_min_date:
+              type: string
+              format: date-time
+              nullable: true
+            db_max_date:
+              type: string
+              format: date-time
+              nullable: true
+            s3_min_date:
+              type: string
+              format: date-time
+              nullable: true
+            s3_max_date:
+              type: string
+              format: date-time
+              nullable: true
+        reconciliation_status:
+          $ref: '#/components/schemas/SocialReconciliationStatus'
+        reconciliation_by_channel:
+          type: array
+          items:
+            $ref: '#/components/schemas/MonitorSocialReconciliationItem'
+        runs:
+          type: array
+          items:
+            type: object
+            required:
+              [id, triggerType, status, queuedAt, startedAt, finishedAt, currentPhase, counters, malformedRows, errorMessage]
+            properties:
+              id:
+                type: string
+                format: uuid
+              triggerType:
+                $ref: '#/components/schemas/TriggerType'
+              status:
+                $ref: '#/components/schemas/RunStatus'
+              queuedAt:
+                type: string
+                format: date-time
+              startedAt:
+                type: string
+                format: date-time
+                nullable: true
+              finishedAt:
+                type: string
+                format: date-time
+                nullable: true
+              currentPhase:
+                $ref: '#/components/schemas/SocialSyncPhase'
+                nullable: true
+              counters:
+                $ref: '#/components/schemas/SocialRunCounters'
+              malformedRows:
+                type: integer
+              errorMessage:
+                type: string
+                nullable: true
+    CreateMonitorSocialRunRequest:
+      type: object
+      properties:
+        force:
+          type: boolean
+          default: false
+        bucket:
+          type: string
+        prefix:
+          type: string
+    MonitorSocialRunAccepted:
+      type: object
+      required: [status, run_id, queued_at]
+      properties:
+        status:
+          type: string
+          const: accepted
+        run_id:
+          type: string
+          format: uuid
+        queued_at:
+          type: string
+          format: date-time
+    PatchMonitorSocialSettingsRequest:
+      type: object
+      properties:
+        focus_account:
+          type: string
+          nullable: true
+        target_quarterly_sov_pp:
+          type: number
+        target_shs:
+          type: number
+        risk_threshold:
+          type: number
+        sentiment_drop_threshold:
+          type: number
+        er_drop_threshold:
+          type: number
+        alert_cooldown_minutes:
+          type: integer
+        metadata:
+          type: object
+          additionalProperties: true
+    AnalyzeOverviewDelta:
+      type: object
+      required: [items, classified_items, sentimiento_neto, bhs, riesgo_activo, sov_claro, sov_competencia]
+      properties:
+        items:
+          type: integer
+        classified_items:
+          type: integer
+        sentimiento_neto:
+          type: number
+        bhs:
+          type: number
+        riesgo_activo:
+          type: number
+        sov_claro:
+          type: number
+        sov_competencia:
+          type: number
+    AnalyzeOverviewResponse:
+      type: object
+      required: [generated_at, window_days, source_type, formula_version, totals, previous_totals, delta, by_scope, diagnostics]
+      properties:
+        generated_at:
+          type: string
+          format: date-time
+        window_days:
+          type: integer
+          const: 7
+        source_type:
+          type: string
+          const: news
+        formula_version:
+          type: string
+          const: analysis-v1
+        totals:
+          $ref: '#/components/schemas/MonitorTotalsKpi'
+        previous_totals:
+          $ref: '#/components/schemas/MonitorTotalsKpi'
+        delta:
+          $ref: '#/components/schemas/AnalyzeOverviewDelta'
+        by_scope:
+          type: object
+          required: [claro, competencia]
+          properties:
+            claro:
+              $ref: '#/components/schemas/MonitorScopeKpi'
+            competencia:
+              $ref: '#/components/schemas/MonitorScopeKpi'
+        diagnostics:
+          $ref: '#/components/schemas/MonitorDiagnostics'
+    AnalyzeCategoryCount:
+      type: object
+      required: [value, count]
+      properties:
+        value:
+          type: string
+        count:
+          type: integer
+    AnalyzeChannelItem:
+      type: object
+      required:
+        [provider, items, classified_items, positivos, negativos, neutrales, sentimiento_neto, riesgo_activo, quality_score, bhs, severidad, top_categories, insufficient_data]
+      properties:
+        provider:
+          type: string
+        items:
+          type: integer
+        classified_items:
+          type: integer
+        positivos:
+          type: integer
+        negativos:
+          type: integer
+        neutrales:
+          type: integer
+        sentimiento_neto:
+          type: number
+        riesgo_activo:
+          type: number
+        quality_score:
+          type: number
+        bhs:
+          type: number
+        severidad:
+          $ref: '#/components/schemas/MonitorSeverity'
+        top_categories:
+          type: array
+          items:
+            $ref: '#/components/schemas/AnalyzeCategoryCount'
+        insufficient_data:
+          type: boolean
+    AnalyzeChannelResponse:
+      type: object
+      required: [generated_at, window_days, source_type, formula_version, totals, items]
+      properties:
+        generated_at:
+          type: string
+          format: date-time
+        window_days:
+          type: integer
+          const: 7
+        source_type:
+          type: string
+          const: news
+        formula_version:
+          type: string
+          const: analysis-v1
+        totals:
+          type: object
+          required: [providers, items, classified_items]
+          properties:
+            providers:
+              type: integer
+            items:
+              type: integer
+            classified_items:
+              type: integer
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/AnalyzeChannelItem'
+    AnalyzeScopeBenchmark:
+      type: object
+      required:
+        [items, classified_items, positivos, negativos, neutrales, sentimiento_neto, riesgo_activo, quality_score, bhs, severidad, sov, insufficient_data]
+      properties:
+        items:
+          type: integer
+        classified_items:
+          type: integer
+        positivos:
+          type: integer
+        negativos:
+          type: integer
+        neutrales:
+          type: integer
+        sentimiento_neto:
+          type: number
+        riesgo_activo:
+          type: number
+        quality_score:
+          type: number
+        bhs:
+          type: number
+        severidad:
+          $ref: '#/components/schemas/MonitorSeverity'
+        sov:
+          type: number
+        insufficient_data:
+          type: boolean
+    AnalyzeCompetitorItem:
+      allOf:
+        - $ref: '#/components/schemas/AnalyzeScopeBenchmark'
+        - type: object
+          required: [term_id, term_name]
+          properties:
+            term_id:
+              type: string
+              format: uuid
+            term_name:
+              type: string
+    AnalyzeCompetitorsResponse:
+      type: object
+      required: [generated_at, window_days, source_type, formula_version, baseline_claro, competitors, totals]
+      properties:
+        generated_at:
+          type: string
+          format: date-time
+        window_days:
+          type: integer
+          const: 7
+        source_type:
+          type: string
+          const: news
+        formula_version:
+          type: string
+          const: analysis-v1
+        baseline_claro:
+          $ref: '#/components/schemas/AnalyzeScopeBenchmark'
+        competitors:
+          type: array
+          items:
+            $ref: '#/components/schemas/AnalyzeCompetitorItem'
+        totals:
+          type: object
+          required: [competitor_terms, items, classified_items]
+          properties:
+            competitor_terms:
+              type: integer
+            items:
+              type: integer
+            classified_items:
+              type: integer
+    IncidentOwner:
+      type: object
+      required: [user_id]
+      properties:
+        user_id:
+          type: string
+          format: uuid
+        name:
+          type: string
+          nullable: true
+        email:
+          type: string
+          nullable: true
+        role:
+          type: string
+          nullable: true
+    Incident:
+      type: object
+      required:
+        [
+          id,
+          scope,
+          severity,
+          status,
+          risk_score,
+          classified_items,
+          sla_due_at,
+          sla_remaining_minutes,
+          cooldown_until,
+          signal_version,
+          payload,
+          created_at,
+          updated_at
+        ]
+      properties:
+        id:
+          type: string
+          format: uuid
+        scope:
+          $ref: '#/components/schemas/TermScope'
+        severity:
+          $ref: '#/components/schemas/MonitorSeverity'
+        status:
+          $ref: '#/components/schemas/IncidentStatus'
+        risk_score:
+          type: number
+        classified_items:
+          type: integer
+        owner_user_id:
+          type: string
+          format: uuid
+          nullable: true
+        owner:
+          allOf:
+            - $ref: '#/components/schemas/IncidentOwner'
+          nullable: true
+        sla_due_at:
+          type: string
+          format: date-time
+        sla_remaining_minutes:
+          type: integer
+        cooldown_until:
+          type: string
+          format: date-time
+        signal_version:
+          type: string
+        payload:
+          type: object
+          additionalProperties: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        resolved_at:
+          type: string
+          format: date-time
+          nullable: true
+    IncidentListResponse:
+      type: object
+      required: [items, page_info]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Incident'
+        page_info:
+          $ref: '#/components/schemas/PageInfo'
+    PatchIncidentRequest:
+      type: object
+      properties:
+        status:
+          $ref: '#/components/schemas/IncidentStatus'
+        owner_user_id:
+          type: string
+          format: uuid
+          nullable: true
+        note:
+          type: string
+          minLength: 1
+          maxLength: 2000
+      additionalProperties: false
+    IncidentNote:
+      type: object
+      required: [id, incident_id, author_user_id, author, note, created_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        incident_id:
+          type: string
+          format: uuid
+        author_user_id:
+          type: string
+          format: uuid
+        author:
+          $ref: '#/components/schemas/IncidentOwner'
+        note:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+    PatchIncidentResponse:
+      type: object
+      required: [incident]
+      properties:
+        incident:
+          $ref: '#/components/schemas/Incident'
+        note:
+          allOf:
+            - $ref: '#/components/schemas/IncidentNote'
+          nullable: true
+    IncidentNotesResponse:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/IncidentNote'
+    CreateIncidentNoteRequest:
+      type: object
+      required: [note]
+      properties:
+        note:
+          type: string
+          minLength: 1
+          maxLength: 2000
+      additionalProperties: false
+    IncidentEvaluationAccepted:
+      type: object
+      required: [status, trigger_type]
+      properties:
+        status:
+          type: string
+          const: queued
+        trigger_type:
+          type: string
+          enum: [manual]
+        message_id:
+          type: string
+          nullable: true
     MetaResponse:
       type: object
       properties:
@@ -1812,6 +5357,163 @@ components:
         metadata:
           type: object
           additionalProperties: true
+    SourceWeight:
+      type: object
+      required: [id, provider, weight, is_active, created_at, updated_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        provider:
+          type: string
+        source_name:
+          type: string
+          nullable: true
+        weight:
+          type: number
+          minimum: 0
+          maximum: 1
+        is_active:
+          type: boolean
+        updated_by_user_id:
+          type: string
+          format: uuid
+          nullable: true
+        updated_by_name:
+          type: string
+          nullable: true
+        updated_by_email:
+          type: string
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    SourceWeightListResponse:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/SourceWeight'
+    CreateSourceWeightRequest:
+      type: object
+      required: [provider, weight]
+      properties:
+        provider:
+          type: string
+        source_name:
+          type: string
+          nullable: true
+        weight:
+          type: number
+          minimum: 0
+          maximum: 1
+        is_active:
+          type: boolean
+          default: true
+    UpdateSourceWeightRequest:
+      type: object
+      properties:
+        source_name:
+          type: string
+          nullable: true
+        weight:
+          type: number
+          minimum: 0
+          maximum: 1
+        is_active:
+          type: boolean
+    NotificationRecipientKind:
+      type: string
+      enum: [digest, incident]
+    NotificationRecipient:
+      type: object
+      required: [id, kind, scope, email_masked, is_active, created_at, updated_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        kind:
+          $ref: '#/components/schemas/NotificationRecipientKind'
+        scope:
+          type: string
+        email:
+          type: string
+          nullable: true
+        email_masked:
+          type: string
+        is_active:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    NotificationRecipientListResponse:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/NotificationRecipient'
+    CreateNotificationRecipientRequest:
+      type: object
+      required: [kind, email]
+      properties:
+        kind:
+          $ref: '#/components/schemas/NotificationRecipientKind'
+        scope:
+          type: string
+          default: ops
+        email:
+          type: string
+        is_active:
+          type: boolean
+          default: true
+    UpdateNotificationRecipientRequest:
+      type: object
+      properties:
+        scope:
+          type: string
+        email:
+          type: string
+        is_active:
+          type: boolean
+    NotificationEmailStatusResponse:
+      type: object
+      required: [production_access_enabled, sending_enabled, send_quota, sender_email, sender_verification_status, sender_verified_for_sending]
+      properties:
+        production_access_enabled:
+          type: boolean
+        sending_enabled:
+          type: boolean
+        send_quota:
+          type: object
+          required: [max_24_hour_send, max_send_rate, sent_last_24_hours]
+          properties:
+            max_24_hour_send:
+              type: number
+              nullable: true
+            max_send_rate:
+              type: number
+              nullable: true
+            sent_last_24_hours:
+              type: number
+              nullable: true
+        sender_email:
+          type: string
+          nullable: true
+        sender_verification_status:
+          type: string
+          nullable: true
+        sender_verified_for_sending:
+          type: boolean
     AuditItem:
       type: object
       required: [id, action, resource_type, created_at]

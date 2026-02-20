@@ -10,26 +10,73 @@ import {
   updateClassification,
   updateContentState
 } from "../routes/v1/content";
-import { createAnalysisRun, listAnalysisHistory } from "../routes/v1/analysis";
+import { createAnalysisRun, getAnalysisRun, listAnalysisHistory } from "../routes/v1/analysis";
+import { getAnalyzeChannel, getAnalyzeCompetitors, getAnalyzeOverview } from "../routes/v1/analyze";
 import { createCsvExport, getCsvExport } from "../routes/v1/exports";
+import {
+  createReportRun,
+  createReportSchedule,
+  createReportTemplate,
+  getReportRun,
+  listReportsCenter,
+  listReportSchedules,
+  listReportTemplates,
+  patchReportSchedule,
+  patchReportTemplate,
+  triggerReportScheduleRun
+} from "../routes/v1/reports";
 import { getMeta } from "../routes/v1/meta";
 import { getNewsFeed } from "../routes/v1/feed";
-import { getMonitorOverview } from "../routes/v1/monitor";
+import {
+  createMonitorIncidentNote,
+  evaluateMonitorIncidents,
+  getMonitorIncidentNotes,
+  getMonitorOverview,
+  listMonitorIncidents,
+  patchMonitorIncident
+} from "../routes/v1/monitor";
+import {
+  createMonitorSocialRun,
+  getMonitorSocialErBreakdown,
+  getMonitorSocialErTargets,
+  getMonitorSocialAccounts,
+  getMonitorSocialEtlQuality,
+  getMonitorSocialExportXlsx,
+  getMonitorSocialHeatmap,
+  getMonitorSocialOverview,
+  getMonitorSocialRisk,
+  getMonitorSocialScatter,
+  getMonitorSocialSettings,
+  listMonitorSocialPosts,
+  listMonitorSocialPostComments,
+  listMonitorSocialRuns,
+  postMonitorSocialHashtagBackfill,
+  patchMonitorSocialComment,
+  patchMonitorSocialErTargets,
+  patchMonitorSocialSettings
+} from "../routes/v1/monitorSocial";
 import {
   createConfigAccount,
   createConfigCompetitor,
+  createNotificationRecipient,
   createTaxonomy,
   exportConfigAudit,
   listConfigAccounts,
   listConfigAudit,
   listConfigCompetitors,
+  getNotificationStatus,
+  listNotificationRecipients,
+  listSourceScoringWeights,
   listConnectors,
   listConnectorRuns,
   listTaxonomies,
   patchConfigAccount,
   patchConfigCompetitor,
+  patchNotificationRecipient,
+  patchSourceScoringWeight,
   patchConnector,
   patchTaxonomy,
+  createSourceScoringWeight,
   triggerConnectorSync
 } from "../routes/v1/config";
 
@@ -47,12 +94,49 @@ const roleRules: RoleRule[] = [
   { pattern: /^PATCH \/v1\/content\/[^/]+\/state$/, requiredRole: "Analyst" },
   { pattern: /^POST \/v1\/content\/bulk\/state$/, requiredRole: "Analyst" },
   { pattern: /^PATCH \/v1\/content\/[^/]+\/classification$/, requiredRole: "Analyst" },
+  { pattern: /^GET \/v1\/analyze\/overview$/, requiredRole: "Viewer" },
+  { pattern: /^GET \/v1\/analyze\/channel$/, requiredRole: "Viewer" },
+  { pattern: /^GET \/v1\/analyze\/competitors$/, requiredRole: "Viewer" },
   { pattern: /^POST \/v1\/analysis\/runs$/, requiredRole: "Analyst" },
   { pattern: /^GET \/v1\/analysis\/history$/, requiredRole: "Viewer" },
+  { pattern: /^GET \/v1\/analysis\/runs\/[^/]+$/, requiredRole: "Viewer" },
   { pattern: /^POST \/v1\/exports\/csv$/, requiredRole: "Analyst" },
   { pattern: /^GET \/v1\/exports\/[^/]+$/, requiredRole: "Analyst" },
+  { pattern: /^GET \/v1\/reports\/center$/, requiredRole: "Viewer" },
+  { pattern: /^GET \/v1\/reports\/runs\/[^/]+$/, requiredRole: "Viewer" },
+  { pattern: /^POST \/v1\/reports\/runs$/, requiredRole: "Analyst" },
+  { pattern: /^GET \/v1\/reports\/templates$/, requiredRole: "Viewer" },
+  { pattern: /^POST \/v1\/reports\/templates$/, requiredRole: "Admin" },
+  { pattern: /^PATCH \/v1\/reports\/templates\/[^/]+$/, requiredRole: "Admin" },
+  { pattern: /^GET \/v1\/reports\/schedules$/, requiredRole: "Viewer" },
+  { pattern: /^POST \/v1\/reports\/schedules$/, requiredRole: "Analyst" },
+  { pattern: /^PATCH \/v1\/reports\/schedules\/[^/]+$/, requiredRole: "Analyst" },
+  { pattern: /^POST \/v1\/reports\/schedules\/[^/]+\/run$/, requiredRole: "Analyst" },
   { pattern: /^GET \/v1\/feed\/news$/, requiredRole: "Viewer" },
   { pattern: /^GET \/v1\/monitor\/overview$/, requiredRole: "Viewer" },
+  { pattern: /^GET \/v1\/monitor\/social\/overview$/, requiredRole: "Viewer" },
+  { pattern: /^GET \/v1\/monitor\/social\/accounts$/, requiredRole: "Viewer" },
+  { pattern: /^GET \/v1\/monitor\/social\/posts$/, requiredRole: "Viewer" },
+  { pattern: /^GET \/v1\/monitor\/social\/posts\/[^/]+\/comments$/, requiredRole: "Viewer" },
+  { pattern: /^PATCH \/v1\/monitor\/social\/comments\/[^/]+$/, requiredRole: "Analyst" },
+  { pattern: /^GET \/v1\/monitor\/social\/risk$/, requiredRole: "Viewer" },
+  { pattern: /^GET \/v1\/monitor\/social\/charts\/heatmap$/, requiredRole: "Viewer" },
+  { pattern: /^GET \/v1\/monitor\/social\/charts\/scatter$/, requiredRole: "Viewer" },
+  { pattern: /^GET \/v1\/monitor\/social\/charts\/er-breakdown$/, requiredRole: "Viewer" },
+  { pattern: /^GET \/v1\/monitor\/social\/targets\/er$/, requiredRole: "Viewer" },
+  { pattern: /^PATCH \/v1\/monitor\/social\/targets\/er$/, requiredRole: "Admin" },
+  { pattern: /^POST \/v1\/monitor\/social\/hashtags\/backfill$/, requiredRole: "Admin" },
+  { pattern: /^GET \/v1\/monitor\/social\/etl-quality$/, requiredRole: "Viewer" },
+  { pattern: /^GET \/v1\/monitor\/social\/export\\.xlsx$/, requiredRole: "Analyst" },
+  { pattern: /^POST \/v1\/monitor\/social\/runs$/, requiredRole: "Analyst" },
+  { pattern: /^GET \/v1\/monitor\/social\/runs$/, requiredRole: "Viewer" },
+  { pattern: /^GET \/v1\/monitor\/social\/settings$/, requiredRole: "Viewer" },
+  { pattern: /^PATCH \/v1\/monitor\/social\/settings$/, requiredRole: "Admin" },
+  { pattern: /^GET \/v1\/monitor\/incidents$/, requiredRole: "Viewer" },
+  { pattern: /^PATCH \/v1\/monitor\/incidents\/[^/]+$/, requiredRole: "Analyst" },
+  { pattern: /^GET \/v1\/monitor\/incidents\/[^/]+\/notes$/, requiredRole: "Viewer" },
+  { pattern: /^POST \/v1\/monitor\/incidents\/[^/]+\/notes$/, requiredRole: "Analyst" },
+  { pattern: /^POST \/v1\/monitor\/incidents\/evaluate$/, requiredRole: "Analyst" },
   { pattern: /^GET \/v1\/meta$/, requiredRole: "Viewer" },
   { pattern: /^GET \/v1\/connectors$/, requiredRole: "Viewer" },
   { pattern: /^PATCH \/v1\/connectors\/[^/]+$/, requiredRole: "Analyst" },
@@ -68,7 +152,14 @@ const roleRules: RoleRule[] = [
   { pattern: /^POST \/v1\/config\/taxonomies\/[^/]+$/, requiredRole: "Admin" },
   { pattern: /^PATCH \/v1\/config\/taxonomies\/[^/]+\/[^/]+$/, requiredRole: "Admin" },
   { pattern: /^GET \/v1\/config\/audit$/, requiredRole: "Viewer" },
-  { pattern: /^POST \/v1\/config\/audit\/export$/, requiredRole: "Analyst" }
+  { pattern: /^POST \/v1\/config\/audit\/export$/, requiredRole: "Analyst" },
+  { pattern: /^GET \/v1\/config\/notifications\/recipients$/, requiredRole: "Analyst" },
+  { pattern: /^POST \/v1\/config\/notifications\/recipients$/, requiredRole: "Admin" },
+  { pattern: /^PATCH \/v1\/config\/notifications\/recipients\/[^/]+$/, requiredRole: "Admin" },
+  { pattern: /^GET \/v1\/config\/notifications\/status$/, requiredRole: "Analyst" },
+  { pattern: /^GET \/v1\/config\/source-scoring\/weights$/, requiredRole: "Viewer" },
+  { pattern: /^POST \/v1\/config\/source-scoring\/weights$/, requiredRole: "Admin" },
+  { pattern: /^PATCH \/v1\/config\/source-scoring\/weights\/[^/]+$/, requiredRole: "Admin" }
 ];
 
 const publicRoutes = new Set<string>(["GET /v1/health"]);
@@ -125,13 +216,51 @@ export const main = async (event: APIGatewayProxyEventV2) => {
   if (key === "POST /v1/content/bulk/state") return bulkUpdateContentState(event);
   if (key.match(/^PATCH \/v1\/content\/[^/]+\/classification$/)) return updateClassification(event);
 
+  if (key === "GET /v1/analyze/overview") return getAnalyzeOverview();
+  if (key === "GET /v1/analyze/channel") return getAnalyzeChannel(event);
+  if (key === "GET /v1/analyze/competitors") return getAnalyzeCompetitors(event);
+
   if (key === "POST /v1/analysis/runs") return createAnalysisRun(event);
-  if (key === "GET /v1/analysis/history") return listAnalysisHistory();
+  if (key === "GET /v1/analysis/history") return listAnalysisHistory(event);
+  if (key.match(/^GET \/v1\/analysis\/runs\/[^/]+$/)) return getAnalysisRun(event);
 
   if (key === "POST /v1/exports/csv") return createCsvExport(event);
   if (key.match(/^GET \/v1\/exports\/[^/]+$/)) return getCsvExport(event);
+  if (key === "GET /v1/reports/center") return listReportsCenter(event);
+  if (key.match(/^GET \/v1\/reports\/runs\/[^/]+$/)) return getReportRun(event);
+  if (key === "POST /v1/reports/runs") return createReportRun(event);
+  if (key === "GET /v1/reports/templates") return listReportTemplates(event);
+  if (key === "POST /v1/reports/templates") return createReportTemplate(event);
+  if (key.match(/^PATCH \/v1\/reports\/templates\/[^/]+$/)) return patchReportTemplate(event);
+  if (key === "GET /v1/reports/schedules") return listReportSchedules(event);
+  if (key === "POST /v1/reports/schedules") return createReportSchedule(event);
+  if (key.match(/^PATCH \/v1\/reports\/schedules\/[^/]+$/)) return patchReportSchedule(event);
+  if (key.match(/^POST \/v1\/reports\/schedules\/[^/]+\/run$/)) return triggerReportScheduleRun(event);
   if (key === "GET /v1/feed/news") return getNewsFeed(event);
   if (key === "GET /v1/monitor/overview") return getMonitorOverview();
+  if (key === "GET /v1/monitor/social/overview") return getMonitorSocialOverview(event);
+  if (key === "GET /v1/monitor/social/accounts") return getMonitorSocialAccounts(event);
+  if (key === "GET /v1/monitor/social/posts") return listMonitorSocialPosts(event);
+  if (key.match(/^GET \/v1\/monitor\/social\/posts\/[^/]+\/comments$/)) return listMonitorSocialPostComments(event);
+  if (key.match(/^PATCH \/v1\/monitor\/social\/comments\/[^/]+$/)) return patchMonitorSocialComment(event);
+  if (key === "GET /v1/monitor/social/risk") return getMonitorSocialRisk(event);
+  if (key === "GET /v1/monitor/social/charts/heatmap") return getMonitorSocialHeatmap(event);
+  if (key === "GET /v1/monitor/social/charts/scatter") return getMonitorSocialScatter(event);
+  if (key === "GET /v1/monitor/social/charts/er-breakdown") return getMonitorSocialErBreakdown(event);
+  if (key === "GET /v1/monitor/social/targets/er") return getMonitorSocialErTargets(event);
+  if (key === "PATCH /v1/monitor/social/targets/er") return patchMonitorSocialErTargets(event);
+  if (key === "POST /v1/monitor/social/hashtags/backfill") return postMonitorSocialHashtagBackfill(event);
+  if (key === "GET /v1/monitor/social/etl-quality") return getMonitorSocialEtlQuality(event);
+  if (key === "GET /v1/monitor/social/export.xlsx") return getMonitorSocialExportXlsx(event);
+  if (key === "POST /v1/monitor/social/runs") return createMonitorSocialRun(event);
+  if (key === "GET /v1/monitor/social/runs") return listMonitorSocialRuns(event);
+  if (key === "GET /v1/monitor/social/settings") return getMonitorSocialSettings();
+  if (key === "PATCH /v1/monitor/social/settings") return patchMonitorSocialSettings(event);
+  if (key === "GET /v1/monitor/incidents") return listMonitorIncidents(event);
+  if (key === "POST /v1/monitor/incidents/evaluate") return evaluateMonitorIncidents(event);
+  if (key.match(/^PATCH \/v1\/monitor\/incidents\/[^/]+$/)) return patchMonitorIncident(event);
+  if (key.match(/^GET \/v1\/monitor\/incidents\/[^/]+\/notes$/)) return getMonitorIncidentNotes(event);
+  if (key.match(/^POST \/v1\/monitor\/incidents\/[^/]+\/notes$/)) return createMonitorIncidentNote(event);
   if (key === "GET /v1/meta") return getMeta();
   if (key === "GET /v1/connectors") return listConnectors(event);
   if (key.match(/^PATCH \/v1\/connectors\/[^/]+$/)) return patchConnector(event);
@@ -148,6 +277,13 @@ export const main = async (event: APIGatewayProxyEventV2) => {
   if (key.match(/^PATCH \/v1\/config\/taxonomies\/[^/]+\/[^/]+$/)) return patchTaxonomy(event);
   if (key === "GET /v1/config/audit") return listConfigAudit(event);
   if (key === "POST /v1/config/audit/export") return exportConfigAudit(event);
+  if (key === "GET /v1/config/notifications/recipients") return listNotificationRecipients(event);
+  if (key === "POST /v1/config/notifications/recipients") return createNotificationRecipient(event);
+  if (key.match(/^PATCH \/v1\/config\/notifications\/recipients\/[^/]+$/)) return patchNotificationRecipient(event);
+  if (key === "GET /v1/config/notifications/status") return getNotificationStatus(event);
+  if (key === "GET /v1/config/source-scoring/weights") return listSourceScoringWeights(event);
+  if (key === "POST /v1/config/source-scoring/weights") return createSourceScoringWeight(event);
+  if (key.match(/^PATCH \/v1\/config\/source-scoring\/weights\/[^/]+$/)) return patchSourceScoringWeight(event);
 
   return json(404, {
     error: "not_found",

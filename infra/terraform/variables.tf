@@ -78,6 +78,36 @@ variable "ses_sender_email" {
   default     = "digest@example.com"
 }
 
+variable "alert_email_recipients" {
+  type        = string
+  description = "Lista CSV de correos para notificaciones de incidentes (SES)."
+  default     = ""
+}
+
+variable "alert_cooldown_minutes" {
+  type        = number
+  description = "Cooldown para deduplicacion de incidentes en minutos."
+  default     = 60
+}
+
+variable "alert_signal_version" {
+  type        = string
+  description = "Version de la formula de senal de alertas."
+  default     = "alert-v1-weighted"
+}
+
+variable "report_confidence_threshold" {
+  type        = number
+  description = "Umbral minimo de confianza para publicar reportes sin revision manual."
+  default     = 0.65
+}
+
+variable "report_default_timezone" {
+  type        = string
+  description = "Zona horaria por defecto para programacion de reportes."
+  default     = "America/Bogota"
+}
+
 variable "provider_keys_secret_name" {
   type        = string
   description = "Nombre del secreto con API keys de proveedores"
@@ -106,6 +136,18 @@ variable "ingestion_default_terms" {
   type        = string
   description = "Terminos por defecto para corridas programadas, separados por coma"
   default     = ""
+}
+
+variable "social_raw_bucket_name" {
+  type        = string
+  description = "Bucket de origen para ETL social (archivos CSV organic)."
+  default     = "claro-dataslayer-dump"
+}
+
+variable "social_raw_prefix" {
+  type        = string
+  description = "Prefijo de origen para ETL social dentro del bucket."
+  default     = "raw/organic/"
 }
 
 variable "cognito_domain_prefix" {

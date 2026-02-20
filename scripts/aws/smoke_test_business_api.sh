@@ -158,6 +158,68 @@ wait_export_completed() {
   exit 1
 }
 
+wait_report_run_terminal() {
+  local report_run_id="$1"
+  local token="$2"
+
+  for i in {1..60}; do
+    local code
+    code="$(curl -s -o /tmp/claro-report-run-status.json -w "%{http_code}" -H "Authorization: Bearer $token" "$API_BASE/v1/reports/runs/$report_run_id")"
+    if [[ "$code" != "200" ]]; then
+      echo "[FAIL] GET /v1/reports/runs/$report_run_id expected 200 got=$code"
+      cat /tmp/claro-report-run-status.json
+      exit 1
+    fi
+
+    local status
+    status="$(jq -r '.run.status // empty' /tmp/claro-report-run-status.json)"
+    local export_job_id
+    export_job_id="$(jq -r '.run.export_job_id // empty' /tmp/claro-report-run-status.json)"
+    if [[ "$status" == "completed" || "$status" == "pending_review" ]]; then
+      echo "$status|$export_job_id"
+      return 0
+    fi
+
+    if [[ "$status" == "failed" ]]; then
+      echo "[FAIL] report run failed id=$report_run_id"
+      cat /tmp/claro-report-run-status.json
+      exit 1
+    fi
+
+    sleep 5
+  done
+
+  echo "[FAIL] report run timeout report_run_id=$report_run_id"
+  exit 1
+}
+
+wait_analysis_run_terminal() {
+  local analysis_run_id="$1"
+  local token="$2"
+
+  for i in {1..90}; do
+    local code
+    code="$(curl -s -o /tmp/claro-analysis-run-status.json -w "%{http_code}" -H "Authorization: Bearer $token" "$API_BASE/v1/analysis/runs/$analysis_run_id")"
+    if [[ "$code" != "200" ]]; then
+      echo "[FAIL] GET /v1/analysis/runs/$analysis_run_id expected 200 got=$code"
+      cat /tmp/claro-analysis-run-status.json
+      exit 1
+    fi
+
+    local status
+    status="$(jq -r '.run.status // empty' /tmp/claro-analysis-run-status.json)"
+    if [[ "$status" == "completed" || "$status" == "failed" ]]; then
+      echo "$status"
+      return 0
+    fi
+
+    sleep 4
+  done
+
+  echo "[FAIL] analysis run timeout analysis_run_id=$analysis_run_id"
+  exit 1
+}
+
 echo "[1] Health and auth checks"
 CODE="$(curl -s -o /tmp/claro-health.json -w "%{http_code}" "$API_BASE/v1/health")"
 assert_code "$CODE" "200" "GET /v1/health"
@@ -181,6 +243,66 @@ if [[ "$OV_WINDOW_DAYS" != "7" || "$OV_SOURCE_TYPE" != "news" || "$OV_FORMULA" !
   echo "[FAIL] overview payload mismatch (window/source/formula)"
   cat /tmp/claro-overview-viewer.json
   exit 1
+fi
+
+echo "[1.0] Analyze endpoints"
+CODE="$(curl -s -o /tmp/claro-analyze-overview-no-token.json -w "%{http_code}" "$API_BASE/v1/analyze/overview")"
+assert_code "$CODE" "401" "GET /v1/analyze/overview without token"
+
+CODE="$(curl -s -o /tmp/claro-analyze-overview-viewer.json -w "%{http_code}" -H "Authorization: Bearer $VIEWER_TOKEN" "$API_BASE/v1/analyze/overview")"
+assert_code "$CODE" "200" "GET /v1/analyze/overview viewer"
+
+AN_WINDOW_DAYS="$(jq -r '.window_days // empty' /tmp/claro-analyze-overview-viewer.json)"
+AN_SOURCE_TYPE="$(jq -r '.source_type // empty' /tmp/claro-analyze-overview-viewer.json)"
+AN_FORMULA="$(jq -r '.formula_version // empty' /tmp/claro-analyze-overview-viewer.json)"
+if [[ "$AN_WINDOW_DAYS" != "7" || "$AN_SOURCE_TYPE" != "news" || "$AN_FORMULA" != "analysis-v1" ]]; then
+  echo "[FAIL] analyze overview payload mismatch (window/source/formula)"
+  cat /tmp/claro-analyze-overview-viewer.json
+  exit 1
+fi
+
+CODE="$(curl -s -o /tmp/claro-analyze-channel-viewer.json -w "%{http_code}" -H "Authorization: Bearer $VIEWER_TOKEN" "$API_BASE/v1/analyze/channel?limit=20")"
+assert_code "$CODE" "200" "GET /v1/analyze/channel viewer"
+
+CODE="$(curl -s -o /tmp/claro-analyze-competitors-viewer.json -w "%{http_code}" -H "Authorization: Bearer $VIEWER_TOKEN" "$API_BASE/v1/analyze/competitors?limit=20")"
+assert_code "$CODE" "200" "GET /v1/analyze/competitors viewer"
+
+echo "[1.1] Incident endpoints"
+CODE="$(curl -s -o /tmp/claro-incidents-no-token.json -w "%{http_code}" "$API_BASE/v1/monitor/incidents")"
+assert_code "$CODE" "401" "GET /v1/monitor/incidents without token"
+
+CODE="$(curl -s -o /tmp/claro-incidents-viewer.json -w "%{http_code}" -H "Authorization: Bearer $VIEWER_TOKEN" "$API_BASE/v1/monitor/incidents?limit=80")"
+assert_code "$CODE" "200" "GET /v1/monitor/incidents viewer"
+
+CODE="$(curl -s -o /tmp/claro-incidents-evaluate.json -w "%{http_code}" -X POST -H "Authorization: Bearer $ANALYST_TOKEN" -H "Content-Type: application/json" -d '{}' "$API_BASE/v1/monitor/incidents/evaluate")"
+assert_code "$CODE" "202" "POST /v1/monitor/incidents/evaluate analyst"
+
+sleep 3
+
+CODE="$(curl -s -o /tmp/claro-incidents-after-evaluate.json -w "%{http_code}" -H "Authorization: Bearer $VIEWER_TOKEN" "$API_BASE/v1/monitor/incidents?limit=80")"
+assert_code "$CODE" "200" "GET /v1/monitor/incidents after evaluate"
+
+INCIDENT_ID="$(jq -r '.items[0].id // empty' /tmp/claro-incidents-after-evaluate.json)"
+INCIDENT_STATUS="$(jq -r '.items[0].status // empty' /tmp/claro-incidents-after-evaluate.json)"
+if [[ -n "$INCIDENT_ID" ]]; then
+  NEXT_STATUS="open"
+  if [[ "$INCIDENT_STATUS" == "open" ]]; then
+    NEXT_STATUS="acknowledged"
+  fi
+
+  CODE="$(curl -s -o /tmp/claro-incidents-patch-viewer.json -w "%{http_code}" -X PATCH -H "Authorization: Bearer $VIEWER_TOKEN" -H "Content-Type: application/json" -d "{\"status\":\"$NEXT_STATUS\"}" "$API_BASE/v1/monitor/incidents/$INCIDENT_ID")"
+  assert_code "$CODE" "403" "PATCH /v1/monitor/incidents/{id} viewer denied"
+
+  CODE="$(curl -s -o /tmp/claro-incidents-patch-analyst.json -w "%{http_code}" -X PATCH -H "Authorization: Bearer $ANALYST_TOKEN" -H "Content-Type: application/json" -d "{\"status\":\"$NEXT_STATUS\",\"note\":\"smoke incident patch\"}" "$API_BASE/v1/monitor/incidents/$INCIDENT_ID")"
+  assert_code "$CODE" "200" "PATCH /v1/monitor/incidents/{id} analyst"
+
+  CODE="$(curl -s -o /tmp/claro-incidents-note-create.json -w "%{http_code}" -X POST -H "Authorization: Bearer $ANALYST_TOKEN" -H "Content-Type: application/json" -d '{"note":"smoke incident note"}' "$API_BASE/v1/monitor/incidents/$INCIDENT_ID/notes")"
+  assert_code "$CODE" "201" "POST /v1/monitor/incidents/{id}/notes analyst"
+
+  CODE="$(curl -s -o /tmp/claro-incidents-notes-viewer.json -w "%{http_code}" -H "Authorization: Bearer $VIEWER_TOKEN" "$API_BASE/v1/monitor/incidents/$INCIDENT_ID/notes?limit=20")"
+  assert_code "$CODE" "200" "GET /v1/monitor/incidents/{id}/notes viewer"
+else
+  echo "[WARN] No incident found after evaluate; patch/notes flow skipped"
 fi
 
 CODE="$(curl -s -o /tmp/claro-content-viewer.json -w "%{http_code}" -H "Authorization: Bearer $VIEWER_TOKEN" "$API_BASE/v1/content?limit=5")"
@@ -378,6 +500,170 @@ if [[ -z "$AUDIT_DOWNLOAD_URL" || "$AUDIT_DOWNLOAD_URL" == "null" ]]; then
   exit 1
 fi
 
+echo "[3.25] Source scoring configurable"
+CODE="$(curl -s -o /tmp/claro-source-weights-list.json -w "%{http_code}" -H "Authorization: Bearer $VIEWER_TOKEN" "$API_BASE/v1/config/source-scoring/weights")"
+assert_code "$CODE" "200" "GET /v1/config/source-scoring/weights viewer"
+
+CODE="$(curl -s -o /tmp/claro-source-weights-create-viewer.json -w "%{http_code}" -X POST -H "Authorization: Bearer $VIEWER_TOKEN" -H "Content-Type: application/json" -d '{"provider":"viewer-denied","weight":0.5}' "$API_BASE/v1/config/source-scoring/weights")"
+assert_code "$CODE" "403" "POST /v1/config/source-scoring/weights viewer denied"
+
+SOURCE_PROVIDER="$(jq -r '.items[0].provider // empty' /tmp/claro-analyze-channel-viewer.json)"
+if [[ -z "$SOURCE_PROVIDER" ]]; then
+  echo "[WARN] source-scoring KPI impact check skipped: no providers in analyze/channel"
+else
+  CODE="$(curl -s -o /tmp/claro-source-weights-create-admin.json -w "%{http_code}" -X POST -H "Authorization: Bearer $ADMIN_TOKEN" -H "Content-Type: application/json" -d "{\"provider\":\"$SOURCE_PROVIDER\",\"source_name\":null,\"weight\":0.95,\"is_active\":true}" "$API_BASE/v1/config/source-scoring/weights")"
+  if [[ "$CODE" != "201" && "$CODE" != "409" ]]; then
+    echo "[FAIL] POST /v1/config/source-scoring/weights admin expected 201/409 got=$CODE"
+    cat /tmp/claro-source-weights-create-admin.json
+    exit 1
+  fi
+
+  SOURCE_WEIGHT_ID="$(jq -r '.id // empty' /tmp/claro-source-weights-create-admin.json)"
+  if [[ -z "$SOURCE_WEIGHT_ID" ]]; then
+    CODE="$(curl -s -o /tmp/claro-source-weights-provider-list.json -w "%{http_code}" -H "Authorization: Bearer $VIEWER_TOKEN" "$API_BASE/v1/config/source-scoring/weights?provider=$SOURCE_PROVIDER&include_inactive=true")"
+    assert_code "$CODE" "200" "GET /v1/config/source-scoring/weights by provider"
+    SOURCE_WEIGHT_ID="$(jq -r '.items[] | select(.source_name == null) | .id' /tmp/claro-source-weights-provider-list.json | head -n 1)"
+  fi
+
+  if [[ -z "$SOURCE_WEIGHT_ID" ]]; then
+    echo "[FAIL] source weight id not found for provider=$SOURCE_PROVIDER"
+    exit 1
+  fi
+
+  CODE="$(curl -s -o /tmp/claro-source-weights-patch-high.json -w "%{http_code}" -X PATCH -H "Authorization: Bearer $ADMIN_TOKEN" -H "Content-Type: application/json" -d '{"weight":0.95,"is_active":true}' "$API_BASE/v1/config/source-scoring/weights/$SOURCE_WEIGHT_ID")"
+  assert_code "$CODE" "200" "PATCH /v1/config/source-scoring/weights/{id} high"
+
+  CODE="$(curl -s -o /tmp/claro-analyze-channel-high-weight.json -w "%{http_code}" -H "Authorization: Bearer $VIEWER_TOKEN" "$API_BASE/v1/analyze/channel?limit=40")"
+  assert_code "$CODE" "200" "GET /v1/analyze/channel after high source weight"
+  HIGH_Q="$(jq -r --arg P "$SOURCE_PROVIDER" '.items[] | select(.provider==$P) | .quality_score' /tmp/claro-analyze-channel-high-weight.json | head -n 1)"
+
+  CODE="$(curl -s -o /tmp/claro-source-weights-patch-low.json -w "%{http_code}" -X PATCH -H "Authorization: Bearer $ADMIN_TOKEN" -H "Content-Type: application/json" -d '{"weight":0.10,"is_active":true}' "$API_BASE/v1/config/source-scoring/weights/$SOURCE_WEIGHT_ID")"
+  assert_code "$CODE" "200" "PATCH /v1/config/source-scoring/weights/{id} low"
+
+  CODE="$(curl -s -o /tmp/claro-analyze-channel-low-weight.json -w "%{http_code}" -H "Authorization: Bearer $VIEWER_TOKEN" "$API_BASE/v1/analyze/channel?limit=40")"
+  assert_code "$CODE" "200" "GET /v1/analyze/channel after low source weight"
+  LOW_Q="$(jq -r --arg P "$SOURCE_PROVIDER" '.items[] | select(.provider==$P) | .quality_score' /tmp/claro-analyze-channel-low-weight.json | head -n 1)"
+
+  if [[ -z "$HIGH_Q" || -z "$LOW_Q" || "$HIGH_Q" == "null" || "$LOW_Q" == "null" ]]; then
+    echo "[FAIL] missing quality_score for provider=$SOURCE_PROVIDER after source-scoring patches"
+    exit 1
+  fi
+
+  DELTA="$(node -e "const a=Number(process.argv[1]); const b=Number(process.argv[2]); process.stdout.write(String(Math.abs(a-b)));" "$HIGH_Q" "$LOW_Q")"
+  DELTA_OK="$(node -e "const d=Number(process.argv[1]); process.stdout.write(d >= 1 ? 'true' : 'false');" "$DELTA")"
+  if [[ "$DELTA_OK" != "true" ]]; then
+    echo "[FAIL] source-scoring expected quality_score delta >= 1 (got $DELTA)"
+    exit 1
+  fi
+
+  CODE="$(curl -s -o /tmp/claro-source-audit-list.json -w "%{http_code}" -H "Authorization: Bearer $VIEWER_TOKEN" "$API_BASE/v1/config/audit?limit=20&resource_type=SourceWeight")"
+  assert_code "$CODE" "200" "GET /v1/config/audit resource_type=SourceWeight"
+fi
+
+echo "[3.26] Analysis async real endpoints"
+CODE="$(curl -s -o /tmp/claro-analysis-create-viewer.json -w "%{http_code}" -X POST -H "Authorization: Bearer $VIEWER_TOKEN" -H "Content-Type: application/json" -d '{"scope":"overview"}' "$API_BASE/v1/analysis/runs")"
+assert_code "$CODE" "403" "POST /v1/analysis/runs viewer denied"
+
+ANALYSIS_IDEM_KEY="smoke-analysis-$(date +%s)"
+CODE="$(curl -s -o /tmp/claro-analysis-create-analyst.json -w "%{http_code}" -X POST -H "Authorization: Bearer $ANALYST_TOKEN" -H "Content-Type: application/json" -d "{\"scope\":\"overview\",\"source_type\":\"news\",\"prompt_version\":\"analysis-v1\",\"limit\":80,\"idempotency_key\":\"$ANALYSIS_IDEM_KEY\",\"filters\":{}}" "$API_BASE/v1/analysis/runs")"
+assert_code "$CODE" "202" "POST /v1/analysis/runs analyst"
+
+ANALYSIS_RUN_ID="$(jq -r '.analysis_run_id // empty' /tmp/claro-analysis-create-analyst.json)"
+if [[ -z "$ANALYSIS_RUN_ID" ]]; then
+  echo "[FAIL] analysis_run_id missing"
+  cat /tmp/claro-analysis-create-analyst.json
+  exit 1
+fi
+
+CODE="$(curl -s -o /tmp/claro-analysis-history-viewer.json -w "%{http_code}" -H "Authorization: Bearer $VIEWER_TOKEN" "$API_BASE/v1/analysis/history?limit=30")"
+assert_code "$CODE" "200" "GET /v1/analysis/history viewer"
+
+ANALYSIS_STATUS="$(wait_analysis_run_terminal "$ANALYSIS_RUN_ID" "$VIEWER_TOKEN")"
+if [[ "$ANALYSIS_STATUS" != "completed" ]]; then
+  echo "[FAIL] analysis run did not complete successfully (status=$ANALYSIS_STATUS)"
+  cat /tmp/claro-analysis-run-status.json
+  exit 1
+fi
+
+ANALYSIS_SUMMARY="$(jq -r '.output.sintesis_general // empty' /tmp/claro-analysis-run-status.json)"
+if [[ -z "$ANALYSIS_SUMMARY" ]]; then
+  echo "[FAIL] completed analysis run missing output.sintesis_general"
+  cat /tmp/claro-analysis-run-status.json
+  exit 1
+fi
+
+CODE="$(curl -s -o /tmp/claro-analysis-create-idem.json -w "%{http_code}" -X POST -H "Authorization: Bearer $ANALYST_TOKEN" -H "Content-Type: application/json" -d "{\"scope\":\"overview\",\"source_type\":\"news\",\"prompt_version\":\"analysis-v1\",\"limit\":80,\"idempotency_key\":\"$ANALYSIS_IDEM_KEY\",\"filters\":{}}" "$API_BASE/v1/analysis/runs")"
+assert_code "$CODE" "202" "POST /v1/analysis/runs idempotent reuse"
+
+ANALYSIS_REUSED="$(jq -r '.reused // empty' /tmp/claro-analysis-create-idem.json)"
+if [[ "$ANALYSIS_REUSED" != "true" ]]; then
+  echo "[FAIL] expected reused=true in idempotent analysis run response"
+  cat /tmp/claro-analysis-create-idem.json
+  exit 1
+fi
+
+echo "[3.3] Reports V1 backend surface"
+TEMPLATE_NAME="smoke-report-template-$(date +%s)"
+CODE="$(curl -s -o /tmp/claro-report-template-create-viewer.json -w "%{http_code}" -X POST -H "Authorization: Bearer $VIEWER_TOKEN" -H "Content-Type: application/json" -d "{\"name\":\"$TEMPLATE_NAME\"}" "$API_BASE/v1/reports/templates")"
+assert_code "$CODE" "403" "POST /v1/reports/templates viewer denied"
+
+CODE="$(curl -s -o /tmp/claro-report-template-create-admin.json -w "%{http_code}" -X POST -H "Authorization: Bearer $ADMIN_TOKEN" -H "Content-Type: application/json" -d "{\"name\":\"$TEMPLATE_NAME\",\"description\":\"Smoke template\",\"is_active\":true,\"confidence_threshold\":0.65,\"sections\":{\"blocks\":[\"kpi\",\"incidents\"]},\"filters\":{}}" "$API_BASE/v1/reports/templates")"
+assert_code "$CODE" "201" "POST /v1/reports/templates admin"
+
+REPORT_TEMPLATE_ID="$(jq -r '.id // empty' /tmp/claro-report-template-create-admin.json)"
+if [[ -z "$REPORT_TEMPLATE_ID" ]]; then
+  echo "[FAIL] report template id missing"
+  cat /tmp/claro-report-template-create-admin.json
+  exit 1
+fi
+
+CODE="$(curl -s -o /tmp/claro-report-templates-list-viewer.json -w "%{http_code}" -H "Authorization: Bearer $VIEWER_TOKEN" "$API_BASE/v1/reports/templates?limit=30")"
+assert_code "$CODE" "200" "GET /v1/reports/templates viewer"
+
+CODE="$(curl -s -o /tmp/claro-report-template-patch-admin.json -w "%{http_code}" -X PATCH -H "Authorization: Bearer $ADMIN_TOKEN" -H "Content-Type: application/json" -d '{"description":"Smoke template updated","confidence_threshold":0.67}' "$API_BASE/v1/reports/templates/$REPORT_TEMPLATE_ID")"
+assert_code "$CODE" "200" "PATCH /v1/reports/templates/{id} admin"
+
+SCHEDULE_NAME="smoke-report-schedule-$(date +%s)"
+CODE="$(curl -s -o /tmp/claro-report-schedule-create-analyst.json -w "%{http_code}" -X POST -H "Authorization: Bearer $ANALYST_TOKEN" -H "Content-Type: application/json" -d "{\"template_id\":\"$REPORT_TEMPLATE_ID\",\"name\":\"$SCHEDULE_NAME\",\"enabled\":true,\"frequency\":\"daily\",\"day_of_week\":null,\"time_local\":\"08:00\",\"timezone\":\"America/Bogota\",\"recipients\":[]}" "$API_BASE/v1/reports/schedules")"
+assert_code "$CODE" "201" "POST /v1/reports/schedules analyst"
+
+REPORT_SCHEDULE_ID="$(jq -r '.id // empty' /tmp/claro-report-schedule-create-analyst.json)"
+if [[ -z "$REPORT_SCHEDULE_ID" ]]; then
+  echo "[FAIL] report schedule id missing"
+  cat /tmp/claro-report-schedule-create-analyst.json
+  exit 1
+fi
+
+CODE="$(curl -s -o /tmp/claro-report-schedules-list-viewer.json -w "%{http_code}" -H "Authorization: Bearer $VIEWER_TOKEN" "$API_BASE/v1/reports/schedules?limit=30")"
+assert_code "$CODE" "200" "GET /v1/reports/schedules viewer"
+
+CODE="$(curl -s -o /tmp/claro-report-schedule-patch-analyst.json -w "%{http_code}" -X PATCH -H "Authorization: Bearer $ANALYST_TOKEN" -H "Content-Type: application/json" -d '{"frequency":"weekly","day_of_week":1,"time_local":"09:30"}' "$API_BASE/v1/reports/schedules/$REPORT_SCHEDULE_ID")"
+assert_code "$CODE" "200" "PATCH /v1/reports/schedules/{id} analyst"
+
+CODE="$(curl -s -o /tmp/claro-report-run-create-analyst.json -w "%{http_code}" -X POST -H "Authorization: Bearer $ANALYST_TOKEN" -H "Content-Type: application/json" -d "{\"template_id\":\"$REPORT_TEMPLATE_ID\"}" "$API_BASE/v1/reports/runs")"
+assert_code "$CODE" "202" "POST /v1/reports/runs analyst"
+
+REPORT_RUN_ID="$(jq -r '.report_run_id // empty' /tmp/claro-report-run-create-analyst.json)"
+if [[ -z "$REPORT_RUN_ID" ]]; then
+  echo "[FAIL] report_run_id missing for manual run"
+  cat /tmp/claro-report-run-create-analyst.json
+  exit 1
+fi
+
+CODE="$(curl -s -o /tmp/claro-report-schedule-run-analyst.json -w "%{http_code}" -X POST -H "Authorization: Bearer $ANALYST_TOKEN" "$API_BASE/v1/reports/schedules/$REPORT_SCHEDULE_ID/run")"
+assert_code "$CODE" "202" "POST /v1/reports/schedules/{id}/run analyst"
+
+CODE="$(curl -s -o /tmp/claro-report-center-viewer.json -w "%{http_code}" -H "Authorization: Bearer $VIEWER_TOKEN" "$API_BASE/v1/reports/center?limit=30")"
+assert_code "$CODE" "200" "GET /v1/reports/center viewer"
+
+REPORT_TERMINAL="$(wait_report_run_terminal "$REPORT_RUN_ID" "$VIEWER_TOKEN")"
+REPORT_STATUS="${REPORT_TERMINAL%%|*}"
+REPORT_EXPORT_ID="${REPORT_TERMINAL#*|}"
+echo "[INFO] report run terminal status: $REPORT_STATUS"
+if [[ -n "$REPORT_EXPORT_ID" && "$REPORT_EXPORT_ID" != "null" ]]; then
+  wait_export_completed "$REPORT_EXPORT_ID" "$ANALYST_TOKEN"
+fi
+
 echo "[4] Editorial operations (state, bulk, classification)"
 CODE="$(curl -s -o /tmp/claro-content-for-state.json -w "%{http_code}" -H "Authorization: Bearer $VIEWER_TOKEN" "$API_BASE/v1/content?limit=1&term_id=$SMOKE_TERM_ID&source_type=news")"
 assert_code "$CODE" "200" "GET /v1/content for editorial tests"
@@ -414,6 +700,41 @@ RANDOM_ID="$(node -e 'console.log(require("crypto").randomUUID())')"
 CODE="$(curl -s -o /tmp/claro-content-bulk-state.json -w "%{http_code}" -X POST -H "Authorization: Bearer $ANALYST_TOKEN" -H "Content-Type: application/json" -d "{\"ids\":[\"$CONTENT_ID\",\"$RANDOM_ID\"],\"target_state\":\"$BULK_TARGET\",\"reason\":\"smoke bulk state\"}" "$API_BASE/v1/content/bulk/state")"
 assert_code "$CODE" "200" "POST /v1/content/bulk/state analyst"
 
+echo "[4.1] Classification async (SQS + Bedrock)"
+CLASSIFICATION_QUEUE_URL="$(terraform -chdir=infra/terraform output -raw classification_generation_queue_url)"
+BEDROCK_MODEL_ID="$(terraform -chdir=infra/terraform output -raw bedrock_model_id)"
+CLASSIFICATION_REQ_ID="smoke-classifier-$(date +%s)"
+
+aws sqs send-message \
+  --region "$AWS_REGION" \
+  --queue-url "$CLASSIFICATION_QUEUE_URL" \
+  --message-body "{\"content_item_id\":\"$CONTENT_ID\",\"prompt_version\":\"classification-v1\",\"model_id\":\"$BEDROCK_MODEL_ID\",\"trigger_type\":\"manual\",\"request_id\":\"$CLASSIFICATION_REQ_ID\",\"requested_at\":\"$(date -u +%Y-%m-%dT%H:%M:%SZ)\"}" >/dev/null
+
+CLASSIFICATION_FOUND="false"
+for i in {1..60}; do
+  COUNT_CLASSIFICATION="$(aws rds-data execute-statement \
+    --region "$AWS_REGION" \
+    --resource-arn "$CLUSTER_ARN" \
+    --secret-arn "$DB_SECRET_ARN" \
+    --database "$DB_NAME" \
+    --sql "SELECT COUNT(*)::int FROM \"public\".\"Classification\" WHERE \"contentItemId\"='${CONTENT_ID}' AND \"promptVersion\"='classification-v1' AND \"modelId\"='${BEDROCK_MODEL_ID}' AND \"isOverride\"=FALSE" \
+    --query 'records[0][0].longValue' \
+    --output text)"
+
+  if [[ "$COUNT_CLASSIFICATION" != "None" && "$COUNT_CLASSIFICATION" -ge 1 ]]; then
+    CLASSIFICATION_FOUND="true"
+    break
+  fi
+
+  sleep 5
+done
+
+if [[ "$CLASSIFICATION_FOUND" != "true" ]]; then
+  echo "[FAIL] classification record not found after wait"
+  exit 1
+fi
+echo "[OK] classification record present"
+
 CODE="$(curl -s -o /tmp/claro-content-classification.json -w "%{http_code}" -X PATCH -H "Authorization: Bearer $ANALYST_TOKEN" -H "Content-Type: application/json" -d '{"categoria":"smoke-test","sentimiento":"neutral","etiquetas":["smoke","contract"],"confidence_override":0.87,"reason":"smoke classification override"}' "$API_BASE/v1/content/$CONTENT_ID/classification")"
 assert_code "$CODE" "200" "PATCH /v1/content/{id}/classification analyst"
 
@@ -429,5 +750,61 @@ if [[ -z "$EXPORT_ID" ]]; then
 fi
 
 wait_export_completed "$EXPORT_ID" "$ANALYST_TOKEN"
+
+echo "[6] Digest daily (SES)"
+DIGEST_REQ_ID="smoke-digest-$(date +%s)"
+DIGEST_SCOPE="smoke-${DIGEST_REQ_ID}"
+
+CODE="$(curl -s -o /tmp/claro-notifications-status.json -w "%{http_code}" -X GET -H "Authorization: Bearer $ANALYST_TOKEN" "$API_BASE/v1/config/notifications/status")"
+assert_code "$CODE" "200" "GET /v1/config/notifications/status analyst"
+
+SES_PRODUCTION_ACCESS_ENABLED="$(jq -r '.production_access_enabled // empty' /tmp/claro-notifications-status.json)"
+SES_SENDING_ENABLED="$(jq -r '.sending_enabled // empty' /tmp/claro-notifications-status.json)"
+SES_SENDER_EMAIL="$(jq -r '.sender_email // empty' /tmp/claro-notifications-status.json)"
+SES_SENDER_VERIFIED="$(jq -r '.sender_verified_for_sending // empty' /tmp/claro-notifications-status.json)"
+
+if [[ -n "$SES_SENDER_EMAIL" ]]; then
+  CODE="$(curl -s -o /tmp/claro-recipient-create.json -w "%{http_code}" -X POST -H "Authorization: Bearer $ADMIN_TOKEN" -H "Content-Type: application/json" -d "{\"kind\":\"digest\",\"scope\":\"$DIGEST_SCOPE\",\"email\":\"$SES_SENDER_EMAIL\",\"is_active\":true}" "$API_BASE/v1/config/notifications/recipients")"
+  if [[ "$CODE" != "201" && "$CODE" != "409" ]]; then
+    echo "[FAIL] POST /v1/config/notifications/recipients expected 201/409 got=$CODE"
+    cat /tmp/claro-recipient-create.json
+    exit 1
+  fi
+  echo "[OK] notification recipient seed -> $CODE"
+else
+  echo "[WARN] sender_email is empty; skipping recipient seed"
+fi
+
+DIGEST_FUNCTION_NAME="$(terraform -chdir=infra/terraform output -raw digest_worker_lambda_name)"
+aws lambda invoke \
+  --cli-binary-format raw-in-base64-out \
+  --region "$AWS_REGION" \
+  --function-name "$DIGEST_FUNCTION_NAME" \
+  --payload "{\"trigger_type\":\"manual\",\"recipient_scope\":\"$DIGEST_SCOPE\",\"request_id\":\"$DIGEST_REQ_ID\"}" \
+  /tmp/claro-digest-response.json >/tmp/claro-digest-meta.json
+
+DIGEST_STATUS="$(jq -r '.status // empty' /tmp/claro-digest-response.json)"
+if [[ "$DIGEST_STATUS" != "completed" && "$DIGEST_STATUS" != "skipped" ]]; then
+  echo "[FAIL] digest run expected completed|skipped got=$DIGEST_STATUS"
+  cat /tmp/claro-digest-response.json
+  exit 1
+fi
+echo "[OK] digest run -> $DIGEST_STATUS"
+
+if [[ "$DIGEST_STATUS" == "completed" ]]; then
+  DIGEST_EMAIL_SENT="$(jq -r '.email_sent // empty' /tmp/claro-digest-response.json)"
+  DIGEST_RECIPIENTS_COUNT="$(jq -r '.recipients_count // empty' /tmp/claro-digest-response.json)"
+  echo "[INFO] digest email_sent=$DIGEST_EMAIL_SENT recipients_count=$DIGEST_RECIPIENTS_COUNT"
+
+  if [[ "$SES_SENDING_ENABLED" == "true" && "$SES_SENDER_VERIFIED" == "true" ]]; then
+    if [[ "$DIGEST_EMAIL_SENT" != "true" || "$DIGEST_RECIPIENTS_COUNT" -lt 1 ]]; then
+      echo "[FAIL] digest completed but email not sent (check SES sandbox/prod + sender/recipient verification)"
+      cat /tmp/claro-notifications-status.json
+      cat /tmp/claro-digest-response.json
+      exit 1
+    fi
+    echo "[OK] digest email sent to $DIGEST_RECIPIENTS_COUNT recipients"
+  fi
+fi
 
 echo "Smoke business API completed"

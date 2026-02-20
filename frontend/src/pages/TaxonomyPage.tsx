@@ -23,7 +23,8 @@ const kinds: Array<{ kind: TaxonomyKind; label: string }> = [
   { kind: "categories", label: "Categorias" },
   { kind: "business_lines", label: "Lineas de negocio" },
   { kind: "macro_regions", label: "Macro regiones" },
-  { kind: "campaigns", label: "Campanas" }
+  { kind: "campaigns", label: "Campanas" },
+  { kind: "strategies", label: "Estrategias" }
 ];
 
 export const TaxonomyPage = () => {

@@ -335,6 +335,180 @@ resource "aws_iam_role_policy_attachment" "lambda_export_sqs" {
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaSQSQueueExecutionRole"
 }
 
+resource "aws_iam_role" "lambda_incident" {
+  name = "${local.name_prefix}-lambda-incident-role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Action = "sts:AssumeRole"
+        Effect = "Allow"
+        Principal = {
+          Service = "lambda.amazonaws.com"
+        }
+      }
+    ]
+  })
+}
+
+resource "aws_iam_role_policy_attachment" "lambda_incident_basic" {
+  role       = aws_iam_role.lambda_incident.name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+}
+
+resource "aws_iam_role_policy_attachment" "lambda_incident_sqs" {
+  role       = aws_iam_role.lambda_incident.name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaSQSQueueExecutionRole"
+}
+
+resource "aws_iam_role" "lambda_report" {
+  name = "${local.name_prefix}-lambda-report-role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Action = "sts:AssumeRole"
+        Effect = "Allow"
+        Principal = {
+          Service = "lambda.amazonaws.com"
+        }
+      }
+    ]
+  })
+}
+
+resource "aws_iam_role_policy_attachment" "lambda_report_basic" {
+  role       = aws_iam_role.lambda_report.name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+}
+
+resource "aws_iam_role_policy_attachment" "lambda_report_sqs" {
+  role       = aws_iam_role.lambda_report.name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaSQSQueueExecutionRole"
+}
+
+resource "aws_iam_role" "lambda_analysis" {
+  name = "${local.name_prefix}-lambda-analysis-role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Action = "sts:AssumeRole"
+        Effect = "Allow"
+        Principal = {
+          Service = "lambda.amazonaws.com"
+        }
+      }
+    ]
+  })
+}
+
+resource "aws_iam_role_policy_attachment" "lambda_analysis_basic" {
+  role       = aws_iam_role.lambda_analysis.name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+}
+
+resource "aws_iam_role_policy_attachment" "lambda_analysis_sqs" {
+  role       = aws_iam_role.lambda_analysis.name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaSQSQueueExecutionRole"
+}
+
+resource "aws_iam_role" "lambda_digest" {
+  name = "${local.name_prefix}-lambda-digest-role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Action = "sts:AssumeRole"
+        Effect = "Allow"
+        Principal = {
+          Service = "lambda.amazonaws.com"
+        }
+      }
+    ]
+  })
+}
+
+resource "aws_iam_role_policy_attachment" "lambda_digest_basic" {
+  role       = aws_iam_role.lambda_digest.name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+}
+
+resource "aws_iam_role" "lambda_classification_worker" {
+  name = "${local.name_prefix}-lambda-classification-worker-role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Action = "sts:AssumeRole"
+        Effect = "Allow"
+        Principal = {
+          Service = "lambda.amazonaws.com"
+        }
+      }
+    ]
+  })
+}
+
+resource "aws_iam_role_policy_attachment" "lambda_classification_worker_basic" {
+  role       = aws_iam_role.lambda_classification_worker.name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+}
+
+resource "aws_iam_role_policy_attachment" "lambda_classification_worker_sqs" {
+  role       = aws_iam_role.lambda_classification_worker.name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaSQSQueueExecutionRole"
+}
+
+resource "aws_iam_role" "lambda_classification_scheduler" {
+  name = "${local.name_prefix}-lambda-classification-scheduler-role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Action = "sts:AssumeRole"
+        Effect = "Allow"
+        Principal = {
+          Service = "lambda.amazonaws.com"
+        }
+      }
+    ]
+  })
+}
+
+resource "aws_iam_role_policy_attachment" "lambda_classification_scheduler_basic" {
+  role       = aws_iam_role.lambda_classification_scheduler.name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+}
+
+resource "aws_iam_role" "lambda_social_scheduler" {
+  name = "${local.name_prefix}-lambda-social-scheduler-role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Action = "sts:AssumeRole"
+        Effect = "Allow"
+        Principal = {
+          Service = "lambda.amazonaws.com"
+        }
+      }
+    ]
+  })
+}
+
+resource "aws_iam_role_policy_attachment" "lambda_social_scheduler_basic" {
+  role       = aws_iam_role.lambda_social_scheduler.name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+}
+
 resource "aws_iam_role" "lambda_migrations" {
   name = "${local.name_prefix}-lambda-migrations-role"
 
@@ -371,12 +545,12 @@ resource "aws_lambda_function" "api" {
   filename         = var.lambda_package_path
   source_code_hash = filebase64sha256(var.lambda_package_path)
 
-  timeout     = 30
+  timeout     = 300
   memory_size = 512
 
   environment {
     variables = {
-      BEDROCK_MODEL_ID            = "anthropic.claude-haiku-4-5-20251001-v1:0"
+      BEDROCK_MODEL_ID            = "us.anthropic.claude-haiku-4-5-20251001-v1:0"
       APP_ENV                     = var.environment
       PROVIDER_KEYS_SECRET_ARN    = data.aws_secretsmanager_secret.provider_keys.arn
       APP_CONFIG_SECRET_ARN       = data.aws_secretsmanager_secret.app_config.arn
@@ -389,10 +563,21 @@ resource "aws_lambda_function" "api" {
       DB_NAME                     = var.db_name
       INGESTION_STATE_MACHINE_ARN = aws_sfn_state_machine.ingestion.arn
       RAW_BUCKET_NAME             = aws_s3_bucket.raw.bucket
+      SOCIAL_RAW_BUCKET_NAME      = var.social_raw_bucket_name
+      SOCIAL_RAW_PREFIX           = var.social_raw_prefix
+      SOCIAL_SCHEDULER_LAMBDA_NAME = aws_lambda_function.social_scheduler.function_name
       EXPORT_BUCKET_NAME          = aws_s3_bucket.exports.bucket
       EXPORT_QUEUE_URL            = aws_sqs_queue.export.url
+      INCIDENT_QUEUE_URL          = aws_sqs_queue.incident_evaluation.url
+      REPORT_QUEUE_URL            = aws_sqs_queue.report_generation.url
+      ANALYSIS_QUEUE_URL          = aws_sqs_queue.analysis_generation.url
+      CLASSIFICATION_QUEUE_URL    = aws_sqs_queue.classification_generation.url
+      REPORT_CONFIDENCE_THRESHOLD = tostring(var.report_confidence_threshold)
+      REPORT_DEFAULT_TIMEZONE     = var.report_default_timezone
+      REPORT_EMAIL_SENDER         = var.ses_sender_email
       EXPORT_SIGNED_URL_SECONDS   = "900"
       INGESTION_DEFAULT_TERMS     = var.ingestion_default_terms
+      SOCIAL_ANALYTICS_V2_ENABLED = "true"
     }
   }
 }
@@ -447,6 +632,216 @@ resource "aws_lambda_function" "export_worker" {
       DB_NAME                   = var.db_name
       EXPORT_BUCKET_NAME        = aws_s3_bucket.exports.bucket
       EXPORT_SIGNED_URL_SECONDS = "900"
+    }
+  }
+}
+
+resource "aws_lambda_function" "incident_worker" {
+  function_name = "${local.name_prefix}-incident-worker"
+  role          = aws_iam_role.lambda_incident.arn
+  runtime       = "nodejs22.x"
+  handler       = "incidents/worker.main"
+
+  filename         = var.lambda_package_path
+  source_code_hash = filebase64sha256(var.lambda_package_path)
+
+  timeout     = 180
+  memory_size = 512
+
+  environment {
+    variables = {
+      APP_ENV                = var.environment
+      DB_RESOURCE_ARN        = aws_rds_cluster.aurora.arn
+      DB_SECRET_ARN          = data.aws_secretsmanager_secret.database.arn
+      DB_NAME                = var.db_name
+      ALERT_EMAIL_SENDER     = var.ses_sender_email
+      ALERT_EMAIL_RECIPIENTS = var.alert_email_recipients
+      ALERT_COOLDOWN_MINUTES = tostring(var.alert_cooldown_minutes)
+      ALERT_SIGNAL_VERSION   = var.alert_signal_version
+    }
+  }
+}
+
+resource "aws_lambda_function" "digest_worker" {
+  function_name = "${local.name_prefix}-digest-worker"
+  role          = aws_iam_role.lambda_digest.arn
+  runtime       = "nodejs22.x"
+  handler       = "digest/worker.main"
+
+  filename         = var.lambda_package_path
+  source_code_hash = filebase64sha256(var.lambda_package_path)
+
+  timeout     = 180
+  memory_size = 512
+
+  environment {
+    variables = {
+      APP_ENV                 = var.environment
+      DB_RESOURCE_ARN         = aws_rds_cluster.aurora.arn
+      DB_SECRET_ARN           = data.aws_secretsmanager_secret.database.arn
+      DB_NAME                 = var.db_name
+      EXPORT_BUCKET_NAME      = aws_s3_bucket.exports.bucket
+      REPORT_DEFAULT_TIMEZONE = var.report_default_timezone
+      REPORT_EMAIL_SENDER     = var.ses_sender_email
+      ALERT_EMAIL_SENDER      = var.ses_sender_email
+      ALERT_EMAIL_RECIPIENTS  = var.alert_email_recipients
+    }
+  }
+}
+
+resource "aws_lambda_function" "report_worker" {
+  function_name = "${local.name_prefix}-report-worker"
+  role          = aws_iam_role.lambda_report.arn
+  runtime       = "nodejs22.x"
+  handler       = "reports/worker.main"
+
+  filename         = var.lambda_package_path
+  source_code_hash = filebase64sha256(var.lambda_package_path)
+
+  timeout     = 300
+  memory_size = 1024
+
+  environment {
+    variables = {
+      APP_ENV                     = var.environment
+      DB_RESOURCE_ARN             = aws_rds_cluster.aurora.arn
+      DB_SECRET_ARN               = data.aws_secretsmanager_secret.database.arn
+      DB_NAME                     = var.db_name
+      EXPORT_QUEUE_URL            = aws_sqs_queue.export.url
+      EXPORT_BUCKET_NAME          = aws_s3_bucket.exports.bucket
+      REPORT_CONFIDENCE_THRESHOLD = tostring(var.report_confidence_threshold)
+      REPORT_DEFAULT_TIMEZONE     = var.report_default_timezone
+      REPORT_EMAIL_SENDER         = var.ses_sender_email
+      ALERT_EMAIL_SENDER          = var.ses_sender_email
+    }
+  }
+}
+
+resource "aws_lambda_function" "analysis_worker" {
+  function_name = "${local.name_prefix}-analysis-worker"
+  role          = aws_iam_role.lambda_analysis.arn
+  runtime       = "nodejs22.x"
+  handler       = "analysis/worker.main"
+
+  filename         = var.lambda_package_path
+  source_code_hash = filebase64sha256(var.lambda_package_path)
+
+  timeout     = 300
+  memory_size = 1024
+
+  environment {
+    variables = {
+      APP_ENV          = var.environment
+      DB_RESOURCE_ARN  = aws_rds_cluster.aurora.arn
+      DB_SECRET_ARN    = data.aws_secretsmanager_secret.database.arn
+      DB_NAME          = var.db_name
+      BEDROCK_MODEL_ID = "us.anthropic.claude-haiku-4-5-20251001-v1:0"
+    }
+  }
+}
+
+resource "aws_lambda_function" "classification_worker" {
+  function_name = "${local.name_prefix}-classification-worker"
+  role          = aws_iam_role.lambda_classification_worker.arn
+  runtime       = "nodejs22.x"
+  handler       = "classification/worker.main"
+
+  filename         = var.lambda_package_path
+  source_code_hash = filebase64sha256(var.lambda_package_path)
+
+  timeout                        = 240
+  memory_size                    = 1024
+  reserved_concurrent_executions = 2
+
+  environment {
+    variables = {
+      APP_ENV                       = var.environment
+      DB_RESOURCE_ARN               = aws_rds_cluster.aurora.arn
+      DB_SECRET_ARN                 = data.aws_secretsmanager_secret.database.arn
+      DB_NAME                       = var.db_name
+      BEDROCK_MODEL_ID              = "us.anthropic.claude-haiku-4-5-20251001-v1:0"
+      CLASSIFICATION_PROMPT_VERSION = "classification-v1"
+    }
+  }
+}
+
+resource "aws_lambda_function" "classification_scheduler" {
+  function_name = "${local.name_prefix}-classification-scheduler"
+  role          = aws_iam_role.lambda_classification_scheduler.arn
+  runtime       = "nodejs22.x"
+  handler       = "classification/scheduler.main"
+
+  filename         = var.lambda_package_path
+  source_code_hash = filebase64sha256(var.lambda_package_path)
+
+  timeout                        = 120
+  memory_size                    = 512
+  reserved_concurrent_executions = 1
+
+  environment {
+    variables = {
+      APP_ENV                        = var.environment
+      DB_RESOURCE_ARN                = aws_rds_cluster.aurora.arn
+      DB_SECRET_ARN                  = data.aws_secretsmanager_secret.database.arn
+      DB_NAME                        = var.db_name
+      BEDROCK_MODEL_ID               = "us.anthropic.claude-haiku-4-5-20251001-v1:0"
+      CLASSIFICATION_QUEUE_URL       = aws_sqs_queue.classification_generation.url
+      CLASSIFICATION_PROMPT_VERSION  = "classification-v1"
+      CLASSIFICATION_WINDOW_DAYS     = "7"
+      CLASSIFICATION_SCHEDULER_LIMIT = "120"
+    }
+  }
+}
+
+resource "aws_lambda_function" "social_scheduler" {
+  function_name = "${local.name_prefix}-social-scheduler"
+  role          = aws_iam_role.lambda_social_scheduler.arn
+  runtime       = "nodejs22.x"
+  handler       = "social/scheduler.main"
+
+  filename         = var.lambda_package_path
+  source_code_hash = filebase64sha256(var.lambda_package_path)
+
+  timeout                        = 300
+  memory_size                    = 1024
+  reserved_concurrent_executions = 1
+
+  environment {
+    variables = {
+      APP_ENV                = var.environment
+      DB_RESOURCE_ARN        = aws_rds_cluster.aurora.arn
+      DB_SECRET_ARN          = data.aws_secretsmanager_secret.database.arn
+      DB_NAME                = var.db_name
+      RAW_BUCKET_NAME        = aws_s3_bucket.raw.bucket
+      SOCIAL_RAW_BUCKET_NAME = var.social_raw_bucket_name
+      SOCIAL_RAW_PREFIX      = var.social_raw_prefix
+      CLASSIFICATION_QUEUE_URL = aws_sqs_queue.classification_generation.url
+      CLASSIFICATION_PROMPT_VERSION = "social-sentiment-v1"
+      BEDROCK_MODEL_ID       = "us.anthropic.claude-haiku-4-5-20251001-v1:0"
+    }
+  }
+}
+
+resource "aws_lambda_function" "report_scheduler" {
+  function_name = "${local.name_prefix}-report-scheduler"
+  role          = aws_iam_role.lambda_report.arn
+  runtime       = "nodejs22.x"
+  handler       = "reports/scheduler.main"
+
+  filename         = var.lambda_package_path
+  source_code_hash = filebase64sha256(var.lambda_package_path)
+
+  timeout     = 120
+  memory_size = 512
+
+  environment {
+    variables = {
+      APP_ENV                 = var.environment
+      DB_RESOURCE_ARN         = aws_rds_cluster.aurora.arn
+      DB_SECRET_ARN           = data.aws_secretsmanager_secret.database.arn
+      DB_NAME                 = var.db_name
+      REPORT_QUEUE_URL        = aws_sqs_queue.report_generation.url
+      REPORT_DEFAULT_TIMEZONE = var.report_default_timezone
     }
   }
 }
@@ -535,12 +930,47 @@ resource "aws_apigatewayv2_route" "private_routes" {
     "PATCH /v1/content/{id}/state",
     "POST /v1/content/bulk/state",
     "PATCH /v1/content/{id}/classification",
+    "GET /v1/analyze/overview",
+    "GET /v1/analyze/channel",
+    "GET /v1/analyze/competitors",
     "POST /v1/analysis/runs",
     "GET /v1/analysis/history",
+    "GET /v1/analysis/runs/{id}",
     "POST /v1/exports/csv",
     "GET /v1/exports/{id}",
+    "GET /v1/reports/center",
+    "GET /v1/reports/runs/{id}",
+    "POST /v1/reports/runs",
+    "GET /v1/reports/templates",
+    "POST /v1/reports/templates",
+    "PATCH /v1/reports/templates/{id}",
+    "GET /v1/reports/schedules",
+    "POST /v1/reports/schedules",
+    "PATCH /v1/reports/schedules/{id}",
+    "POST /v1/reports/schedules/{id}/run",
     "GET /v1/feed/news",
     "GET /v1/monitor/overview",
+    "GET /v1/monitor/social/overview",
+    "GET /v1/monitor/social/accounts",
+    "GET /v1/monitor/social/posts",
+    "GET /v1/monitor/social/risk",
+    "GET /v1/monitor/social/charts/heatmap",
+    "GET /v1/monitor/social/charts/scatter",
+    "GET /v1/monitor/social/charts/er-breakdown",
+    "GET /v1/monitor/social/targets/er",
+    "PATCH /v1/monitor/social/targets/er",
+    "POST /v1/monitor/social/hashtags/backfill",
+    "GET /v1/monitor/social/etl-quality",
+    "GET /v1/monitor/social/export.xlsx",
+    "POST /v1/monitor/social/runs",
+    "GET /v1/monitor/social/runs",
+    "GET /v1/monitor/social/settings",
+    "PATCH /v1/monitor/social/settings",
+    "GET /v1/monitor/incidents",
+    "PATCH /v1/monitor/incidents/{id}",
+    "GET /v1/monitor/incidents/{id}/notes",
+    "POST /v1/monitor/incidents/{id}/notes",
+    "POST /v1/monitor/incidents/evaluate",
     "GET /v1/meta",
     "GET /v1/connectors",
     "PATCH /v1/connectors/{id}",
@@ -555,7 +985,14 @@ resource "aws_apigatewayv2_route" "private_routes" {
     "GET /v1/config/taxonomies/{kind}",
     "POST /v1/config/taxonomies/{kind}",
     "PATCH /v1/config/taxonomies/{kind}/{id}",
+    "GET /v1/config/source-scoring/weights",
+    "POST /v1/config/source-scoring/weights",
+    "PATCH /v1/config/source-scoring/weights/{id}",
     "GET /v1/config/audit",
+    "GET /v1/config/notifications/recipients",
+    "POST /v1/config/notifications/recipients",
+    "PATCH /v1/config/notifications/recipients/{id}",
+    "GET /v1/config/notifications/status",
     "POST /v1/config/audit/export"
   ])
 
@@ -624,6 +1061,229 @@ resource "aws_lambda_event_source_mapping" "export_queue_to_worker" {
   event_source_arn = aws_sqs_queue.export.arn
   function_name    = aws_lambda_function.export_worker.arn
   batch_size       = 1
+}
+
+resource "aws_sqs_queue" "incident_evaluation_dlq" {
+  name                      = "${local.name_prefix}-incident-evaluation-dlq"
+  message_retention_seconds = 1209600
+  kms_master_key_id         = aws_kms_key.app.arn
+}
+
+resource "aws_sqs_queue" "incident_evaluation" {
+  name                       = "${local.name_prefix}-incident-evaluation"
+  visibility_timeout_seconds = 240
+  message_retention_seconds  = 345600
+  kms_master_key_id          = aws_kms_key.app.arn
+  redrive_policy = jsonencode({
+    deadLetterTargetArn = aws_sqs_queue.incident_evaluation_dlq.arn
+    maxReceiveCount     = 5
+  })
+}
+
+resource "aws_sqs_queue_policy" "incident_evaluation_events" {
+  queue_url = aws_sqs_queue.incident_evaluation.id
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid    = "AllowEventBridgeSendMessage"
+        Effect = "Allow"
+        Principal = {
+          Service = "events.amazonaws.com"
+        }
+        Action   = "sqs:SendMessage"
+        Resource = aws_sqs_queue.incident_evaluation.arn
+        Condition = {
+          ArnEquals = {
+            "aws:SourceArn" = aws_cloudwatch_event_rule.incident_evaluation_schedule.arn
+          }
+        }
+      }
+    ]
+  })
+}
+
+resource "aws_lambda_event_source_mapping" "incident_queue_to_worker" {
+  event_source_arn = aws_sqs_queue.incident_evaluation.arn
+  function_name    = aws_lambda_function.incident_worker.arn
+  batch_size       = 1
+}
+
+resource "aws_sqs_queue" "report_generation_dlq" {
+  name                      = "${local.name_prefix}-report-generation-dlq"
+  message_retention_seconds = 1209600
+  kms_master_key_id         = aws_kms_key.app.arn
+}
+
+resource "aws_sqs_queue" "report_generation" {
+  name                       = "${local.name_prefix}-report-generation"
+  visibility_timeout_seconds = 300
+  message_retention_seconds  = 345600
+  kms_master_key_id          = aws_kms_key.app.arn
+  redrive_policy = jsonencode({
+    deadLetterTargetArn = aws_sqs_queue.report_generation_dlq.arn
+    maxReceiveCount     = 5
+  })
+}
+
+resource "aws_lambda_event_source_mapping" "report_queue_to_worker" {
+  event_source_arn = aws_sqs_queue.report_generation.arn
+  function_name    = aws_lambda_function.report_worker.arn
+  batch_size       = 1
+}
+
+resource "aws_sqs_queue" "classification_generation_dlq" {
+  name                      = "${local.name_prefix}-classification-generation-dlq"
+  message_retention_seconds = 1209600
+  kms_master_key_id         = aws_kms_key.app.arn
+}
+
+resource "aws_sqs_queue" "classification_generation" {
+  name                       = "${local.name_prefix}-classification-generation"
+  visibility_timeout_seconds = 360
+  message_retention_seconds  = 345600
+  kms_master_key_id          = aws_kms_key.app.arn
+  redrive_policy = jsonencode({
+    deadLetterTargetArn = aws_sqs_queue.classification_generation_dlq.arn
+    maxReceiveCount     = 5
+  })
+}
+
+resource "aws_lambda_event_source_mapping" "classification_queue_to_worker" {
+  event_source_arn = aws_sqs_queue.classification_generation.arn
+  function_name    = aws_lambda_function.classification_worker.arn
+  batch_size       = 1
+}
+
+resource "aws_sqs_queue" "analysis_generation_dlq" {
+  name                      = "${local.name_prefix}-analysis-generation-dlq"
+  message_retention_seconds = 1209600
+  kms_master_key_id         = aws_kms_key.app.arn
+}
+
+resource "aws_sqs_queue" "analysis_generation" {
+  name                       = "${local.name_prefix}-analysis-generation"
+  visibility_timeout_seconds = 360
+  message_retention_seconds  = 345600
+  kms_master_key_id          = aws_kms_key.app.arn
+  redrive_policy = jsonencode({
+    deadLetterTargetArn = aws_sqs_queue.analysis_generation_dlq.arn
+    maxReceiveCount     = 5
+  })
+}
+
+resource "aws_lambda_event_source_mapping" "analysis_queue_to_worker" {
+  event_source_arn = aws_sqs_queue.analysis_generation.arn
+  function_name    = aws_lambda_function.analysis_worker.arn
+  batch_size       = 1
+}
+
+resource "aws_cloudwatch_event_rule" "incident_evaluation_schedule" {
+  name                = "${local.name_prefix}-incident-evaluation-every-15m"
+  schedule_expression = "rate(15 minutes)"
+}
+
+resource "aws_cloudwatch_event_target" "incident_evaluation_schedule" {
+  rule      = aws_cloudwatch_event_rule.incident_evaluation_schedule.name
+  target_id = "incident-evaluation-queue"
+  arn       = aws_sqs_queue.incident_evaluation.arn
+  input = jsonencode({
+    trigger_type = "scheduled"
+    requested_at = "eventbridge"
+  })
+}
+
+resource "aws_cloudwatch_event_rule" "report_schedule" {
+  name                = "${local.name_prefix}-report-scheduler-every-15m"
+  schedule_expression = "rate(15 minutes)"
+}
+
+resource "aws_cloudwatch_event_target" "report_schedule" {
+  rule      = aws_cloudwatch_event_rule.report_schedule.name
+  target_id = "report-scheduler-lambda"
+  arn       = aws_lambda_function.report_scheduler.arn
+  input = jsonencode({
+    trigger_type = "scheduled"
+    requested_at = "eventbridge"
+  })
+}
+
+resource "aws_lambda_permission" "report_scheduler_eventbridge" {
+  statement_id  = "AllowExecutionFromEventBridgeReportScheduler"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.report_scheduler.function_name
+  principal     = "events.amazonaws.com"
+  source_arn    = aws_cloudwatch_event_rule.report_schedule.arn
+}
+
+resource "aws_cloudwatch_event_rule" "classification_schedule" {
+  name                = "${local.name_prefix}-classification-scheduler-every-15m"
+  schedule_expression = "rate(15 minutes)"
+}
+
+resource "aws_cloudwatch_event_target" "classification_schedule" {
+  rule      = aws_cloudwatch_event_rule.classification_schedule.name
+  target_id = "classification-scheduler-lambda"
+  arn       = aws_lambda_function.classification_scheduler.arn
+  input = jsonencode({
+    trigger_type = "scheduled"
+    requested_at = "eventbridge"
+  })
+}
+
+resource "aws_lambda_permission" "classification_scheduler_eventbridge" {
+  statement_id  = "AllowExecutionFromEventBridgeClassificationScheduler"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.classification_scheduler.function_name
+  principal     = "events.amazonaws.com"
+  source_arn    = aws_cloudwatch_event_rule.classification_schedule.arn
+}
+
+resource "aws_cloudwatch_event_rule" "social_daily_8am_bogota" {
+  name                = "${local.name_prefix}-social-daily-8am-bogota"
+  schedule_expression = "cron(0 13 * * ? *)"
+}
+
+resource "aws_cloudwatch_event_target" "social_daily_8am_bogota" {
+  rule      = aws_cloudwatch_event_rule.social_daily_8am_bogota.name
+  target_id = "social-scheduler-lambda"
+  arn       = aws_lambda_function.social_scheduler.arn
+  input = jsonencode({
+    request_id   = "scheduled"
+    requested_at = "eventbridge"
+  })
+}
+
+resource "aws_lambda_permission" "social_scheduler_eventbridge" {
+  statement_id  = "AllowExecutionFromEventBridgeSocialScheduler"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.social_scheduler.function_name
+  principal     = "events.amazonaws.com"
+  source_arn    = aws_cloudwatch_event_rule.social_daily_8am_bogota.arn
+}
+
+resource "aws_cloudwatch_event_rule" "digest_daily" {
+  name                = "${local.name_prefix}-digest-daily-8am-bogota"
+  schedule_expression = "cron(0 13 * * ? *)"
+}
+
+resource "aws_cloudwatch_event_target" "digest_daily" {
+  rule      = aws_cloudwatch_event_rule.digest_daily.name
+  target_id = "digest-worker-lambda"
+  arn       = aws_lambda_function.digest_worker.arn
+  input = jsonencode({
+    trigger_type    = "scheduled"
+    recipient_scope = "ops"
+    requested_at    = "eventbridge"
+  })
+}
+
+resource "aws_lambda_permission" "digest_worker_eventbridge" {
+  statement_id  = "AllowExecutionFromEventBridgeDigestWorker"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.digest_worker.function_name
+  principal     = "events.amazonaws.com"
+  source_arn    = aws_cloudwatch_event_rule.digest_daily.arn
 }
 
 resource "aws_iam_role" "step_functions" {

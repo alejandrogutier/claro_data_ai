@@ -209,7 +209,7 @@ type ClassificationRecord = {
 };
 
 type CreateExportJobInput = {
-  requestedByUserId: string;
+  requestedByUserId?: string | null;
   filters: Record<string, unknown>;
 };
 
@@ -794,7 +794,12 @@ class AppStore {
           ci."language",
           ci."category",
           ci."publishedAt",
-          ci."sourceScore"::text,
+          COALESCE(
+            sw_source."weight",
+            sw_provider."weight",
+            ci."sourceScore",
+            CAST(0.50 AS DECIMAL(3,2))
+          )::text,
           ci."rawPayloadS3Key",
           ci."createdAt",
           ci."updatedAt",
@@ -805,9 +810,30 @@ class AppStore {
           SELECT c."categoria", c."sentimiento"
           FROM "public"."Classification" c
           WHERE c."contentItemId" = ci."id"
-          ORDER BY c."createdAt" DESC
+          ORDER BY c."isOverride" DESC, c."createdAt" DESC
           LIMIT 1
         ) cls ON TRUE
+        LEFT JOIN LATERAL (
+          SELECT sw."weight"
+          FROM "public"."SourceWeight" sw
+          WHERE
+            sw."isActive" = TRUE
+            AND sw."sourceName" IS NOT NULL
+            AND LOWER(sw."provider") = LOWER(ci."provider")
+            AND LOWER(sw."sourceName") = LOWER(COALESCE(ci."sourceName", ''))
+          ORDER BY sw."updatedAt" DESC, sw."id" DESC
+          LIMIT 1
+        ) sw_source ON TRUE
+        LEFT JOIN LATERAL (
+          SELECT sw."weight"
+          FROM "public"."SourceWeight" sw
+          WHERE
+            sw."isActive" = TRUE
+            AND sw."sourceName" IS NULL
+            AND LOWER(sw."provider") = LOWER(ci."provider")
+          ORDER BY sw."updatedAt" DESC, sw."id" DESC
+          LIMIT 1
+        ) sw_provider ON TRUE
         ${whereClause}
         ORDER BY ci."createdAt" DESC, ci."id" DESC
         LIMIT :limit_plus_one
@@ -868,7 +894,12 @@ class AppStore {
           ci."language",
           ci."category",
           ci."publishedAt",
-          ci."sourceScore"::text,
+          COALESCE(
+            sw_source."weight",
+            sw_provider."weight",
+            ci."sourceScore",
+            CAST(0.50 AS DECIMAL(3,2))
+          )::text,
           ci."rawPayloadS3Key",
           ci."createdAt",
           ci."updatedAt",
@@ -879,9 +910,30 @@ class AppStore {
           SELECT c."categoria", c."sentimiento"
           FROM "public"."Classification" c
           WHERE c."contentItemId" = ci."id"
-          ORDER BY c."createdAt" DESC
+          ORDER BY c."isOverride" DESC, c."createdAt" DESC
           LIMIT 1
         ) cls ON TRUE
+        LEFT JOIN LATERAL (
+          SELECT sw."weight"
+          FROM "public"."SourceWeight" sw
+          WHERE
+            sw."isActive" = TRUE
+            AND sw."sourceName" IS NOT NULL
+            AND LOWER(sw."provider") = LOWER(ci."provider")
+            AND LOWER(sw."sourceName") = LOWER(COALESCE(ci."sourceName", ''))
+          ORDER BY sw."updatedAt" DESC, sw."id" DESC
+          LIMIT 1
+        ) sw_source ON TRUE
+        LEFT JOIN LATERAL (
+          SELECT sw."weight"
+          FROM "public"."SourceWeight" sw
+          WHERE
+            sw."isActive" = TRUE
+            AND sw."sourceName" IS NULL
+            AND LOWER(sw."provider") = LOWER(ci."provider")
+          ORDER BY sw."updatedAt" DESC, sw."id" DESC
+          LIMIT 1
+        ) sw_provider ON TRUE
         WHERE
           ci."sourceType" = CAST('news' AS "public"."SourceType")
           AND ci."termId" = CAST(:term_id AS UUID)
@@ -1233,7 +1285,7 @@ class AppStore {
       `,
       [
         sqlUuid("id", randomUUID()),
-        sqlUuid("requested_by_user_id", input.requestedByUserId),
+        sqlUuid("requested_by_user_id", input.requestedByUserId ?? null),
         sqlJson("filters", input.filters)
       ]
     );
@@ -1354,16 +1406,42 @@ class AppStore {
         SELECT
           COALESCE(t."scope"::text, '') AS scope,
           cls."sentimiento",
-          ci."sourceScore"::text
+          COALESCE(
+            sw_source."weight",
+            sw_provider."weight",
+            ci."sourceScore",
+            CAST(0.50 AS DECIMAL(3,2))
+          )::text
         FROM "public"."ContentItem" ci
         LEFT JOIN "public"."TrackedTerm" t ON t."id" = ci."termId"
         LEFT JOIN LATERAL (
           SELECT c."sentimiento"
           FROM "public"."Classification" c
           WHERE c."contentItemId" = ci."id"
-          ORDER BY c."createdAt" DESC
+          ORDER BY c."isOverride" DESC, c."createdAt" DESC
           LIMIT 1
         ) cls ON TRUE
+        LEFT JOIN LATERAL (
+          SELECT sw."weight"
+          FROM "public"."SourceWeight" sw
+          WHERE
+            sw."isActive" = TRUE
+            AND sw."sourceName" IS NOT NULL
+            AND LOWER(sw."provider") = LOWER(ci."provider")
+            AND LOWER(sw."sourceName") = LOWER(COALESCE(ci."sourceName", ''))
+          ORDER BY sw."updatedAt" DESC, sw."id" DESC
+          LIMIT 1
+        ) sw_source ON TRUE
+        LEFT JOIN LATERAL (
+          SELECT sw."weight"
+          FROM "public"."SourceWeight" sw
+          WHERE
+            sw."isActive" = TRUE
+            AND sw."sourceName" IS NULL
+            AND LOWER(sw."provider") = LOWER(ci."provider")
+          ORDER BY sw."updatedAt" DESC, sw."id" DESC
+          LIMIT 1
+        ) sw_provider ON TRUE
         WHERE
           ci."sourceType" = CAST('news' AS "public"."SourceType")
           AND ci."state" = CAST('active' AS "public"."ContentState")
@@ -1530,7 +1608,7 @@ class AppStore {
           FROM (
             SELECT DISTINCT ON (c."contentItemId") c."contentItemId", c."sentimiento"
             FROM "public"."Classification" c
-            ORDER BY c."contentItemId", c."createdAt" DESC
+            ORDER BY c."contentItemId", c."isOverride" DESC, c."createdAt" DESC
           ) latest
           WHERE latest."sentimiento" IS NOT NULL AND latest."sentimiento" <> ''
           GROUP BY latest."sentimiento"
