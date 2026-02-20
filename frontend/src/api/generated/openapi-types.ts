@@ -535,6 +535,100 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/monitor/social/posts/{post_id}/comments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Listado paginado de comentarios Awario vinculados a un post */
+        get: {
+            parameters: {
+                query?: {
+                    /** @description Cursor opaco para paginacion */
+                    cursor?: components["parameters"]["Cursor"];
+                    limit?: components["parameters"]["Limit"];
+                    sentiment?: components["schemas"]["SocialSentiment"];
+                    is_spam?: boolean;
+                    related_to_post_text?: boolean;
+                };
+                header?: never;
+                path: {
+                    post_id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Comentarios Awario del post */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["MonitorSocialPostCommentsResponse"];
+                    };
+                };
+                401: components["responses"]["Unauthorized"];
+                403: components["responses"]["Forbidden"];
+                422: components["responses"]["ValidationError"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/monitor/social/comments/{comment_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Override manual de comentario Awario (spam/relacion/sentimiento) */
+        patch: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    comment_id: string;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["PatchMonitorSocialCommentRequest"];
+                };
+            };
+            responses: {
+                /** @description Comentario actualizado */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["MonitorSocialCommentItem"];
+                    };
+                };
+                401: components["responses"]["Unauthorized"];
+                403: components["responses"]["Forbidden"];
+                404: components["responses"]["NotFound"];
+                422: components["responses"]["ValidationError"];
+            };
+        };
+        trace?: never;
+    };
     "/v1/monitor/social/risk": {
         parameters: {
             query?: never;
@@ -2559,6 +2653,238 @@ export interface paths {
         };
         trace?: never;
     };
+    "/v1/config/awario/profiles": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Listar perfiles internos de query de Awario */
+        get: {
+            parameters: {
+                query?: {
+                    limit?: number;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Lista de perfiles */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["AwarioQueryProfileListResponse"];
+                    };
+                };
+                401: components["responses"]["Unauthorized"];
+                403: components["responses"]["Forbidden"];
+                422: components["responses"]["ValidationError"];
+            };
+        };
+        put?: never;
+        /** Crear perfil interno de query de Awario */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["CreateAwarioQueryProfileRequest"];
+                };
+            };
+            responses: {
+                /** @description Perfil creado */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["AwarioQueryProfile"];
+                    };
+                };
+                401: components["responses"]["Unauthorized"];
+                403: components["responses"]["Forbidden"];
+                409: components["responses"]["Conflict"];
+                422: components["responses"]["ValidationError"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/config/awario/profiles/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Actualizar perfil interno de query de Awario */
+        patch: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: components["parameters"]["Id"];
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["UpdateAwarioQueryProfileRequest"];
+                };
+            };
+            responses: {
+                /** @description Perfil actualizado */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["AwarioQueryProfile"];
+                    };
+                };
+                401: components["responses"]["Unauthorized"];
+                403: components["responses"]["Forbidden"];
+                404: components["responses"]["NotFound"];
+                409: components["responses"]["Conflict"];
+                422: components["responses"]["ValidationError"];
+            };
+        };
+        trace?: never;
+    };
+    "/v1/config/awario/bindings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Listar bindings profile -> alert_id de Awario */
+        get: {
+            parameters: {
+                query?: {
+                    limit?: number;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Lista de bindings */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["AwarioAlertBindingListResponse"];
+                    };
+                };
+                401: components["responses"]["Unauthorized"];
+                403: components["responses"]["Forbidden"];
+                422: components["responses"]["ValidationError"];
+            };
+        };
+        put?: never;
+        /** Crear binding profile -> alert_id de Awario */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["CreateAwarioAlertBindingRequest"];
+                };
+            };
+            responses: {
+                /** @description Binding creado */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["AwarioAlertBinding"];
+                    };
+                };
+                401: components["responses"]["Unauthorized"];
+                403: components["responses"]["Forbidden"];
+                409: components["responses"]["Conflict"];
+                422: components["responses"]["ValidationError"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/config/awario/bindings/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Actualizar binding profile -> alert_id de Awario */
+        patch: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: components["parameters"]["Id"];
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["UpdateAwarioAlertBindingRequest"];
+                };
+            };
+            responses: {
+                /** @description Binding actualizado */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["AwarioAlertBinding"];
+                    };
+                };
+                401: components["responses"]["Unauthorized"];
+                403: components["responses"]["Forbidden"];
+                404: components["responses"]["NotFound"];
+                409: components["responses"]["Conflict"];
+                422: components["responses"]["ValidationError"];
+            };
+        };
+        trace?: never;
+    };
     "/v1/config/competitors": {
         parameters: {
             query?: never;
@@ -4012,6 +4338,7 @@ export interface components {
             clicks: number;
             likes: number;
             comments: number;
+            awario_comments_count: number;
             shares: number;
             views: number;
             source_score: number;
@@ -4026,6 +4353,48 @@ export interface components {
         MonitorSocialPostsResponse: {
             items: components["schemas"]["MonitorSocialPostItem"][];
             page_info: components["schemas"]["PageInfo"];
+        };
+        MonitorSocialCommentItem: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            social_post_metric_id: string;
+            awario_mention_id: string;
+            awario_alert_id: string;
+            channel: components["schemas"]["SocialChannel"];
+            parent_external_post_id: string;
+            external_comment_id?: string | null;
+            external_reply_comment_id?: string | null;
+            comment_url?: string | null;
+            author_name?: string | null;
+            author_profile_url?: string | null;
+            /** Format: date-time */
+            published_at?: string | null;
+            text?: string | null;
+            sentiment: components["schemas"]["SocialSentiment"];
+            /** @enum {string} */
+            sentiment_source: "awario" | "model" | "manual";
+            is_spam: boolean;
+            related_to_post_text: boolean;
+            needs_review: boolean;
+            confidence: number | null;
+            raw_payload: {
+                [key: string]: unknown;
+            };
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+        };
+        MonitorSocialPostCommentsResponse: {
+            items: components["schemas"]["MonitorSocialCommentItem"][];
+            page_info: components["schemas"]["PageInfo"];
+        };
+        PatchMonitorSocialCommentRequest: {
+            is_spam?: boolean;
+            related_to_post_text?: boolean;
+            sentiment?: components["schemas"]["SocialSentiment"];
+            reason?: string;
         };
         MonitorSocialHeatmapPoint: {
             month: number;
@@ -4429,6 +4798,110 @@ export interface components {
             /** Format: uuid */
             connector_id: string;
             items: components["schemas"]["ConnectorSyncRun"][];
+        };
+        /** @enum {string} */
+        AwarioStatus: "active" | "paused" | "archived";
+        /** @enum {string} */
+        AwarioValidationStatus: "valid" | "invalid" | "unknown";
+        AwarioQueryProfile: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            objective?: string | null;
+            query_text: string;
+            sources: string[];
+            language?: string | null;
+            countries: string[];
+            status: components["schemas"]["AwarioStatus"];
+            metadata: {
+                [key: string]: unknown;
+            };
+            /** Format: uuid */
+            created_by_user_id?: string | null;
+            /** Format: uuid */
+            updated_by_user_id?: string | null;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+        };
+        AwarioQueryProfileListResponse: {
+            items: components["schemas"]["AwarioQueryProfile"][];
+        };
+        CreateAwarioQueryProfileRequest: {
+            name: string;
+            objective?: string | null;
+            query_text: string;
+            sources?: string[];
+            language?: string | null;
+            countries?: string[];
+            status?: components["schemas"]["AwarioStatus"];
+            metadata?: {
+                [key: string]: unknown;
+            };
+        };
+        UpdateAwarioQueryProfileRequest: {
+            name?: string;
+            objective?: string | null;
+            query_text?: string;
+            sources?: string[];
+            language?: string | null;
+            countries?: string[];
+            status?: components["schemas"]["AwarioStatus"];
+            metadata?: {
+                [key: string]: unknown;
+            };
+        };
+        AwarioAlertBinding: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            profile_id: string;
+            profile_name?: string | null;
+            /** Format: uuid */
+            connector_id?: string | null;
+            awario_alert_id: string;
+            status: components["schemas"]["AwarioStatus"];
+            validation_status: components["schemas"]["AwarioValidationStatus"];
+            /** Format: date-time */
+            last_validated_at?: string | null;
+            last_validation_error?: string | null;
+            metadata: {
+                [key: string]: unknown;
+            };
+            /** Format: uuid */
+            created_by_user_id?: string | null;
+            /** Format: uuid */
+            updated_by_user_id?: string | null;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+        };
+        AwarioAlertBindingListResponse: {
+            items: components["schemas"]["AwarioAlertBinding"][];
+        };
+        CreateAwarioAlertBindingRequest: {
+            /** Format: uuid */
+            profile_id: string;
+            /** Format: uuid */
+            connector_id?: string | null;
+            awario_alert_id: string;
+            status?: components["schemas"]["AwarioStatus"];
+            metadata?: {
+                [key: string]: unknown;
+            };
+        };
+        UpdateAwarioAlertBindingRequest: {
+            /** Format: uuid */
+            profile_id?: string;
+            /** Format: uuid */
+            connector_id?: string | null;
+            awario_alert_id?: string;
+            status?: components["schemas"]["AwarioStatus"];
+            metadata?: {
+                [key: string]: unknown;
+            };
         };
         OwnedAccount: {
             /** Format: uuid */

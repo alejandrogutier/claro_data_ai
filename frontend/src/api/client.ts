@@ -13,6 +13,9 @@ export type SocialPostSort = components["schemas"]["SocialPostSort"];
 export type MonitorSocialOverviewResponse = components["schemas"]["MonitorSocialOverviewResponse"];
 export type MonitorSocialAccountsResponse = components["schemas"]["MonitorSocialAccountsResponse"];
 export type MonitorSocialPostsResponse = components["schemas"]["MonitorSocialPostsResponse"];
+export type MonitorSocialComment = components["schemas"]["MonitorSocialCommentItem"];
+export type MonitorSocialPostCommentsResponse = components["schemas"]["MonitorSocialPostCommentsResponse"];
+export type PatchMonitorSocialCommentRequest = components["schemas"]["PatchMonitorSocialCommentRequest"];
 export type MonitorSocialRiskResponse = components["schemas"]["MonitorSocialRiskResponse"];
 export type MonitorSocialRunItem = components["schemas"]["MonitorSocialRunItem"];
 export type MonitorSocialRunsResponse = components["schemas"]["MonitorSocialRunsResponse"];
@@ -48,6 +51,14 @@ export type ConnectorListResponse = components["schemas"]["ConnectorListResponse
 export type PatchConnectorRequest = components["schemas"]["PatchConnectorRequest"];
 export type ConnectorSyncRun = components["schemas"]["ConnectorSyncRun"];
 export type ConnectorRunListResponse = components["schemas"]["ConnectorRunListResponse"];
+export type AwarioQueryProfile = components["schemas"]["AwarioQueryProfile"];
+export type AwarioQueryProfileListResponse = components["schemas"]["AwarioQueryProfileListResponse"];
+export type CreateAwarioQueryProfileRequest = components["schemas"]["CreateAwarioQueryProfileRequest"];
+export type UpdateAwarioQueryProfileRequest = components["schemas"]["UpdateAwarioQueryProfileRequest"];
+export type AwarioAlertBinding = components["schemas"]["AwarioAlertBinding"];
+export type AwarioAlertBindingListResponse = components["schemas"]["AwarioAlertBindingListResponse"];
+export type CreateAwarioAlertBindingRequest = components["schemas"]["CreateAwarioAlertBindingRequest"];
+export type UpdateAwarioAlertBindingRequest = components["schemas"]["UpdateAwarioAlertBindingRequest"];
 export type OwnedAccount = components["schemas"]["OwnedAccount"];
 export type OwnedAccountListResponse = components["schemas"]["OwnedAccountListResponse"];
 export type CreateOwnedAccountRequest = components["schemas"]["CreateOwnedAccountRequest"];
@@ -306,6 +317,26 @@ export class ApiClient {
     return this.request<MonitorSocialPostsResponse>("/v1/monitor/social/posts", { query });
   }
 
+  listMonitorSocialPostComments(
+    postId: string,
+    query: {
+      limit?: number;
+      cursor?: string;
+      sentiment?: SocialSentiment;
+      is_spam?: boolean;
+      related_to_post_text?: boolean;
+    } = {}
+  ): Promise<MonitorSocialPostCommentsResponse> {
+    return this.request<MonitorSocialPostCommentsResponse>(`/v1/monitor/social/posts/${postId}/comments`, { query });
+  }
+
+  patchMonitorSocialComment(commentId: string, payload: PatchMonitorSocialCommentRequest): Promise<MonitorSocialComment> {
+    return this.request<MonitorSocialComment>(`/v1/monitor/social/comments/${commentId}`, {
+      method: "PATCH",
+      body: payload
+    });
+  }
+
   getMonitorSocialAccounts(query: MonitorSocialQuery & {
     min_posts?: number;
     min_exposure?: number;
@@ -557,6 +588,46 @@ export class ApiClient {
   listConnectorRuns(id: string, limit = 20): Promise<ConnectorRunListResponse> {
     return this.request<ConnectorRunListResponse>(`/v1/connectors/${id}/runs`, {
       query: { limit }
+    });
+  }
+
+  listAwarioProfiles(limit = 200): Promise<AwarioQueryProfileListResponse> {
+    return this.request<AwarioQueryProfileListResponse>("/v1/config/awario/profiles", {
+      query: { limit }
+    });
+  }
+
+  createAwarioProfile(payload: CreateAwarioQueryProfileRequest): Promise<AwarioQueryProfile> {
+    return this.request<AwarioQueryProfile>("/v1/config/awario/profiles", {
+      method: "POST",
+      body: payload
+    });
+  }
+
+  patchAwarioProfile(id: string, payload: UpdateAwarioQueryProfileRequest): Promise<AwarioQueryProfile> {
+    return this.request<AwarioQueryProfile>(`/v1/config/awario/profiles/${id}`, {
+      method: "PATCH",
+      body: payload
+    });
+  }
+
+  listAwarioBindings(limit = 200): Promise<AwarioAlertBindingListResponse> {
+    return this.request<AwarioAlertBindingListResponse>("/v1/config/awario/bindings", {
+      query: { limit }
+    });
+  }
+
+  createAwarioBinding(payload: CreateAwarioAlertBindingRequest): Promise<AwarioAlertBinding> {
+    return this.request<AwarioAlertBinding>("/v1/config/awario/bindings", {
+      method: "POST",
+      body: payload
+    });
+  }
+
+  patchAwarioBinding(id: string, payload: UpdateAwarioAlertBindingRequest): Promise<AwarioAlertBinding> {
+    return this.request<AwarioAlertBinding>(`/v1/config/awario/bindings/${id}`, {
+      method: "PATCH",
+      body: payload
     });
   }
 

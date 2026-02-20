@@ -14,6 +14,13 @@ export type AppEnv = {
   socialRawPrefix?: string;
   socialSchedulerLambdaName?: string;
   socialAnalyticsV2Enabled: boolean;
+  awarioAccessToken?: string;
+  awarioCommentsEnabled: boolean;
+  awarioSyncWindowDays: number;
+  awarioSyncPageLimit: number;
+  awarioSyncMaxPagesPerAlert: number;
+  awarioSyncThrottleMs: number;
+  awarioCommentsReviewThreshold: number;
   exportBucketName?: string;
   exportQueueUrl?: string;
   exportSignedUrlSeconds?: number;
@@ -50,6 +57,23 @@ export const env: AppEnv = {
   socialRawPrefix: process.env.SOCIAL_RAW_PREFIX,
   socialSchedulerLambdaName: process.env.SOCIAL_SCHEDULER_LAMBDA_NAME,
   socialAnalyticsV2Enabled: ["1", "true", "yes", "on"].includes((process.env.SOCIAL_ANALYTICS_V2_ENABLED ?? "true").toLowerCase()),
+  awarioAccessToken: process.env.AWARIO_ACCESS_TOKEN ?? process.env.AWARIO_API_KEY,
+  awarioCommentsEnabled: ["1", "true", "yes", "on"].includes((process.env.AWARIO_COMMENTS_ENABLED ?? "false").toLowerCase()),
+  awarioSyncWindowDays: process.env.AWARIO_SYNC_WINDOW_DAYS
+    ? Number.parseInt(process.env.AWARIO_SYNC_WINDOW_DAYS, 10)
+    : 30,
+  awarioSyncPageLimit: process.env.AWARIO_SYNC_PAGE_LIMIT
+    ? Number.parseInt(process.env.AWARIO_SYNC_PAGE_LIMIT, 10)
+    : 100,
+  awarioSyncMaxPagesPerAlert: process.env.AWARIO_SYNC_MAX_PAGES_PER_ALERT
+    ? Number.parseInt(process.env.AWARIO_SYNC_MAX_PAGES_PER_ALERT, 10)
+    : 50,
+  awarioSyncThrottleMs: process.env.AWARIO_SYNC_THROTTLE_MS
+    ? Number.parseInt(process.env.AWARIO_SYNC_THROTTLE_MS, 10)
+    : 250,
+  awarioCommentsReviewThreshold: process.env.AWARIO_COMMENTS_REVIEW_THRESHOLD
+    ? Number.parseFloat(process.env.AWARIO_COMMENTS_REVIEW_THRESHOLD)
+    : 0.6,
   exportBucketName: process.env.EXPORT_BUCKET_NAME,
   exportQueueUrl: process.env.EXPORT_QUEUE_URL,
   exportSignedUrlSeconds: process.env.EXPORT_SIGNED_URL_SECONDS

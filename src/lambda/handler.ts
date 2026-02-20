@@ -56,12 +56,16 @@ import {
   patchMonitorSocialSettings
 } from "../routes/v1/monitorSocial";
 import {
+  createAwarioBinding,
+  createAwarioProfile,
   createConfigAccount,
   createConfigCompetitor,
   createNotificationRecipient,
   createTaxonomy,
   exportConfigAudit,
   listConfigAccounts,
+  listAwarioBindings,
+  listAwarioProfiles,
   listConfigAudit,
   listConfigCompetitors,
   getNotificationStatus,
@@ -71,6 +75,8 @@ import {
   listConnectorRuns,
   listTaxonomies,
   patchConfigAccount,
+  patchAwarioBinding,
+  patchAwarioProfile,
   patchConfigCompetitor,
   patchNotificationRecipient,
   patchSourceScoringWeight,
@@ -145,6 +151,12 @@ const roleRules: RoleRule[] = [
   { pattern: /^GET \/v1\/config\/accounts$/, requiredRole: "Viewer" },
   { pattern: /^POST \/v1\/config\/accounts$/, requiredRole: "Admin" },
   { pattern: /^PATCH \/v1\/config\/accounts\/[^/]+$/, requiredRole: "Admin" },
+  { pattern: /^GET \/v1\/config\/awario\/profiles$/, requiredRole: "Viewer" },
+  { pattern: /^POST \/v1\/config\/awario\/profiles$/, requiredRole: "Admin" },
+  { pattern: /^PATCH \/v1\/config\/awario\/profiles\/[^/]+$/, requiredRole: "Admin" },
+  { pattern: /^GET \/v1\/config\/awario\/bindings$/, requiredRole: "Viewer" },
+  { pattern: /^POST \/v1\/config\/awario\/bindings$/, requiredRole: "Admin" },
+  { pattern: /^PATCH \/v1\/config\/awario\/bindings\/[^/]+$/, requiredRole: "Admin" },
   { pattern: /^GET \/v1\/config\/competitors$/, requiredRole: "Viewer" },
   { pattern: /^POST \/v1\/config\/competitors$/, requiredRole: "Admin" },
   { pattern: /^PATCH \/v1\/config\/competitors\/[^/]+$/, requiredRole: "Admin" },
@@ -269,6 +281,12 @@ export const main = async (event: APIGatewayProxyEventV2) => {
   if (key === "GET /v1/config/accounts") return listConfigAccounts(event);
   if (key === "POST /v1/config/accounts") return createConfigAccount(event);
   if (key.match(/^PATCH \/v1\/config\/accounts\/[^/]+$/)) return patchConfigAccount(event);
+  if (key === "GET /v1/config/awario/profiles") return listAwarioProfiles(event);
+  if (key === "POST /v1/config/awario/profiles") return createAwarioProfile(event);
+  if (key.match(/^PATCH \/v1\/config\/awario\/profiles\/[^/]+$/)) return patchAwarioProfile(event);
+  if (key === "GET /v1/config/awario/bindings") return listAwarioBindings(event);
+  if (key === "POST /v1/config/awario/bindings") return createAwarioBinding(event);
+  if (key.match(/^PATCH \/v1\/config\/awario\/bindings\/[^/]+$/)) return patchAwarioBinding(event);
   if (key === "GET /v1/config/competitors") return listConfigCompetitors(event);
   if (key === "POST /v1/config/competitors") return createConfigCompetitor(event);
   if (key.match(/^PATCH \/v1\/config\/competitors\/[^/]+$/)) return patchConfigCompetitor(event);

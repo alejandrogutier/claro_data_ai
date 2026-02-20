@@ -7,6 +7,12 @@ import { getPathWithoutStage, getRequestId, json, parseBody } from "../../core/h
 import { AppStoreError, createAppStore } from "../../data/appStore";
 import { getNotificationEmailStatus } from "../../email/sesDelivery";
 import {
+  type AwarioAlertBindingCreateInput,
+  type AwarioAlertBindingRecord,
+  type AwarioAlertBindingUpdateInput,
+  type AwarioQueryProfileCreateInput,
+  type AwarioQueryProfileRecord,
+  type AwarioQueryProfileUpdateInput,
   createConfigStore,
   isTaxonomyKind,
   type AuditFilters,
@@ -34,6 +40,25 @@ const s3 = new AWS.S3({ region: env.awsRegion, signatureVersion: "v4" });
 type ConnectorPatchBody = {
   enabled?: unknown;
   frequency_minutes?: unknown;
+};
+
+type AwarioProfileBody = {
+  name?: unknown;
+  objective?: unknown;
+  query_text?: unknown;
+  sources?: unknown;
+  language?: unknown;
+  countries?: unknown;
+  status?: unknown;
+  metadata?: unknown;
+};
+
+type AwarioBindingBody = {
+  profile_id?: unknown;
+  connector_id?: unknown;
+  awario_alert_id?: unknown;
+  status?: unknown;
+  metadata?: unknown;
 };
 
 type SourceWeightCreateBody = {
@@ -134,6 +159,29 @@ const normalizeMetadata = (value: unknown): Record<string, unknown> | null => {
   if (value === undefined) return {};
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   return value as Record<string, unknown>;
+};
+
+const normalizeOptionalStringArray = (value: unknown, maxItems = 50, maxLen = 64): string[] | null | undefined => {
+  if (value === undefined) return undefined;
+  if (!Array.isArray(value)) return null;
+  return Array.from(
+    new Set(
+      value
+        .map((item) => (typeof item === "string" ? item.trim() : ""))
+        .filter((item) => item.length > 0)
+        .map((item) => item.slice(0, maxLen))
+    )
+  ).slice(0, maxItems);
+};
+
+const normalizeAwarioStatus = (value: unknown): "active" | "paused" | "archived" | null | undefined => {
+  if (value === undefined) return undefined;
+  if (typeof value !== "string") return null;
+  const normalized = value.trim().toLowerCase();
+  if (normalized === "active" || normalized === "paused" || normalized === "archived") {
+    return normalized as "active" | "paused" | "archived";
+  }
+  return null;
 };
 
 const normalizeDate = (value: string | undefined): Date | null => {
@@ -248,6 +296,39 @@ const toApiTaxonomy = (item: TaxonomyEntryRecord) => ({
   is_active: item.isActive,
   sort_order: item.sortOrder,
   metadata: item.metadata,
+  created_at: item.createdAt.toISOString(),
+  updated_at: item.updatedAt.toISOString()
+});
+
+const toApiAwarioProfile = (item: AwarioQueryProfileRecord) => ({
+  id: item.id,
+  name: item.name,
+  objective: item.objective,
+  query_text: item.queryText,
+  sources: item.sources,
+  language: item.language,
+  countries: item.countries,
+  status: item.status,
+  metadata: item.metadata,
+  created_by_user_id: item.createdByUserId,
+  updated_by_user_id: item.updatedByUserId,
+  created_at: item.createdAt.toISOString(),
+  updated_at: item.updatedAt.toISOString()
+});
+
+const toApiAwarioBinding = (item: AwarioAlertBindingRecord) => ({
+  id: item.id,
+  profile_id: item.profileId,
+  profile_name: item.profileName,
+  connector_id: item.connectorId,
+  awario_alert_id: item.awarioAlertId,
+  status: item.status,
+  validation_status: item.validationStatus,
+  last_validated_at: item.lastValidatedAt?.toISOString() ?? null,
+  last_validation_error: item.lastValidationError,
+  metadata: item.metadata,
+  created_by_user_id: item.createdByUserId,
+  updated_by_user_id: item.updatedByUserId,
   created_at: item.createdAt.toISOString(),
   updated_at: item.updatedAt.toISOString()
 });
@@ -531,6 +612,324 @@ export const listConnectorRuns = async (event: APIGatewayProxyEventV2) => {
       connector_id: connectorId,
       items: items.map(toApiConnectorRun)
     });
+  } catch (error) {
+    return mapStoreError(error);
+  }
+};
+
+export const listAwarioProfiles = async (event: APIGatewayProxyEventV2) => {
+  const stores = assertStores();
+  if (stores.error) return stores.error;
+
+  const limit = parseLimit(event.queryStringParameters?.limit, 200, 500);
+  if (limit === null) {
+    return json(422, { error: "validation_error", message: "limit debe ser entero entre 1 y 500" });
+  }
+
+  try {
+    const items = await stores.store.listAwarioQueryProfiles(limit);
+    return json(200, { items: items.map(toApiAwarioProfile) });
+  } catch (error) {
+    return mapStoreError(error);
+  }
+};
+
+export const createAwarioProfile = async (event: APIGatewayProxyEventV2) => {
+  const role = getRole(event);
+  if (!hasRole(role, "Admin")) {
+    return json(403, { error: "forbidden", message: "Solo Admin puede crear perfiles de Awario" });
+  }
+
+  const body = parseBody<AwarioProfileBody>(event);
+  if (!body) {
+    return json(400, { error: "invalid_json", message: "Body JSON invalido" });
+  }
+
+  const name = normalizeString(body.name, 2, 180);
+  const queryText = normalizeString(body.query_text, 2, 4000);
+  if (!name || !queryText) {
+    return json(422, { error: "validation_error", message: "name y query_text son requeridos" });
+  }
+
+  const sources = normalizeOptionalStringArray(body.sources, 30, 64);
+  if (sources === null) {
+    return json(422, { error: "validation_error", message: "sources debe ser arreglo de strings" });
+  }
+
+  const countries = normalizeOptionalStringArray(body.countries, 80, 8);
+  if (countries === null) {
+    return json(422, { error: "validation_error", message: "countries debe ser arreglo de strings" });
+  }
+
+  const status = normalizeAwarioStatus(body.status);
+  if (status === null) {
+    return json(422, { error: "validation_error", message: "status debe ser active|paused|archived" });
+  }
+
+  const objective = normalizeOptionalString(body.objective, 1000);
+  if (body.objective !== undefined && objective === undefined) {
+    return json(422, { error: "validation_error", message: "objective invalido" });
+  }
+
+  const language = normalizeOptionalString(body.language, 16);
+  if (body.language !== undefined && language === undefined) {
+    return json(422, { error: "validation_error", message: "language invalido" });
+  }
+
+  const metadata = normalizeMetadata(body.metadata);
+  if (metadata === null) {
+    return json(422, { error: "validation_error", message: "metadata debe ser objeto JSON" });
+  }
+
+  const stores = assertStores();
+  if (stores.error) return stores.error;
+
+  try {
+    const principal = getAuthPrincipal(event);
+    const actorUserId = await stores.appStore.upsertUserFromPrincipal(principal);
+    const payload: AwarioQueryProfileCreateInput = {
+      name,
+      objective: objective ?? undefined,
+      queryText,
+      sources: sources ?? undefined,
+      language: language ?? undefined,
+      countries: countries ?? undefined,
+      status: status ?? undefined,
+      metadata: metadata ?? undefined
+    };
+    const created = await stores.store.createAwarioQueryProfile(payload, actorUserId, getRequestId(event));
+    return json(201, toApiAwarioProfile(created));
+  } catch (error) {
+    return mapStoreError(error);
+  }
+};
+
+export const patchAwarioProfile = async (event: APIGatewayProxyEventV2) => {
+  const role = getRole(event);
+  if (!hasRole(role, "Admin")) {
+    return json(403, { error: "forbidden", message: "Solo Admin puede editar perfiles de Awario" });
+  }
+
+  const profileId = getIdFromPath(event, /^\/v1\/config\/awario\/profiles\/([^/]+)$/);
+  if (!profileId || !UUID_REGEX.test(profileId)) {
+    return json(422, { error: "validation_error", message: "profile id invalido" });
+  }
+
+  const body = parseBody<AwarioProfileBody>(event);
+  if (!body) {
+    return json(400, { error: "invalid_json", message: "Body JSON invalido" });
+  }
+
+  const payload: AwarioQueryProfileUpdateInput = {};
+
+  if (body.name !== undefined) {
+    const name = normalizeString(body.name, 2, 180);
+    if (!name) return json(422, { error: "validation_error", message: "name invalido" });
+    payload.name = name;
+  }
+  if (body.query_text !== undefined) {
+    const queryText = normalizeString(body.query_text, 2, 4000);
+    if (!queryText) return json(422, { error: "validation_error", message: "query_text invalido" });
+    payload.queryText = queryText;
+  }
+  if (body.objective !== undefined) {
+    const objective = normalizeOptionalString(body.objective, 1000);
+    if (objective === undefined) return json(422, { error: "validation_error", message: "objective invalido" });
+    payload.objective = objective;
+  }
+  if (body.language !== undefined) {
+    const language = normalizeOptionalString(body.language, 16);
+    if (language === undefined) return json(422, { error: "validation_error", message: "language invalido" });
+    payload.language = language;
+  }
+  if (body.sources !== undefined) {
+    const sources = normalizeOptionalStringArray(body.sources, 30, 64);
+    if (sources === null) return json(422, { error: "validation_error", message: "sources debe ser arreglo de strings" });
+    payload.sources = sources;
+  }
+  if (body.countries !== undefined) {
+    const countries = normalizeOptionalStringArray(body.countries, 80, 8);
+    if (countries === null) return json(422, { error: "validation_error", message: "countries debe ser arreglo de strings" });
+    payload.countries = countries;
+  }
+  if (body.status !== undefined) {
+    const status = normalizeAwarioStatus(body.status);
+    if (status === null) return json(422, { error: "validation_error", message: "status debe ser active|paused|archived" });
+    payload.status = status;
+  }
+  if (body.metadata !== undefined) {
+    const metadata = normalizeMetadata(body.metadata);
+    if (metadata === null) return json(422, { error: "validation_error", message: "metadata debe ser objeto JSON" });
+    payload.metadata = metadata;
+  }
+
+  if (Object.keys(payload).length === 0) {
+    return json(422, { error: "validation_error", message: "No hay campos para actualizar" });
+  }
+
+  const stores = assertStores();
+  if (stores.error) return stores.error;
+
+  try {
+    const principal = getAuthPrincipal(event);
+    const actorUserId = await stores.appStore.upsertUserFromPrincipal(principal);
+    const updated = await stores.store.updateAwarioQueryProfile(profileId, payload, actorUserId, getRequestId(event));
+    return json(200, toApiAwarioProfile(updated));
+  } catch (error) {
+    return mapStoreError(error);
+  }
+};
+
+export const listAwarioBindings = async (event: APIGatewayProxyEventV2) => {
+  const stores = assertStores();
+  if (stores.error) return stores.error;
+
+  const limit = parseLimit(event.queryStringParameters?.limit, 200, 500);
+  if (limit === null) {
+    return json(422, { error: "validation_error", message: "limit debe ser entero entre 1 y 500" });
+  }
+
+  try {
+    const items = await stores.store.listAwarioAlertBindings(limit);
+    return json(200, { items: items.map(toApiAwarioBinding) });
+  } catch (error) {
+    return mapStoreError(error);
+  }
+};
+
+export const createAwarioBinding = async (event: APIGatewayProxyEventV2) => {
+  const role = getRole(event);
+  if (!hasRole(role, "Admin")) {
+    return json(403, { error: "forbidden", message: "Solo Admin puede crear bindings de Awario" });
+  }
+
+  const body = parseBody<AwarioBindingBody>(event);
+  if (!body) {
+    return json(400, { error: "invalid_json", message: "Body JSON invalido" });
+  }
+
+  const profileId = normalizeString(body.profile_id, 36, 36);
+  const awarioAlertId = normalizeString(body.awario_alert_id, 1, 200);
+  if (!profileId || !UUID_REGEX.test(profileId) || !awarioAlertId) {
+    return json(422, { error: "validation_error", message: "profile_id y awario_alert_id son requeridos" });
+  }
+
+  let connectorId: string | null | undefined = undefined;
+  if (body.connector_id !== undefined) {
+    if (body.connector_id === null) connectorId = null;
+    else {
+      const rawConnectorId = normalizeString(body.connector_id, 36, 36);
+      if (!rawConnectorId || !UUID_REGEX.test(rawConnectorId)) {
+        return json(422, { error: "validation_error", message: "connector_id invalido" });
+      }
+      connectorId = rawConnectorId;
+    }
+  }
+
+  const status = normalizeAwarioStatus(body.status);
+  if (status === null) {
+    return json(422, { error: "validation_error", message: "status debe ser active|paused|archived" });
+  }
+
+  const metadata = normalizeMetadata(body.metadata);
+  if (metadata === null) {
+    return json(422, { error: "validation_error", message: "metadata debe ser objeto JSON" });
+  }
+
+  const stores = assertStores();
+  if (stores.error) return stores.error;
+
+  try {
+    const principal = getAuthPrincipal(event);
+    const actorUserId = await stores.appStore.upsertUserFromPrincipal(principal);
+    const payload: AwarioAlertBindingCreateInput = {
+      profileId,
+      connectorId,
+      awarioAlertId,
+      status: status ?? undefined,
+      metadata: metadata ?? undefined
+    };
+    const created = await stores.store.createAwarioAlertBinding(payload, actorUserId, getRequestId(event));
+    return json(201, toApiAwarioBinding(created));
+  } catch (error) {
+    return mapStoreError(error);
+  }
+};
+
+export const patchAwarioBinding = async (event: APIGatewayProxyEventV2) => {
+  const role = getRole(event);
+  if (!hasRole(role, "Admin")) {
+    return json(403, { error: "forbidden", message: "Solo Admin puede editar bindings de Awario" });
+  }
+
+  const bindingId = getIdFromPath(event, /^\/v1\/config\/awario\/bindings\/([^/]+)$/);
+  if (!bindingId || !UUID_REGEX.test(bindingId)) {
+    return json(422, { error: "validation_error", message: "binding id invalido" });
+  }
+
+  const body = parseBody<AwarioBindingBody>(event);
+  if (!body) {
+    return json(400, { error: "invalid_json", message: "Body JSON invalido" });
+  }
+
+  const payload: AwarioAlertBindingUpdateInput = {};
+
+  if (body.profile_id !== undefined) {
+    const profileId = normalizeString(body.profile_id, 36, 36);
+    if (!profileId || !UUID_REGEX.test(profileId)) {
+      return json(422, { error: "validation_error", message: "profile_id invalido" });
+    }
+    payload.profileId = profileId;
+  }
+
+  if (body.connector_id !== undefined) {
+    if (body.connector_id === null) {
+      payload.connectorId = null;
+    } else {
+      const connectorId = normalizeString(body.connector_id, 36, 36);
+      if (!connectorId || !UUID_REGEX.test(connectorId)) {
+        return json(422, { error: "validation_error", message: "connector_id invalido" });
+      }
+      payload.connectorId = connectorId;
+    }
+  }
+
+  if (body.awario_alert_id !== undefined) {
+    const awarioAlertId = normalizeString(body.awario_alert_id, 1, 200);
+    if (!awarioAlertId) {
+      return json(422, { error: "validation_error", message: "awario_alert_id invalido" });
+    }
+    payload.awarioAlertId = awarioAlertId;
+  }
+
+  if (body.status !== undefined) {
+    const status = normalizeAwarioStatus(body.status);
+    if (status === null) {
+      return json(422, { error: "validation_error", message: "status debe ser active|paused|archived" });
+    }
+    payload.status = status;
+  }
+
+  if (body.metadata !== undefined) {
+    const metadata = normalizeMetadata(body.metadata);
+    if (metadata === null) {
+      return json(422, { error: "validation_error", message: "metadata debe ser objeto JSON" });
+    }
+    payload.metadata = metadata;
+  }
+
+  if (Object.keys(payload).length === 0) {
+    return json(422, { error: "validation_error", message: "No hay campos para actualizar" });
+  }
+
+  const stores = assertStores();
+  if (stores.error) return stores.error;
+
+  try {
+    const principal = getAuthPrincipal(event);
+    const actorUserId = await stores.appStore.upsertUserFromPrincipal(principal);
+    const updated = await stores.store.updateAwarioAlertBinding(bindingId, payload, actorUserId, getRequestId(event));
+    return json(200, toApiAwarioBinding(updated));
   } catch (error) {
     return mapStoreError(error);
   }

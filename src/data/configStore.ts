@@ -27,6 +27,8 @@ const DEFAULT_CONNECTOR_PROVIDERS = ["newsapi", "gnews", "mediastack", "hootsuit
 const TAXONOMY_KINDS = ["categories", "business_lines", "macro_regions", "campaigns", "strategies"] as const;
 const NOTIFICATION_RECIPIENT_KINDS = ["digest", "incident"] as const;
 
+const isUuid = (value: string): boolean => UUID_REGEX.test(value);
+
 export type ConnectorRunStatus = "queued" | "running" | "completed" | "failed";
 export type ConnectorHealth = "unknown" | "healthy" | "degraded" | "offline";
 export type TaxonomyKind = (typeof TAXONOMY_KINDS)[number];
@@ -1098,7 +1100,7 @@ class ConfigStore {
   }
 
   private getAwarioAccessToken(): string | null {
-    const token = process.env.AWARIO_ACCESS_TOKEN ?? process.env.AWARIO_API_KEY ?? null;
+    const token = env.awarioAccessToken ?? process.env.AWARIO_API_KEY ?? null;
     if (!token) return null;
     const trimmed = token.trim();
     return trimmed.length > 0 ? trimmed : null;
@@ -1269,6 +1271,9 @@ class ConfigStore {
 
     try {
       if (connector?.provider === "awario") {
+        if (!env.awarioCommentsEnabled) {
+          throw new AppStoreError("conflict", "AWARIO_COMMENTS_ENABLED está desactivado");
+        }
         const token = this.getAwarioAccessToken();
         if (!token) {
           throw new AppStoreError("validation", "AWARIO_ACCESS_TOKEN no configurado");
@@ -1443,6 +1448,500 @@ class ConfigStore {
     );
 
     return (response.records ?? []).map(parseConnectorRunRow).filter((item): item is ConnectorSyncRunRecord => item !== null);
+  }
+
+  private async getAwarioConnectorId(transactionId?: string): Promise<string | null> {
+    const response = await this.rds.execute(
+      `
+        SELECT "id"::text
+        FROM "public"."ConnectorConfig"
+        WHERE LOWER("provider") = 'awario'
+        LIMIT 1
+      `,
+      [],
+      { transactionId }
+    );
+    return fieldString(response.records?.[0], 0);
+  }
+
+  private async getAwarioQueryProfileById(id: string, transactionId?: string): Promise<AwarioQueryProfileRecord | null> {
+    const response = await this.rds.execute(
+      `
+        SELECT
+          "id"::text,
+          "name",
+          "objective",
+          "queryText",
+          "sources"::text,
+          "language",
+          "countries"::text,
+          "status",
+          "metadata"::text,
+          "createdByUserId"::text,
+          "updatedByUserId"::text,
+          "createdAt",
+          "updatedAt"
+        FROM "public"."AwarioQueryProfile"
+        WHERE "id" = CAST(:id AS UUID)
+        LIMIT 1
+      `,
+      [sqlUuid("id", id)],
+      { transactionId }
+    );
+    return parseAwarioQueryProfileRow(response.records?.[0]);
+  }
+
+  private async getAwarioAlertBindingById(id: string, transactionId?: string): Promise<AwarioAlertBindingRecord | null> {
+    const response = await this.rds.execute(
+      `
+        SELECT
+          b."id"::text,
+          b."profileId"::text,
+          b."connectorId"::text,
+          b."awarioAlertId",
+          b."status",
+          b."validationStatus",
+          b."lastValidatedAt",
+          b."lastValidationError",
+          b."metadata"::text,
+          b."createdByUserId"::text,
+          b."updatedByUserId"::text,
+          b."createdAt",
+          b."updatedAt",
+          p."name"
+        FROM "public"."AwarioAlertBinding" b
+        JOIN "public"."AwarioQueryProfile" p ON p."id" = b."profileId"
+        WHERE b."id" = CAST(:id AS UUID)
+        LIMIT 1
+      `,
+      [sqlUuid("id", id)],
+      { transactionId }
+    );
+    return parseAwarioAlertBindingRow(response.records?.[0]);
+  }
+
+  async listAwarioQueryProfiles(limit = 200): Promise<AwarioQueryProfileRecord[]> {
+    const safeLimit = Math.min(500, Math.max(1, Math.floor(limit)));
+    const response = await this.rds.execute(
+      `
+        SELECT
+          "id"::text,
+          "name",
+          "objective",
+          "queryText",
+          "sources"::text,
+          "language",
+          "countries"::text,
+          "status",
+          "metadata"::text,
+          "createdByUserId"::text,
+          "updatedByUserId"::text,
+          "createdAt",
+          "updatedAt"
+        FROM "public"."AwarioQueryProfile"
+        ORDER BY "createdAt" DESC, "id" DESC
+        LIMIT :limit
+      `,
+      [sqlLong("limit", safeLimit)]
+    );
+
+    return (response.records ?? []).map(parseAwarioQueryProfileRow).filter((item): item is AwarioQueryProfileRecord => item !== null);
+  }
+
+  async createAwarioQueryProfile(
+    input: AwarioQueryProfileCreateInput,
+    actorUserId: string,
+    requestId?: string
+  ): Promise<AwarioQueryProfileRecord> {
+    const name = normalizeAwarioName(input.name);
+    const queryText = normalizeAwarioQueryText(input.queryText);
+    if (!name || !queryText) {
+      throw new AppStoreError("validation", "name y queryText son requeridos");
+    }
+
+    const status = normalizeAwarioStatusInput(input.status);
+    const objective = input.objective === undefined ? null : input.objective ? input.objective.trim().slice(0, 1000) : null;
+    const language = input.language === undefined ? null : input.language ? input.language.trim().toLowerCase().slice(0, 16) : null;
+    const sources = normalizeStringList(input.sources, 30, 64);
+    const countries = normalizeStringList(input.countries, 80, 8);
+
+    const tx = await this.rds.beginTransaction();
+    try {
+      const id = randomUUID();
+      await this.rds.execute(
+        `
+          INSERT INTO "public"."AwarioQueryProfile"
+            ("id", "name", "objective", "queryText", "sources", "language", "countries", "status", "metadata", "createdByUserId", "updatedByUserId", "createdAt", "updatedAt")
+          VALUES
+            (
+              CAST(:id AS UUID),
+              :name,
+              :objective,
+              :query_text,
+              CAST(:sources AS JSONB),
+              :language,
+              CAST(:countries AS JSONB),
+              :status,
+              CAST(:metadata AS JSONB),
+              CAST(:created_by_user_id AS UUID),
+              CAST(:updated_by_user_id AS UUID),
+              NOW(),
+              NOW()
+            )
+        `,
+        [
+          sqlUuid("id", id),
+          sqlString("name", name),
+          sqlString("objective", objective),
+          sqlString("query_text", queryText),
+          sqlJson("sources", sources),
+          sqlString("language", language),
+          sqlJson("countries", countries),
+          sqlString("status", status),
+          sqlJson("metadata", input.metadata ?? {}),
+          sqlUuid("created_by_user_id", actorUserId),
+          sqlUuid("updated_by_user_id", actorUserId)
+        ],
+        { transactionId: tx }
+      );
+
+      const created = await this.getAwarioQueryProfileById(id, tx);
+      if (!created) throw new Error("Failed to parse created Awario profile");
+
+      await this.appendAudit(
+        {
+          actorUserId,
+          action: "awario_query_profile_created",
+          resourceType: "AwarioQueryProfile",
+          resourceId: created.id,
+          requestId,
+          after: created
+        },
+        tx
+      );
+
+      await this.rds.commitTransaction(tx);
+      return created;
+    } catch (error) {
+      await this.rds.rollbackTransaction(tx).catch(() => undefined);
+      throw error;
+    }
+  }
+
+  async updateAwarioQueryProfile(
+    id: string,
+    input: AwarioQueryProfileUpdateInput,
+    actorUserId: string,
+    requestId?: string
+  ): Promise<AwarioQueryProfileRecord> {
+    const tx = await this.rds.beginTransaction();
+    try {
+      const before = await this.getAwarioQueryProfileById(id, tx);
+      if (!before) {
+        throw new AppStoreError("not_found", "Awario profile not found");
+      }
+
+      const setParts: string[] = ['"updatedAt" = NOW()', '"updatedByUserId" = CAST(:updated_by_user_id AS UUID)'];
+      const params: SqlParameter[] = [sqlUuid("id", id), sqlUuid("updated_by_user_id", actorUserId)];
+
+      if (input.name !== undefined) {
+        const value = normalizeAwarioName(input.name);
+        if (!value) throw new AppStoreError("validation", "name invalido");
+        setParts.push('"name" = :name');
+        params.push(sqlString("name", value));
+      }
+      if (input.objective !== undefined) {
+        const value = input.objective ? input.objective.trim().slice(0, 1000) : null;
+        setParts.push('"objective" = :objective');
+        params.push(sqlString("objective", value));
+      }
+      if (input.queryText !== undefined) {
+        const value = normalizeAwarioQueryText(input.queryText);
+        if (!value) throw new AppStoreError("validation", "queryText invalido");
+        setParts.push('"queryText" = :query_text');
+        params.push(sqlString("query_text", value));
+      }
+      if (input.sources !== undefined) {
+        setParts.push('"sources" = CAST(:sources AS JSONB)');
+        params.push(sqlJson("sources", normalizeStringList(input.sources, 30, 64)));
+      }
+      if (input.language !== undefined) {
+        const value = input.language ? input.language.trim().toLowerCase().slice(0, 16) : null;
+        setParts.push('"language" = :language');
+        params.push(sqlString("language", value));
+      }
+      if (input.countries !== undefined) {
+        setParts.push('"countries" = CAST(:countries AS JSONB)');
+        params.push(sqlJson("countries", normalizeStringList(input.countries, 80, 8)));
+      }
+      if (input.status !== undefined) {
+        setParts.push('"status" = :status');
+        params.push(sqlString("status", normalizeAwarioStatusInput(input.status)));
+      }
+      if (input.metadata !== undefined) {
+        setParts.push('"metadata" = CAST(:metadata AS JSONB)');
+        params.push(sqlJson("metadata", input.metadata));
+      }
+
+      if (setParts.length === 2) {
+        throw new AppStoreError("conflict", "No changes requested for Awario profile");
+      }
+
+      await this.rds.execute(
+        `
+          UPDATE "public"."AwarioQueryProfile"
+          SET ${setParts.join(", ")}
+          WHERE "id" = CAST(:id AS UUID)
+        `,
+        params,
+        { transactionId: tx }
+      );
+
+      const after = await this.getAwarioQueryProfileById(id, tx);
+      if (!after) throw new Error("Failed to parse updated Awario profile");
+
+      await this.appendAudit(
+        {
+          actorUserId,
+          action: "awario_query_profile_updated",
+          resourceType: "AwarioQueryProfile",
+          resourceId: after.id,
+          requestId,
+          before,
+          after
+        },
+        tx
+      );
+
+      await this.rds.commitTransaction(tx);
+      return after;
+    } catch (error) {
+      await this.rds.rollbackTransaction(tx).catch(() => undefined);
+      throw error;
+    }
+  }
+
+  async listAwarioAlertBindings(limit = 200): Promise<AwarioAlertBindingRecord[]> {
+    const safeLimit = Math.min(500, Math.max(1, Math.floor(limit)));
+    const response = await this.rds.execute(
+      `
+        SELECT
+          b."id"::text,
+          b."profileId"::text,
+          b."connectorId"::text,
+          b."awarioAlertId",
+          b."status",
+          b."validationStatus",
+          b."lastValidatedAt",
+          b."lastValidationError",
+          b."metadata"::text,
+          b."createdByUserId"::text,
+          b."updatedByUserId"::text,
+          b."createdAt",
+          b."updatedAt",
+          p."name"
+        FROM "public"."AwarioAlertBinding" b
+        JOIN "public"."AwarioQueryProfile" p ON p."id" = b."profileId"
+        ORDER BY b."createdAt" DESC, b."id" DESC
+        LIMIT :limit
+      `,
+      [sqlLong("limit", safeLimit)]
+    );
+
+    return (response.records ?? []).map(parseAwarioAlertBindingRow).filter((item): item is AwarioAlertBindingRecord => item !== null);
+  }
+
+  async createAwarioAlertBinding(
+    input: AwarioAlertBindingCreateInput,
+    actorUserId: string,
+    requestId?: string
+  ): Promise<AwarioAlertBindingRecord> {
+    if (!isUuid(input.profileId)) {
+      throw new AppStoreError("validation", "profileId invalido");
+    }
+    const awarioAlertId = input.awarioAlertId.trim();
+    if (!awarioAlertId) {
+      throw new AppStoreError("validation", "awarioAlertId es requerido");
+    }
+
+    const tx = await this.rds.beginTransaction();
+    try {
+      const profile = await this.getAwarioQueryProfileById(input.profileId, tx);
+      if (!profile) {
+        throw new AppStoreError("not_found", "Awario profile not found");
+      }
+
+      const connectorId = input.connectorId === undefined ? await this.getAwarioConnectorId(tx) : input.connectorId;
+      if (connectorId !== null && connectorId !== undefined && !isUuid(connectorId)) {
+        throw new AppStoreError("validation", "connectorId invalido");
+      }
+
+      const validation = await this.validateAwarioAlertBinding(awarioAlertId);
+      const id = randomUUID();
+      await this.rds.execute(
+        `
+          INSERT INTO "public"."AwarioAlertBinding"
+            ("id", "profileId", "connectorId", "awarioAlertId", "status", "validationStatus", "lastValidatedAt", "lastValidationError", "metadata", "createdByUserId", "updatedByUserId", "createdAt", "updatedAt")
+          VALUES
+            (
+              CAST(:id AS UUID),
+              CAST(:profile_id AS UUID),
+              CAST(:connector_id AS UUID),
+              :awario_alert_id,
+              :status,
+              :validation_status,
+              :last_validated_at,
+              :last_validation_error,
+              CAST(:metadata AS JSONB),
+              CAST(:created_by_user_id AS UUID),
+              CAST(:updated_by_user_id AS UUID),
+              NOW(),
+              NOW()
+            )
+        `,
+        [
+          sqlUuid("id", id),
+          sqlUuid("profile_id", input.profileId),
+          sqlUuid("connector_id", connectorId ?? null),
+          sqlString("awario_alert_id", awarioAlertId),
+          sqlString("status", normalizeAwarioStatusInput(input.status)),
+          sqlString("validation_status", validation.validationStatus),
+          sqlTimestamp("last_validated_at", validation.lastValidatedAt),
+          sqlString("last_validation_error", validation.lastValidationError),
+          sqlJson("metadata", input.metadata ?? {}),
+          sqlUuid("created_by_user_id", actorUserId),
+          sqlUuid("updated_by_user_id", actorUserId)
+        ],
+        { transactionId: tx }
+      );
+
+      const created = await this.getAwarioAlertBindingById(id, tx);
+      if (!created) throw new Error("Failed to parse created Awario binding");
+
+      await this.appendAudit(
+        {
+          actorUserId,
+          action: "awario_alert_binding_created",
+          resourceType: "AwarioAlertBinding",
+          resourceId: created.id,
+          requestId,
+          after: created
+        },
+        tx
+      );
+
+      await this.rds.commitTransaction(tx);
+      return created;
+    } catch (error) {
+      await this.rds.rollbackTransaction(tx).catch(() => undefined);
+      if (isUniqueViolation(error)) {
+        throw new AppStoreError("conflict", "Ya existe binding para ese profileId + alertId");
+      }
+      throw error;
+    }
+  }
+
+  async updateAwarioAlertBinding(
+    id: string,
+    input: AwarioAlertBindingUpdateInput,
+    actorUserId: string,
+    requestId?: string
+  ): Promise<AwarioAlertBindingRecord> {
+    const tx = await this.rds.beginTransaction();
+    try {
+      const before = await this.getAwarioAlertBindingById(id, tx);
+      if (!before) {
+        throw new AppStoreError("not_found", "Awario binding not found");
+      }
+
+      const setParts: string[] = ['"updatedAt" = NOW()', '"updatedByUserId" = CAST(:updated_by_user_id AS UUID)'];
+      const params: SqlParameter[] = [sqlUuid("id", id), sqlUuid("updated_by_user_id", actorUserId)];
+
+      let alertIdForValidation: string | null = null;
+
+      if (input.profileId !== undefined) {
+        if (!isUuid(input.profileId)) throw new AppStoreError("validation", "profileId invalido");
+        const profile = await this.getAwarioQueryProfileById(input.profileId, tx);
+        if (!profile) throw new AppStoreError("not_found", "Awario profile not found");
+        setParts.push('"profileId" = CAST(:profile_id AS UUID)');
+        params.push(sqlUuid("profile_id", input.profileId));
+      }
+
+      if (input.connectorId !== undefined) {
+        if (input.connectorId !== null && !isUuid(input.connectorId)) {
+          throw new AppStoreError("validation", "connectorId invalido");
+        }
+        setParts.push('"connectorId" = CAST(:connector_id AS UUID)');
+        params.push(sqlUuid("connector_id", input.connectorId ?? null));
+      }
+
+      if (input.awarioAlertId !== undefined) {
+        const awarioAlertId = input.awarioAlertId.trim();
+        if (!awarioAlertId) throw new AppStoreError("validation", "awarioAlertId invalido");
+        setParts.push('"awarioAlertId" = :awario_alert_id');
+        params.push(sqlString("awario_alert_id", awarioAlertId));
+        alertIdForValidation = awarioAlertId;
+      }
+
+      if (input.status !== undefined) {
+        setParts.push('"status" = :status');
+        params.push(sqlString("status", normalizeAwarioStatusInput(input.status)));
+      }
+
+      if (input.metadata !== undefined) {
+        setParts.push('"metadata" = CAST(:metadata AS JSONB)');
+        params.push(sqlJson("metadata", input.metadata));
+      }
+
+      if (alertIdForValidation) {
+        const validation = await this.validateAwarioAlertBinding(alertIdForValidation);
+        setParts.push('"validationStatus" = :validation_status');
+        setParts.push('"lastValidatedAt" = :last_validated_at');
+        setParts.push('"lastValidationError" = :last_validation_error');
+        params.push(sqlString("validation_status", validation.validationStatus));
+        params.push(sqlTimestamp("last_validated_at", validation.lastValidatedAt));
+        params.push(sqlString("last_validation_error", validation.lastValidationError));
+      }
+
+      if (setParts.length === 2) {
+        throw new AppStoreError("conflict", "No changes requested for Awario binding");
+      }
+
+      await this.rds.execute(
+        `
+          UPDATE "public"."AwarioAlertBinding"
+          SET ${setParts.join(", ")}
+          WHERE "id" = CAST(:id AS UUID)
+        `,
+        params,
+        { transactionId: tx }
+      );
+
+      const after = await this.getAwarioAlertBindingById(id, tx);
+      if (!after) throw new Error("Failed to parse updated Awario binding");
+
+      await this.appendAudit(
+        {
+          actorUserId,
+          action: "awario_alert_binding_updated",
+          resourceType: "AwarioAlertBinding",
+          resourceId: after.id,
+          requestId,
+          before,
+          after
+        },
+        tx
+      );
+
+      await this.rds.commitTransaction(tx);
+      return after;
+    } catch (error) {
+      await this.rds.rollbackTransaction(tx).catch(() => undefined);
+      if (isUniqueViolation(error)) {
+        throw new AppStoreError("conflict", "Ya existe binding para ese profileId + alertId");
+      }
+      throw error;
+    }
   }
 
   async listSourceWeights(filters: SourceWeightListFilters, limit = 500): Promise<SourceWeightRecord[]> {

@@ -516,6 +516,76 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '422':
           $ref: '#/components/responses/ValidationError'
+  /v1/monitor/social/posts/{post_id}/comments:
+    get:
+      tags: [Monitor]
+      summary: Listado paginado de comentarios Awario vinculados a un post
+      parameters:
+        - name: post_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+        - name: sentiment
+          in: query
+          schema:
+            $ref: '#/components/schemas/SocialSentiment'
+        - name: is_spam
+          in: query
+          schema:
+            type: boolean
+        - name: related_to_post_text
+          in: query
+          schema:
+            type: boolean
+      responses:
+        '200':
+          description: Comentarios Awario del post
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MonitorSocialPostCommentsResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+  /v1/monitor/social/comments/{comment_id}:
+    patch:
+      tags: [Monitor]
+      summary: Override manual de comentario Awario (spam/relacion/sentimiento)
+      parameters:
+        - name: comment_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchMonitorSocialCommentRequest'
+      responses:
+        '200':
+          description: Comentario actualizado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MonitorSocialCommentItem'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationError'
   /v1/monitor/social/risk:
     get:
       tags: [Monitor]
@@ -1944,6 +2014,162 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/OwnedAccount'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+  /v1/config/awario/profiles:
+    get:
+      tags: [Config]
+      summary: Listar perfiles internos de query de Awario
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 500
+            default: 200
+      responses:
+        '200':
+          description: Lista de perfiles
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AwarioQueryProfileListResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+    post:
+      tags: [Config]
+      summary: Crear perfil interno de query de Awario
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateAwarioQueryProfileRequest'
+      responses:
+        '201':
+          description: Perfil creado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AwarioQueryProfile'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+  /v1/config/awario/profiles/{id}:
+    patch:
+      tags: [Config]
+      summary: Actualizar perfil interno de query de Awario
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateAwarioQueryProfileRequest'
+      responses:
+        '200':
+          description: Perfil actualizado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AwarioQueryProfile'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+  /v1/config/awario/bindings:
+    get:
+      tags: [Config]
+      summary: Listar bindings profile -> alert_id de Awario
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 500
+            default: 200
+      responses:
+        '200':
+          description: Lista de bindings
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AwarioAlertBindingListResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+    post:
+      tags: [Config]
+      summary: Crear binding profile -> alert_id de Awario
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateAwarioAlertBindingRequest'
+      responses:
+        '201':
+          description: Binding creado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AwarioAlertBinding'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+  /v1/config/awario/bindings/{id}:
+    patch:
+      tags: [Config]
+      summary: Actualizar binding profile -> alert_id de Awario
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateAwarioAlertBindingRequest'
+      responses:
+        '200':
+          description: Binding actualizado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AwarioAlertBinding'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
@@ -4172,6 +4398,7 @@ components:
           clicks,
           likes,
           comments,
+          awario_comments_count,
           shares,
           views,
           source_score,
@@ -4230,6 +4457,8 @@ components:
           type: number
         comments:
           type: number
+        awario_comments_count:
+          type: integer
         shares:
           type: number
         views:
@@ -4263,6 +4492,108 @@ components:
             $ref: '#/components/schemas/MonitorSocialPostItem'
         page_info:
           $ref: '#/components/schemas/PageInfo'
+    MonitorSocialCommentItem:
+      type: object
+      required:
+        [
+          id,
+          social_post_metric_id,
+          awario_mention_id,
+          awario_alert_id,
+          channel,
+          parent_external_post_id,
+          sentiment,
+          sentiment_source,
+          is_spam,
+          related_to_post_text,
+          needs_review,
+          confidence,
+          raw_payload,
+          created_at,
+          updated_at
+        ]
+      properties:
+        id:
+          type: string
+          format: uuid
+        social_post_metric_id:
+          type: string
+          format: uuid
+        awario_mention_id:
+          type: string
+        awario_alert_id:
+          type: string
+        channel:
+          $ref: '#/components/schemas/SocialChannel'
+        parent_external_post_id:
+          type: string
+        external_comment_id:
+          type: string
+          nullable: true
+        external_reply_comment_id:
+          type: string
+          nullable: true
+        comment_url:
+          type: string
+          nullable: true
+        author_name:
+          type: string
+          nullable: true
+        author_profile_url:
+          type: string
+          nullable: true
+        published_at:
+          type: string
+          format: date-time
+          nullable: true
+        text:
+          type: string
+          nullable: true
+        sentiment:
+          $ref: '#/components/schemas/SocialSentiment'
+        sentiment_source:
+          type: string
+          enum: [awario, model, manual]
+        is_spam:
+          type: boolean
+        related_to_post_text:
+          type: boolean
+        needs_review:
+          type: boolean
+        confidence:
+          type: number
+          nullable: true
+        raw_payload:
+          type: object
+          additionalProperties: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    MonitorSocialPostCommentsResponse:
+      type: object
+      required: [items, page_info]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/MonitorSocialCommentItem'
+        page_info:
+          $ref: '#/components/schemas/PageInfo'
+    PatchMonitorSocialCommentRequest:
+      type: object
+      properties:
+        is_spam:
+          type: boolean
+        related_to_post_text:
+          type: boolean
+        sentiment:
+          $ref: '#/components/schemas/SocialSentiment'
+        reason:
+          type: string
+          maxLength: 600
     MonitorSocialHeatmapPoint:
       type: object
       required: [month, weekday, value, posts]
@@ -5101,6 +5432,216 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/ConnectorSyncRun'
+    AwarioStatus:
+      type: string
+      enum: [active, paused, archived]
+    AwarioValidationStatus:
+      type: string
+      enum: [valid, invalid, unknown]
+    AwarioQueryProfile:
+      type: object
+      required: [id, name, query_text, sources, countries, status, metadata, created_at, updated_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        objective:
+          type: string
+          nullable: true
+        query_text:
+          type: string
+        sources:
+          type: array
+          items:
+            type: string
+        language:
+          type: string
+          nullable: true
+        countries:
+          type: array
+          items:
+            type: string
+        status:
+          $ref: '#/components/schemas/AwarioStatus'
+        metadata:
+          type: object
+          additionalProperties: true
+        created_by_user_id:
+          type: string
+          format: uuid
+          nullable: true
+        updated_by_user_id:
+          type: string
+          format: uuid
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    AwarioQueryProfileListResponse:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/AwarioQueryProfile'
+    CreateAwarioQueryProfileRequest:
+      type: object
+      required: [name, query_text]
+      properties:
+        name:
+          type: string
+          minLength: 2
+        objective:
+          type: string
+          maxLength: 1000
+          nullable: true
+        query_text:
+          type: string
+          minLength: 2
+        sources:
+          type: array
+          items:
+            type: string
+        language:
+          type: string
+          nullable: true
+        countries:
+          type: array
+          items:
+            type: string
+        status:
+          $ref: '#/components/schemas/AwarioStatus'
+        metadata:
+          type: object
+          additionalProperties: true
+    UpdateAwarioQueryProfileRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 2
+        objective:
+          type: string
+          maxLength: 1000
+          nullable: true
+        query_text:
+          type: string
+          minLength: 2
+        sources:
+          type: array
+          items:
+            type: string
+        language:
+          type: string
+          nullable: true
+        countries:
+          type: array
+          items:
+            type: string
+        status:
+          $ref: '#/components/schemas/AwarioStatus'
+        metadata:
+          type: object
+          additionalProperties: true
+    AwarioAlertBinding:
+      type: object
+      required:
+        [id, profile_id, awario_alert_id, status, validation_status, metadata, created_at, updated_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        profile_id:
+          type: string
+          format: uuid
+        profile_name:
+          type: string
+          nullable: true
+        connector_id:
+          type: string
+          format: uuid
+          nullable: true
+        awario_alert_id:
+          type: string
+        status:
+          $ref: '#/components/schemas/AwarioStatus'
+        validation_status:
+          $ref: '#/components/schemas/AwarioValidationStatus'
+        last_validated_at:
+          type: string
+          format: date-time
+          nullable: true
+        last_validation_error:
+          type: string
+          nullable: true
+        metadata:
+          type: object
+          additionalProperties: true
+        created_by_user_id:
+          type: string
+          format: uuid
+          nullable: true
+        updated_by_user_id:
+          type: string
+          format: uuid
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    AwarioAlertBindingListResponse:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/AwarioAlertBinding'
+    CreateAwarioAlertBindingRequest:
+      type: object
+      required: [profile_id, awario_alert_id]
+      properties:
+        profile_id:
+          type: string
+          format: uuid
+        connector_id:
+          type: string
+          format: uuid
+          nullable: true
+        awario_alert_id:
+          type: string
+          minLength: 1
+        status:
+          $ref: '#/components/schemas/AwarioStatus'
+        metadata:
+          type: object
+          additionalProperties: true
+    UpdateAwarioAlertBindingRequest:
+      type: object
+      properties:
+        profile_id:
+          type: string
+          format: uuid
+        connector_id:
+          type: string
+          format: uuid
+          nullable: true
+        awario_alert_id:
+          type: string
+          minLength: 1
+        status:
+          $ref: '#/components/schemas/AwarioStatus'
+        metadata:
+          type: object
+          additionalProperties: true
     OwnedAccount:
       type: object
       required: [id, plataforma, handle, nombre_cuenta, idioma, estado, tags_campana, created_at, updated_at]
