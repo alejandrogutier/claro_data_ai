@@ -48,8 +48,10 @@ import {
   getMonitorSocialScatter,
   getMonitorSocialSettings,
   listMonitorSocialPosts,
+  listMonitorSocialPostComments,
   listMonitorSocialRuns,
   postMonitorSocialHashtagBackfill,
+  patchMonitorSocialComment,
   patchMonitorSocialErTargets,
   patchMonitorSocialSettings
 } from "../routes/v1/monitorSocial";
@@ -115,6 +117,8 @@ const roleRules: RoleRule[] = [
   { pattern: /^GET \/v1\/monitor\/social\/overview$/, requiredRole: "Viewer" },
   { pattern: /^GET \/v1\/monitor\/social\/accounts$/, requiredRole: "Viewer" },
   { pattern: /^GET \/v1\/monitor\/social\/posts$/, requiredRole: "Viewer" },
+  { pattern: /^GET \/v1\/monitor\/social\/posts\/[^/]+\/comments$/, requiredRole: "Viewer" },
+  { pattern: /^PATCH \/v1\/monitor\/social\/comments\/[^/]+$/, requiredRole: "Analyst" },
   { pattern: /^GET \/v1\/monitor\/social\/risk$/, requiredRole: "Viewer" },
   { pattern: /^GET \/v1\/monitor\/social\/charts\/heatmap$/, requiredRole: "Viewer" },
   { pattern: /^GET \/v1\/monitor\/social\/charts\/scatter$/, requiredRole: "Viewer" },
@@ -237,6 +241,8 @@ export const main = async (event: APIGatewayProxyEventV2) => {
   if (key === "GET /v1/monitor/social/overview") return getMonitorSocialOverview(event);
   if (key === "GET /v1/monitor/social/accounts") return getMonitorSocialAccounts(event);
   if (key === "GET /v1/monitor/social/posts") return listMonitorSocialPosts(event);
+  if (key.match(/^GET \/v1\/monitor\/social\/posts\/[^/]+\/comments$/)) return listMonitorSocialPostComments(event);
+  if (key.match(/^PATCH \/v1\/monitor\/social\/comments\/[^/]+$/)) return patchMonitorSocialComment(event);
   if (key === "GET /v1/monitor/social/risk") return getMonitorSocialRisk(event);
   if (key === "GET /v1/monitor/social/charts/heatmap") return getMonitorSocialHeatmap(event);
   if (key === "GET /v1/monitor/social/charts/scatter") return getMonitorSocialScatter(event);

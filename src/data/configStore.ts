@@ -1,6 +1,10 @@
 import { randomUUID } from "crypto";
 import { AppStoreError } from "./appStore";
 import type { UserRole } from "../core/auth";
+import { env } from "../config/env";
+import { AwarioClient } from "../connectors/awario/client";
+import { runAwarioCommentsSync } from "../connectors/awario/sync";
+import { createSocialStore } from "./socialStore";
 import {
   RdsDataClient,
   fieldBoolean,
@@ -62,6 +66,77 @@ export type ConnectorSyncRunRecord = {
 export type ConnectorPatchInput = {
   enabled?: boolean;
   frequencyMinutes?: number;
+};
+
+export type AwarioQueryProfileRecord = {
+  id: string;
+  name: string;
+  objective: string | null;
+  queryText: string;
+  sources: string[];
+  language: string | null;
+  countries: string[];
+  status: "active" | "paused" | "archived";
+  metadata: Record<string, unknown>;
+  createdByUserId: string | null;
+  updatedByUserId: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
+export type AwarioQueryProfileCreateInput = {
+  name: string;
+  objective?: string | null;
+  queryText: string;
+  sources?: string[];
+  language?: string | null;
+  countries?: string[];
+  status?: "active" | "paused" | "archived";
+  metadata?: Record<string, unknown>;
+};
+
+export type AwarioQueryProfileUpdateInput = {
+  name?: string;
+  objective?: string | null;
+  queryText?: string;
+  sources?: string[];
+  language?: string | null;
+  countries?: string[];
+  status?: "active" | "paused" | "archived";
+  metadata?: Record<string, unknown>;
+};
+
+export type AwarioAlertBindingRecord = {
+  id: string;
+  profileId: string;
+  connectorId: string | null;
+  awarioAlertId: string;
+  status: "active" | "paused" | "archived";
+  validationStatus: "valid" | "invalid" | "unknown";
+  lastValidatedAt: Date | null;
+  lastValidationError: string | null;
+  metadata: Record<string, unknown>;
+  createdByUserId: string | null;
+  updatedByUserId: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+  profileName: string | null;
+};
+
+export type AwarioAlertBindingCreateInput = {
+  profileId: string;
+  connectorId?: string | null;
+  awarioAlertId: string;
+  status?: "active" | "paused" | "archived";
+  metadata?: Record<string, unknown>;
+};
+
+export type AwarioAlertBindingUpdateInput = {
+  profileId?: string;
+  connectorId?: string | null;
+  awarioAlertId?: string;
+  status?: "active" | "paused" | "archived";
+  metadata?: Record<string, unknown>;
 };
 
 export type SourceWeightRecord = {
@@ -374,6 +449,86 @@ const parseConnectorRunRow = (row: SqlRow | undefined): ConnectorSyncRunRecord |
   };
 };
 
+const normalizeAwarioProfileStatus = (value: string | null): "active" | "paused" | "archived" => {
+  if (value === "paused" || value === "archived") return value;
+  return "active";
+};
+
+const normalizeAwarioValidationStatus = (value: string | null): "valid" | "invalid" | "unknown" => {
+  if (value === "valid" || value === "invalid") return value;
+  return "unknown";
+};
+
+const parseAwarioQueryProfileRow = (row: SqlRow | undefined): AwarioQueryProfileRecord | null => {
+  const id = fieldString(row, 0);
+  const name = fieldString(row, 1);
+  const objective = fieldString(row, 2);
+  const queryText = fieldString(row, 3);
+  const sources = parseStringArray(fieldString(row, 4));
+  const language = fieldString(row, 5);
+  const countries = parseStringArray(fieldString(row, 6));
+  const status = normalizeAwarioProfileStatus(fieldString(row, 7));
+  const metadata = parseJsonObject(fieldString(row, 8));
+  const createdByUserId = fieldString(row, 9);
+  const updatedByUserId = fieldString(row, 10);
+  const createdAt = fieldDate(row, 11);
+  const updatedAt = fieldDate(row, 12);
+
+  if (!id || !name || !queryText || !createdAt || !updatedAt) return null;
+
+  return {
+    id,
+    name,
+    objective,
+    queryText,
+    sources,
+    language,
+    countries,
+    status,
+    metadata,
+    createdByUserId,
+    updatedByUserId,
+    createdAt,
+    updatedAt
+  };
+};
+
+const parseAwarioAlertBindingRow = (row: SqlRow | undefined): AwarioAlertBindingRecord | null => {
+  const id = fieldString(row, 0);
+  const profileId = fieldString(row, 1);
+  const connectorId = fieldString(row, 2);
+  const awarioAlertId = fieldString(row, 3);
+  const status = normalizeAwarioProfileStatus(fieldString(row, 4));
+  const validationStatus = normalizeAwarioValidationStatus(fieldString(row, 5));
+  const lastValidatedAt = fieldDate(row, 6);
+  const lastValidationError = fieldString(row, 7);
+  const metadata = parseJsonObject(fieldString(row, 8));
+  const createdByUserId = fieldString(row, 9);
+  const updatedByUserId = fieldString(row, 10);
+  const createdAt = fieldDate(row, 11);
+  const updatedAt = fieldDate(row, 12);
+  const profileName = fieldString(row, 13);
+
+  if (!id || !profileId || !awarioAlertId || !createdAt || !updatedAt) return null;
+
+  return {
+    id,
+    profileId,
+    connectorId,
+    awarioAlertId,
+    status,
+    validationStatus,
+    lastValidatedAt,
+    lastValidationError,
+    metadata,
+    createdByUserId,
+    updatedByUserId,
+    createdAt,
+    updatedAt,
+    profileName
+  };
+};
+
 const parseSourceWeightRow = (row: SqlRow | undefined): SourceWeightRecord | null => {
   const id = fieldString(row, 0);
   const provider = fieldString(row, 1);
@@ -405,6 +560,38 @@ const parseSourceWeightRow = (row: SqlRow | undefined): SourceWeightRecord | nul
 };
 
 const normalizeProvider = (value: string): string => value.trim().toLowerCase();
+
+const normalizeAwarioStatusInput = (value: string | undefined | null): "active" | "paused" | "archived" => {
+  if (!value) return "active";
+  const normalized = value.trim().toLowerCase();
+  if (normalized === "paused") return "paused";
+  if (normalized === "archived") return "archived";
+  return "active";
+};
+
+const normalizeAwarioName = (value: string): string | null => {
+  const normalized = value.trim();
+  if (!normalized) return null;
+  return normalized.slice(0, 180);
+};
+
+const normalizeAwarioQueryText = (value: string): string | null => {
+  const normalized = value.trim();
+  if (!normalized) return null;
+  return normalized.slice(0, 4000);
+};
+
+const normalizeStringList = (value: string[] | undefined, maxItems: number, maxItemLength: number): string[] => {
+  if (!value) return [];
+  return Array.from(
+    new Set(
+      value
+        .map((item) => item.trim().toLowerCase())
+        .filter((item) => item.length > 0)
+        .map((item) => item.slice(0, maxItemLength))
+    )
+  ).slice(0, maxItems);
+};
 
 const normalizeSourceName = (value: string | null | undefined): string | null => {
   if (value === undefined || value === null) return null;
@@ -910,8 +1097,99 @@ class ConfigStore {
     }
   }
 
+  private getAwarioAccessToken(): string | null {
+    const token = process.env.AWARIO_ACCESS_TOKEN ?? process.env.AWARIO_API_KEY ?? null;
+    if (!token) return null;
+    const trimmed = token.trim();
+    return trimmed.length > 0 ? trimmed : null;
+  }
+
+  private async listActiveAwarioBindingsForSync(connectorId: string): Promise<Array<{ id: string; profileId: string | null; awarioAlertId: string; status: string }>> {
+    const response = await this.rds.execute(
+      `
+        SELECT
+          b."id"::text,
+          b."profileId"::text,
+          b."awarioAlertId",
+          b."status"
+        FROM "public"."AwarioAlertBinding" b
+        WHERE
+          LOWER(b."status") = 'active'
+          AND (
+            b."connectorId" IS NULL
+            OR b."connectorId" = CAST(:connector_id AS UUID)
+          )
+        ORDER BY b."createdAt" ASC, b."id" ASC
+      `,
+      [sqlUuid("connector_id", connectorId)]
+    );
+
+    return (response.records ?? [])
+      .map((row) => ({
+        id: fieldString(row, 0),
+        profileId: fieldString(row, 1),
+        awarioAlertId: fieldString(row, 2),
+        status: (fieldString(row, 3) ?? "active").toLowerCase()
+      }))
+      .filter(
+        (row): row is { id: string; profileId: string | null; awarioAlertId: string; status: string } =>
+          Boolean(row.id && row.awarioAlertId)
+      );
+  }
+
+  private async validateAwarioAlertBinding(
+    alertId: string
+  ): Promise<{ validationStatus: "valid" | "invalid" | "unknown"; lastValidationError: string | null; lastValidatedAt: Date | null }> {
+    const token = this.getAwarioAccessToken();
+    if (!token) {
+      return {
+        validationStatus: "unknown",
+        lastValidationError: "AWARIO_ACCESS_TOKEN no configurado",
+        lastValidatedAt: null
+      };
+    }
+
+    try {
+      const client = new AwarioClient(token, {
+        baseUrl: process.env.AWARIO_API_BASE_URL,
+        throttleMs: env.awarioSyncThrottleMs,
+        maxRetries: 4
+      });
+      const alerts = await client.listAlerts();
+      const match = alerts.find((item) => item.id === alertId);
+      if (!match) {
+        return {
+          validationStatus: "invalid",
+          lastValidationError: `alert_id ${alertId} no encontrado en Awario`,
+          lastValidatedAt: new Date()
+        };
+      }
+      if (!match.isActive) {
+        return {
+          validationStatus: "invalid",
+          lastValidationError: `alert_id ${alertId} existe pero está inactivo`,
+          lastValidatedAt: new Date()
+        };
+      }
+      return {
+        validationStatus: "valid",
+        lastValidationError: null,
+        lastValidatedAt: new Date()
+      };
+    } catch (error) {
+      return {
+        validationStatus: "unknown",
+        lastValidationError: (error as Error).message.slice(0, 500),
+        lastValidatedAt: new Date()
+      };
+    }
+  }
+
   async triggerConnectorSync(connectorId: string, actorUserId: string, requestId?: string): Promise<ConnectorSyncRunRecord> {
-    const tx = await this.rds.beginTransaction();
+    const setupTx = await this.rds.beginTransaction();
+    let connector: ConnectorRecord | null = null;
+    let runId = "";
+    const startedAt = new Date();
 
     try {
       const connectorRes = await this.rds.execute(
@@ -933,68 +1211,32 @@ class ConfigStore {
           LIMIT 1
         `,
         [sqlUuid("connector_id", connectorId)],
-        { transactionId: tx }
+        { transactionId: setupTx }
       );
 
-      const connector = parseConnectorRow(connectorRes.records?.[0]);
+      connector = parseConnectorRow(connectorRes.records?.[0]);
       if (!connector) {
         throw new AppStoreError("not_found", "Connector not found");
       }
+      if (!connector.enabled) {
+        throw new AppStoreError("conflict", "Connector is disabled");
+      }
 
-      const runId = randomUUID();
-      const runResponse = await this.rds.execute(
+      runId = randomUUID();
+      await this.rds.execute(
         `
           INSERT INTO "public"."ConnectorSyncRun"
             ("id", "connectorId", "status", "startedAt", "finishedAt", "metrics", "errorMessage", "triggeredByUserId", "createdAt")
           VALUES
-            (CAST(:id AS UUID), CAST(:connector_id AS UUID), CAST('completed' AS "public"."RunStatus"), NOW(), NOW(), CAST(:metrics AS JSONB), NULL, CAST(:triggered_by_user_id AS UUID), NOW())
-          RETURNING
-            "id"::text,
-            "connectorId"::text,
-            "status"::text,
-            "startedAt",
-            "finishedAt",
-            "metrics"::text,
-            "errorMessage",
-            "triggeredByUserId"::text,
-            "createdAt"
+            (CAST(:id AS UUID), CAST(:connector_id AS UUID), CAST('running' AS "public"."RunStatus"), NOW(), NULL, CAST(:metrics AS JSONB), NULL, CAST(:triggered_by_user_id AS UUID), NOW())
         `,
         [
           sqlUuid("id", runId),
           sqlUuid("connector_id", connectorId),
-          sqlJson("metrics", {
-            mode: "manual",
-            fetched: 0,
-            persisted: 0,
-            skipped: 0
-          }),
+          sqlJson("metrics", { mode: "manual", phase: "running" }),
           sqlUuid("triggered_by_user_id", actorUserId)
         ],
-        { transactionId: tx }
-      );
-
-      const run = parseConnectorRunRow(runResponse.records?.[0]);
-      if (!run) {
-        throw new Error("Failed to parse connector sync run");
-      }
-
-      await this.rds.execute(
-        `
-          UPDATE "public"."ConnectorConfig"
-          SET
-            "healthStatus" = :health_status,
-            "lastSyncAt" = NOW(),
-            "lastError" = NULL,
-            "latencyP95Ms" = COALESCE("latencyP95Ms", :latency_ms),
-            "updatedAt" = NOW()
-          WHERE "id" = CAST(:connector_id AS UUID)
-        `,
-        [
-          sqlString("health_status", "healthy"),
-          sqlLong("latency_ms", 120),
-          sqlUuid("connector_id", connectorId)
-        ],
-        { transactionId: tx }
+        { transactionId: setupTx }
       );
 
       await this.appendAudit(
@@ -1009,17 +1251,158 @@ class ConfigStore {
             health_status: connector.healthStatus
           },
           after: {
-            sync_run_id: run.id,
-            status: run.status
+            sync_run_id: runId,
+            status: "running"
           }
         },
-        tx
+        setupTx
       );
 
-      await this.rds.commitTransaction(tx);
+      await this.rds.commitTransaction(setupTx);
+    } catch (error) {
+      await this.rds.rollbackTransaction(setupTx).catch(() => undefined);
+      throw error;
+    }
+
+    const startedMs = Date.now();
+    let resultMetrics: Record<string, unknown> = { mode: "manual" };
+    let errorMessage: string | null = null;
+
+    try {
+      if (connector?.provider === "awario") {
+        const token = this.getAwarioAccessToken();
+        if (!token) {
+          throw new AppStoreError("validation", "AWARIO_ACCESS_TOKEN no configurado");
+        }
+
+        const socialStore = createSocialStore();
+        if (!socialStore) {
+          throw new AppStoreError("validation", "Social store no disponible");
+        }
+
+        const bindings = await this.listActiveAwarioBindingsForSync(connectorId);
+        const client = new AwarioClient(token, {
+          baseUrl: process.env.AWARIO_API_BASE_URL,
+          throttleMs: env.awarioSyncThrottleMs,
+          maxRetries: 4
+        });
+
+        const syncResult = await runAwarioCommentsSync({
+          client,
+          socialStore,
+          bindings,
+          windowStart: new Date(Date.now() - env.awarioSyncWindowDays * 24 * 60 * 60 * 1000),
+          windowEnd: new Date(),
+          maxPagesPerAlert: env.awarioSyncMaxPagesPerAlert,
+          pageLimit: env.awarioSyncPageLimit,
+          reviewThreshold: env.awarioCommentsReviewThreshold
+        });
+
+        resultMetrics = {
+          mode: "manual",
+          provider: "awario",
+          bindings_active: bindings.length,
+          ...syncResult.metrics
+        };
+      } else {
+        resultMetrics = {
+          mode: "manual",
+          provider: connector?.provider ?? "unknown",
+          fetched: 0,
+          persisted: 0,
+          skipped_unlinked: 0,
+          errors: 0
+        };
+      }
+    } catch (error) {
+      errorMessage = (error as Error).message.slice(0, 1000);
+      resultMetrics = {
+        ...resultMetrics,
+        error: errorMessage
+      };
+    }
+
+    const finishTx = await this.rds.beginTransaction();
+
+    try {
+      const latencyMs = Math.max(1, Date.now() - startedMs);
+      const status = errorMessage ? "failed" : "completed";
+
+      const runResponse = await this.rds.execute(
+        `
+          UPDATE "public"."ConnectorSyncRun"
+          SET
+            "status" = CAST(:status AS "public"."RunStatus"),
+            "finishedAt" = NOW(),
+            "metrics" = CAST(:metrics AS JSONB),
+            "errorMessage" = :error_message
+          WHERE "id" = CAST(:run_id AS UUID)
+          RETURNING
+            "id"::text,
+            "connectorId"::text,
+            "status"::text,
+            "startedAt",
+            "finishedAt",
+            "metrics"::text,
+            "errorMessage",
+            "triggeredByUserId"::text,
+            "createdAt"
+        `,
+        [
+          sqlString("status", status),
+          sqlJson("metrics", resultMetrics),
+          sqlString("error_message", errorMessage),
+          sqlUuid("run_id", runId)
+        ],
+        { transactionId: finishTx }
+      );
+      const run = parseConnectorRunRow(runResponse.records?.[0]);
+      if (!run) {
+        throw new Error("Failed to parse finished connector run");
+      }
+
+      await this.rds.execute(
+        `
+          UPDATE "public"."ConnectorConfig"
+          SET
+            "healthStatus" = :health_status,
+            "lastSyncAt" = NOW(),
+            "lastError" = :last_error,
+            "latencyP95Ms" = :latency_ms,
+            "updatedAt" = NOW()
+          WHERE "id" = CAST(:connector_id AS UUID)
+        `,
+        [
+          sqlString("health_status", errorMessage ? "degraded" : "healthy"),
+          sqlString("last_error", errorMessage),
+          sqlLong("latency_ms", latencyMs),
+          sqlUuid("connector_id", connectorId)
+        ],
+        { transactionId: finishTx }
+      );
+
+      await this.appendAudit(
+        {
+          actorUserId,
+          action: "connector_sync_finished",
+          resourceType: "ConnectorConfig",
+          resourceId: connectorId,
+          requestId,
+          before: { status: "running" },
+          after: {
+            sync_run_id: runId,
+            status,
+            metrics: resultMetrics,
+            error: errorMessage
+          }
+        },
+        finishTx
+      );
+
+      await this.rds.commitTransaction(finishTx);
       return run;
     } catch (error) {
-      await this.rds.rollbackTransaction(tx).catch(() => undefined);
+      await this.rds.rollbackTransaction(finishTx).catch(() => undefined);
       throw error;
     }
   }
