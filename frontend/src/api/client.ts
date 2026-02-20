@@ -6,6 +6,21 @@ export type CreateTermRequest = components["schemas"]["CreateTermRequest"];
 export type UpdateTermRequest = components["schemas"]["UpdateTermRequest"];
 export type NewsFeedResponse = components["schemas"]["NewsFeedResponse"];
 export type MonitorOverviewResponse = components["schemas"]["MonitorOverviewResponse"];
+export type SocialChannel = components["schemas"]["SocialChannel"];
+export type SocialSentiment = components["schemas"]["SocialSentiment"];
+export type SocialDatePreset = components["schemas"]["SocialDatePreset"];
+export type SocialPostSort = components["schemas"]["SocialPostSort"];
+export type MonitorSocialOverviewResponse = components["schemas"]["MonitorSocialOverviewResponse"];
+export type MonitorSocialAccountsResponse = components["schemas"]["MonitorSocialAccountsResponse"];
+export type MonitorSocialPostsResponse = components["schemas"]["MonitorSocialPostsResponse"];
+export type MonitorSocialRiskResponse = components["schemas"]["MonitorSocialRiskResponse"];
+export type MonitorSocialRunItem = components["schemas"]["MonitorSocialRunItem"];
+export type MonitorSocialRunsResponse = components["schemas"]["MonitorSocialRunsResponse"];
+export type MonitorSocialEtlQualityResponse = components["schemas"]["MonitorSocialEtlQualityResponse"];
+export type MonitorSocialSettings = components["schemas"]["MonitorSocialSettings"];
+export type CreateMonitorSocialRunRequest = components["schemas"]["CreateMonitorSocialRunRequest"];
+export type MonitorSocialRunAccepted = components["schemas"]["MonitorSocialRunAccepted"];
+export type PatchMonitorSocialSettingsRequest = components["schemas"]["PatchMonitorSocialSettingsRequest"];
 export type AnalyzeOverviewResponse = components["schemas"]["AnalyzeOverviewResponse"];
 export type AnalyzeChannelResponse = components["schemas"]["AnalyzeChannelResponse"];
 export type AnalyzeCompetitorsResponse = components["schemas"]["AnalyzeCompetitorsResponse"];
@@ -76,6 +91,71 @@ export type ReportSchedulesResponse = components["schemas"]["ReportSchedulesResp
 export type CreateReportScheduleRequest = components["schemas"]["CreateReportScheduleRequest"];
 export type UpdateReportScheduleRequest = components["schemas"]["UpdateReportScheduleRequest"];
 
+export type SocialComparisonMode = "weekday_aligned_week" | "exact_days" | "same_period_last_year";
+export type SocialHeatmapMetric = "er" | "engagement_total" | "likes" | "comments" | "shares" | "views" | "view_rate";
+export type SocialScatterDimension = "post_type" | "channel" | "account" | "campaign" | "strategy" | "hashtag";
+export type SocialErBreakdownDimension = "hashtag" | "word" | "post_type" | "publish_frequency" | "weekday";
+
+export type MonitorSocialHeatmapResponse = {
+  generated_at: string;
+  metric: SocialHeatmapMetric;
+  items: Array<{ month: number; weekday: number; value: number; posts: number }>;
+};
+
+export type MonitorSocialScatterResponse = {
+  generated_at: string;
+  dimension: SocialScatterDimension;
+  items: Array<{ label: string; exposure_total: number; engagement_total: number; er_global: number; posts: number }>;
+};
+
+export type MonitorSocialErBreakdownResponse = {
+  generated_at: string;
+  dimension: SocialErBreakdownDimension;
+  items: Array<{ label: string; posts: number; exposure_total: number; engagement_total: number; er_global: number }>;
+};
+
+export type MonitorSocialErTargetsResponse = {
+  generated_at: string;
+  last_etl_at: string | null;
+  year: number;
+  items: Array<{
+    channel: SocialChannel;
+    baseline_2025_er: number;
+    target_2026_er: number;
+    current_er: number;
+    gap: number;
+    progress_pct: number;
+    source: "auto" | "manual";
+  }>;
+};
+
+export type PatchMonitorSocialErTargetsRequest = {
+  year?: number;
+  targets: Array<{
+    channel: SocialChannel;
+    source: "auto" | "manual";
+    target_2026_er?: number;
+    override_reason?: string;
+  }>;
+};
+
+type MonitorSocialQuery = {
+  preset?: SocialDatePreset;
+  window_days?: 7 | 30 | 90;
+  from?: string;
+  to?: string;
+  channel?: SocialChannel | string;
+  account?: string;
+  post_type?: string;
+  campaign?: string;
+  strategy?: string;
+  hashtag?: string;
+  sentiment?: SocialSentiment;
+  trend_granularity?: "auto" | "day" | "week" | "month";
+  comparison_mode?: SocialComparisonMode;
+  comparison_days?: number;
+};
+
 type HttpMethod = "GET" | "POST" | "PATCH";
 
 type RequestOptions = {
@@ -83,10 +163,11 @@ type RequestOptions = {
   token?: string;
   query?: Record<string, string | number | boolean | undefined | null>;
   body?: unknown;
+  headers?: Record<string, string>;
 };
 
 export type TermScope = "claro" | "competencia";
-export type TaxonomyKind = "categories" | "business_lines" | "macro_regions" | "campaigns";
+export type TaxonomyKind = "categories" | "business_lines" | "macro_regions" | "campaigns" | "strategies";
 
 export class ApiError extends Error {
   constructor(
@@ -118,9 +199,11 @@ export class ApiClient {
 
   private async request<T>(path: string, options: RequestOptions = {}): Promise<T> {
     const token = options.token ?? this.getToken();
-    const headers: Record<string, string> = {
-      "content-type": "application/json"
-    };
+    const headers: Record<string, string> = { ...(options.headers ?? {}) };
+
+    if (options.body !== undefined && !headers["content-type"]) {
+      headers["content-type"] = "application/json";
+    }
 
     if (token) {
       headers.authorization = `Bearer ${token}`;
@@ -145,6 +228,34 @@ export class ApiClient {
     }
 
     return payload as T;
+  }
+
+  private async requestBlob(path: string, options: RequestOptions = {}): Promise<Blob> {
+    const token = options.token ?? this.getToken();
+    const headers: Record<string, string> = { ...(options.headers ?? {}) };
+    if (token) {
+      headers.authorization = `Bearer ${token}`;
+    }
+
+    const response = await fetch(`${this.baseUrl}${path}${buildQueryString(options.query)}`, {
+      method: options.method ?? "GET",
+      headers
+    });
+
+    if (!response.ok) {
+      let message = `API request failed (${response.status})`;
+      try {
+        const payload = (await response.json()) as unknown;
+        if (typeof payload === "object" && payload && "message" in payload && typeof (payload as { message?: unknown }).message === "string") {
+          message = (payload as { message: string }).message;
+        }
+      } catch {
+        // noop
+      }
+      throw new ApiError(response.status, null, message);
+    }
+
+    return response.blob();
   }
 
   listTerms(limit = 100, cursor?: string, scope?: TermScope): Promise<TermListResponse> {
@@ -181,6 +292,97 @@ export class ApiClient {
 
   getMonitorOverview(): Promise<MonitorOverviewResponse> {
     return this.request<MonitorOverviewResponse>("/v1/monitor/overview");
+  }
+
+  getMonitorSocialOverview(query: MonitorSocialQuery = {}): Promise<MonitorSocialOverviewResponse> {
+    return this.request<MonitorSocialOverviewResponse>("/v1/monitor/social/overview", { query });
+  }
+
+  listMonitorSocialPosts(query: MonitorSocialQuery & {
+    sort?: SocialPostSort;
+    limit?: number;
+    cursor?: string;
+  } = {}): Promise<MonitorSocialPostsResponse> {
+    return this.request<MonitorSocialPostsResponse>("/v1/monitor/social/posts", { query });
+  }
+
+  getMonitorSocialAccounts(query: MonitorSocialQuery & {
+    min_posts?: number;
+    min_exposure?: number;
+  } = {}): Promise<MonitorSocialAccountsResponse> {
+    return this.request<MonitorSocialAccountsResponse>("/v1/monitor/social/accounts", { query });
+  }
+
+  getMonitorSocialRisk(query: MonitorSocialQuery = {}): Promise<MonitorSocialRiskResponse> {
+    return this.request<MonitorSocialRiskResponse>("/v1/monitor/social/risk", { query });
+  }
+
+  getMonitorSocialEtlQuality(limit = 20): Promise<MonitorSocialEtlQualityResponse> {
+    return this.request<MonitorSocialEtlQualityResponse>("/v1/monitor/social/etl-quality", {
+      query: { limit }
+    });
+  }
+
+  downloadMonitorSocialExcel(query: MonitorSocialQuery & {
+    sort?: SocialPostSort;
+    min_posts?: number;
+    min_exposure?: number;
+  } = {}): Promise<Blob> {
+    return this.requestBlob("/v1/monitor/social/export.xlsx", {
+      query,
+      headers: {
+        accept: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+      }
+    });
+  }
+
+  getMonitorSocialHeatmap(query: MonitorSocialQuery & { metric?: SocialHeatmapMetric } = {}): Promise<MonitorSocialHeatmapResponse> {
+    return this.request<MonitorSocialHeatmapResponse>("/v1/monitor/social/charts/heatmap", { query });
+  }
+
+  getMonitorSocialScatter(query: MonitorSocialQuery & { dimension?: SocialScatterDimension } = {}): Promise<MonitorSocialScatterResponse> {
+    return this.request<MonitorSocialScatterResponse>("/v1/monitor/social/charts/scatter", { query });
+  }
+
+  getMonitorSocialErBreakdown(
+    query: MonitorSocialQuery & { dimension?: SocialErBreakdownDimension } = {}
+  ): Promise<MonitorSocialErBreakdownResponse> {
+    return this.request<MonitorSocialErBreakdownResponse>("/v1/monitor/social/charts/er-breakdown", { query });
+  }
+
+  getMonitorSocialErTargets(query: MonitorSocialQuery & { year?: number } = {}): Promise<MonitorSocialErTargetsResponse> {
+    return this.request<MonitorSocialErTargetsResponse>("/v1/monitor/social/targets/er", { query });
+  }
+
+  patchMonitorSocialErTargets(payload: PatchMonitorSocialErTargetsRequest): Promise<MonitorSocialErTargetsResponse> {
+    return this.request<MonitorSocialErTargetsResponse>("/v1/monitor/social/targets/er", {
+      method: "PATCH",
+      body: payload
+    });
+  }
+
+  createMonitorSocialRun(payload: CreateMonitorSocialRunRequest = { force: false }): Promise<MonitorSocialRunAccepted> {
+    return this.request<MonitorSocialRunAccepted>("/v1/monitor/social/runs", {
+      method: "POST",
+      body: payload
+    });
+  }
+
+  listMonitorSocialRuns(limit = 50, cursor?: string): Promise<MonitorSocialRunsResponse> {
+    return this.request<MonitorSocialRunsResponse>("/v1/monitor/social/runs", {
+      query: { limit, cursor }
+    });
+  }
+
+  getMonitorSocialSettings(): Promise<MonitorSocialSettings> {
+    return this.request<MonitorSocialSettings>("/v1/monitor/social/settings");
+  }
+
+  patchMonitorSocialSettings(payload: PatchMonitorSocialSettingsRequest): Promise<MonitorSocialSettings> {
+    return this.request<MonitorSocialSettings>("/v1/monitor/social/settings", {
+      method: "PATCH",
+      body: payload
+    });
   }
 
   getAnalyzeOverview(): Promise<AnalyzeOverviewResponse> {

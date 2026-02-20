@@ -36,6 +36,24 @@ import {
   patchMonitorIncident
 } from "../routes/v1/monitor";
 import {
+  createMonitorSocialRun,
+  getMonitorSocialErBreakdown,
+  getMonitorSocialErTargets,
+  getMonitorSocialAccounts,
+  getMonitorSocialEtlQuality,
+  getMonitorSocialExportXlsx,
+  getMonitorSocialHeatmap,
+  getMonitorSocialOverview,
+  getMonitorSocialRisk,
+  getMonitorSocialScatter,
+  getMonitorSocialSettings,
+  listMonitorSocialPosts,
+  listMonitorSocialRuns,
+  postMonitorSocialHashtagBackfill,
+  patchMonitorSocialErTargets,
+  patchMonitorSocialSettings
+} from "../routes/v1/monitorSocial";
+import {
   createConfigAccount,
   createConfigCompetitor,
   createNotificationRecipient,
@@ -94,6 +112,22 @@ const roleRules: RoleRule[] = [
   { pattern: /^POST \/v1\/reports\/schedules\/[^/]+\/run$/, requiredRole: "Analyst" },
   { pattern: /^GET \/v1\/feed\/news$/, requiredRole: "Viewer" },
   { pattern: /^GET \/v1\/monitor\/overview$/, requiredRole: "Viewer" },
+  { pattern: /^GET \/v1\/monitor\/social\/overview$/, requiredRole: "Viewer" },
+  { pattern: /^GET \/v1\/monitor\/social\/accounts$/, requiredRole: "Viewer" },
+  { pattern: /^GET \/v1\/monitor\/social\/posts$/, requiredRole: "Viewer" },
+  { pattern: /^GET \/v1\/monitor\/social\/risk$/, requiredRole: "Viewer" },
+  { pattern: /^GET \/v1\/monitor\/social\/charts\/heatmap$/, requiredRole: "Viewer" },
+  { pattern: /^GET \/v1\/monitor\/social\/charts\/scatter$/, requiredRole: "Viewer" },
+  { pattern: /^GET \/v1\/monitor\/social\/charts\/er-breakdown$/, requiredRole: "Viewer" },
+  { pattern: /^GET \/v1\/monitor\/social\/targets\/er$/, requiredRole: "Viewer" },
+  { pattern: /^PATCH \/v1\/monitor\/social\/targets\/er$/, requiredRole: "Admin" },
+  { pattern: /^POST \/v1\/monitor\/social\/hashtags\/backfill$/, requiredRole: "Admin" },
+  { pattern: /^GET \/v1\/monitor\/social\/etl-quality$/, requiredRole: "Viewer" },
+  { pattern: /^GET \/v1\/monitor\/social\/export\\.xlsx$/, requiredRole: "Analyst" },
+  { pattern: /^POST \/v1\/monitor\/social\/runs$/, requiredRole: "Analyst" },
+  { pattern: /^GET \/v1\/monitor\/social\/runs$/, requiredRole: "Viewer" },
+  { pattern: /^GET \/v1\/monitor\/social\/settings$/, requiredRole: "Viewer" },
+  { pattern: /^PATCH \/v1\/monitor\/social\/settings$/, requiredRole: "Admin" },
   { pattern: /^GET \/v1\/monitor\/incidents$/, requiredRole: "Viewer" },
   { pattern: /^PATCH \/v1\/monitor\/incidents\/[^/]+$/, requiredRole: "Analyst" },
   { pattern: /^GET \/v1\/monitor\/incidents\/[^/]+\/notes$/, requiredRole: "Viewer" },
@@ -200,6 +234,22 @@ export const main = async (event: APIGatewayProxyEventV2) => {
   if (key.match(/^POST \/v1\/reports\/schedules\/[^/]+\/run$/)) return triggerReportScheduleRun(event);
   if (key === "GET /v1/feed/news") return getNewsFeed(event);
   if (key === "GET /v1/monitor/overview") return getMonitorOverview();
+  if (key === "GET /v1/monitor/social/overview") return getMonitorSocialOverview(event);
+  if (key === "GET /v1/monitor/social/accounts") return getMonitorSocialAccounts(event);
+  if (key === "GET /v1/monitor/social/posts") return listMonitorSocialPosts(event);
+  if (key === "GET /v1/monitor/social/risk") return getMonitorSocialRisk(event);
+  if (key === "GET /v1/monitor/social/charts/heatmap") return getMonitorSocialHeatmap(event);
+  if (key === "GET /v1/monitor/social/charts/scatter") return getMonitorSocialScatter(event);
+  if (key === "GET /v1/monitor/social/charts/er-breakdown") return getMonitorSocialErBreakdown(event);
+  if (key === "GET /v1/monitor/social/targets/er") return getMonitorSocialErTargets(event);
+  if (key === "PATCH /v1/monitor/social/targets/er") return patchMonitorSocialErTargets(event);
+  if (key === "POST /v1/monitor/social/hashtags/backfill") return postMonitorSocialHashtagBackfill(event);
+  if (key === "GET /v1/monitor/social/etl-quality") return getMonitorSocialEtlQuality(event);
+  if (key === "GET /v1/monitor/social/export.xlsx") return getMonitorSocialExportXlsx(event);
+  if (key === "POST /v1/monitor/social/runs") return createMonitorSocialRun(event);
+  if (key === "GET /v1/monitor/social/runs") return listMonitorSocialRuns(event);
+  if (key === "GET /v1/monitor/social/settings") return getMonitorSocialSettings();
+  if (key === "PATCH /v1/monitor/social/settings") return patchMonitorSocialSettings(event);
   if (key === "GET /v1/monitor/incidents") return listMonitorIncidents(event);
   if (key === "POST /v1/monitor/incidents/evaluate") return evaluateMonitorIncidents(event);
   if (key.match(/^PATCH \/v1\/monitor\/incidents\/[^/]+$/)) return patchMonitorIncident(event);

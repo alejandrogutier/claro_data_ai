@@ -155,14 +155,19 @@ const normalizeSentimiento = (value: unknown): "positivo" | "neutro" | "negativo
   return null;
 };
 
-const validateOutput = (payload: Record<string, unknown>): {
+const validateOutput = (
+  payload: Record<string, unknown>,
+  options?: {
+    defaultCategoria?: string;
+  }
+): {
   categoria: string;
   sentimiento: "positivo" | "neutro" | "negativo";
   etiquetas: string[];
   confianza: number;
   resumen: string | null;
 } => {
-  const categoria = normalizeString(payload.categoria, 120);
+  const categoria = normalizeString(payload.categoria, 120) ?? normalizeString(options?.defaultCategoria, 120);
   if (!categoria) {
     throw new Error("model_missing_categoria");
   }
@@ -315,7 +320,10 @@ const processContentItem = async (message: Required<Pick<ClassificationMessage, 
   const rawOutput = await invokeModelStrict(prompt, modelId || env.bedrockModelId);
   const latencyMs = Date.now() - started;
 
-  const validated = validateOutput(rawOutput);
+  const validated = validateOutput(rawOutput, {
+    // Social sentiment prompt can legitimately omit "categoria"; keep a stable default for storage.
+    defaultCategoria: promptVersion.startsWith("social-sentiment-v") ? "social_sentiment_v1" : undefined
+  });
 
   await store.upsertAutoClassification({
     contentItemId,

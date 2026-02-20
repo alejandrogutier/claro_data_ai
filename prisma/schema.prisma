@@ -102,6 +102,13 @@ model User {
   reportTemplates      ReportTemplate[] @relation("ReportTemplateCreator")
   reportSchedules      ReportSchedule[] @relation("ReportScheduleCreator")
   reportRuns           ReportRun[]      @relation("ReportRunRequester")
+  socialSettingsUpdated SocialDashboardSetting[] @relation("SocialDashboardSettingUpdater")
+  kpiTargetsUpdated     SocialKpiTarget[]        @relation("SocialKpiTargetUpdater")
+  socialCommentOverrides SocialPostCommentOverride[] @relation("SocialPostCommentOverrideActor")
+  awarioProfilesCreated  AwarioQueryProfile[]        @relation("AwarioProfileCreator")
+  awarioProfilesUpdated  AwarioQueryProfile[]        @relation("AwarioProfileUpdater")
+  awarioBindingsCreated  AwarioAlertBinding[]        @relation("AwarioBindingCreator")
+  awarioBindingsUpdated  AwarioAlertBinding[]        @relation("AwarioBindingUpdater")
 
   @@index([role])
 }
@@ -187,12 +194,190 @@ model ContentItem {
   stateEvents      ContentStateEvent[]
   analysisLinks    AnalysisRunItem[]
   ingestionLinks   IngestionRunContentLink[]
+  socialMetric     SocialPostMetric?
 
   @@unique([canonicalUrl])
   @@index([termId, publishedAt])
   @@index([state, createdAt])
   @@index([sourceType, provider])
   @@index([category])
+}
+
+model SocialSyncRun {
+  id             String      @id @default(uuid()) @db.Uuid
+  triggerType    TriggerType
+  status         RunStatus   @default(queued)
+  requestId      String?
+  queuedAt       DateTime    @default(now())
+  startedAt      DateTime?
+  finishedAt     DateTime?
+  currentPhase   String?
+  phaseStatus    Json?
+  metrics        Json?
+  errorMessage   String?
+  createdAt      DateTime    @default(now())
+  objects        SocialSyncObject[]
+  reconciliations SocialReconciliationSnapshot[]
+
+  @@index([status, createdAt])
+  @@index([triggerType, createdAt])
+  @@index([queuedAt, createdAt])
+}
+
+model SocialSyncObject {
+  id           String      @id @default(uuid()) @db.Uuid
+  runId        String      @db.Uuid
+  bucket       String
+  objectKey    String
+  eTag         String
+  lastModified DateTime
+  createdAt    DateTime    @default(now())
+  run          SocialSyncRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+
+  @@unique([bucket, objectKey, eTag, lastModified])
+  @@index([runId, createdAt])
+}
+
+model SocialPostMetric {
+  id               String     @id @default(uuid()) @db.Uuid
+  contentItemId    String     @unique @db.Uuid
+  channel          String
+  accountName      String
+  externalPostId   String
+  postUrl          String
+  postType         String?
+  campaignTaxonomyId String?   @db.Uuid
+  publishedAt      DateTime?
+  exposure         Decimal    @default(0) @db.Decimal(18, 2)
+  engagementTotal  Decimal    @default(0) @db.Decimal(18, 2)
+  impressions      Decimal    @default(0) @db.Decimal(18, 2)
+  reach            Decimal    @default(0) @db.Decimal(18, 2)
+  clicks           Decimal    @default(0) @db.Decimal(18, 2)
+  likes            Decimal    @default(0) @db.Decimal(18, 2)
+  comments         Decimal    @default(0) @db.Decimal(18, 2)
+  shares           Decimal    @default(0) @db.Decimal(18, 2)
+  views            Decimal    @default(0) @db.Decimal(18, 2)
+  diagnostics      Json?
+  createdAt        DateTime   @default(now())
+  updatedAt        DateTime   @updatedAt
+  contentItem      ContentItem @relation(fields: [contentItemId], references: [id], onDelete: Cascade)
+  campaignTaxonomy TaxonomyEntry? @relation("SocialPostCampaign", fields: [campaignTaxonomyId], references: [id], onDelete: SetNull)
+  hashtags         SocialPostHashtag[]
+  strategies       SocialPostStrategy[]
+  awarioComments   SocialPostComment[]
+
+  @@unique([channel, externalPostId])
+  @@index([channel, publishedAt])
+  @@index([accountName, publishedAt])
+  @@index([campaignTaxonomyId, publishedAt])
+}
+
+model SocialPostComment {
+  id                     String           @id @default(uuid()) @db.Uuid
+  socialPostMetricId     String           @db.Uuid
+  awarioMentionId        String           @unique
+  awarioAlertId          String
+  channel                String
+  parentExternalPostId   String
+  externalCommentId      String?
+  externalReplyCommentId String?
+  commentUrl             String?
+  authorName             String?
+  authorProfileUrl       String?
+  publishedAt            DateTime?
+  text                   String?
+  sentiment              String           @default("unknown")
+  sentimentSource        String           @default("awario")
+  isSpam                 Boolean          @default(false)
+  relatedToPostText      Boolean          @default(false)
+  needsReview            Boolean          @default(false)
+  confidence             Decimal?         @db.Decimal(5, 4)
+  rawPayload             Json?
+  createdAt              DateTime         @default(now())
+  updatedAt              DateTime         @updatedAt
+  socialPostMetric       SocialPostMetric @relation(fields: [socialPostMetricId], references: [id], onDelete: Cascade)
+  overrides              SocialPostCommentOverride[]
+
+  @@index([socialPostMetricId, publishedAt])
+  @@index([channel, parentExternalPostId])
+  @@index([sentiment, isSpam, relatedToPostText])
+}
+
+model SocialPostCommentOverride {
+  id                  String            @id @default(uuid()) @db.Uuid
+  socialPostCommentId String            @db.Uuid
+  actorUserId         String?           @db.Uuid
+  requestId           String?
+  reason              String?
+  before              Json?
+  after               Json?
+  createdAt           DateTime          @default(now())
+  socialPostComment   SocialPostComment @relation(fields: [socialPostCommentId], references: [id], onDelete: Cascade)
+  actorUser           User?             @relation("SocialPostCommentOverrideActor", fields: [actorUserId], references: [id], onDelete: SetNull)
+
+  @@index([socialPostCommentId, createdAt])
+  @@index([actorUserId, createdAt])
+}
+
+model SocialReconciliationSnapshot {
+  id          String       @id @default(uuid()) @db.Uuid
+  runId       String       @db.Uuid
+  channel     String
+  s3Rows      Int          @default(0)
+  dbRows      Int          @default(0)
+  deltaRows   Int          @default(0)
+  s3MinDate   DateTime?
+  s3MaxDate   DateTime?
+  dbMinDate   DateTime?
+  dbMaxDate   DateTime?
+  status      String
+  details     Json?
+  createdAt   DateTime     @default(now())
+  run         SocialSyncRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+
+  @@index([runId, createdAt])
+  @@index([channel, createdAt])
+  @@index([status, createdAt])
+}
+
+model SocialAccountDailyAggregate {
+  id              String    @id @default(uuid()) @db.Uuid
+  date            DateTime
+  channel         String
+  accountName     String
+  posts           Int       @default(0)
+  exposureTotal   Decimal   @default(0) @db.Decimal(18, 2)
+  engagementTotal Decimal   @default(0) @db.Decimal(18, 2)
+  erGlobal        Decimal   @default(0) @db.Decimal(9, 4)
+  positivos       Int       @default(0)
+  negativos       Int       @default(0)
+  neutrales       Int       @default(0)
+  unknowns        Int       @default(0)
+  sentimientoNeto Decimal   @default(0) @db.Decimal(9, 4)
+  riesgoActivo    Decimal   @default(0) @db.Decimal(9, 4)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@unique([date, channel, accountName])
+  @@index([date, channel])
+  @@index([accountName, date])
+}
+
+model SocialDashboardSetting {
+  id                       String    @id @default(uuid()) @db.Uuid
+  key                      String    @unique
+  focusAccount             String?
+  targetQuarterlySovPp     Decimal   @default(5.00) @db.Decimal(6, 2)
+  targetShs                Decimal   @default(70.00) @db.Decimal(6, 2)
+  riskThreshold            Decimal   @default(60.00) @db.Decimal(6, 2)
+  sentimentDropThreshold   Decimal   @default(10.00) @db.Decimal(6, 2)
+  erDropThreshold          Decimal   @default(5.00) @db.Decimal(6, 2)
+  alertCooldownMinutes     Int       @default(60)
+  metadata                 Json?
+  updatedByUserId          String?   @db.Uuid
+  createdAt                DateTime  @default(now())
+  updatedAt                DateTime  @updatedAt
+  updatedByUser            User?     @relation("SocialDashboardSettingUpdater", fields: [updatedByUserId], references: [id], onDelete: SetNull)
 }
 
 model IngestionRunContentLink {
@@ -455,6 +640,7 @@ model ConnectorConfig {
   createdAt        DateTime           @default(now())
   updatedAt        DateTime           @updatedAt
   syncRuns         ConnectorSyncRun[]
+  awarioBindings   AwarioAlertBinding[]
 
   @@index([enabled, provider])
 }
@@ -474,6 +660,52 @@ model ConnectorSyncRun {
 
   @@index([connectorId, createdAt])
   @@index([status, createdAt])
+}
+
+model AwarioQueryProfile {
+  id              String               @id @default(uuid()) @db.Uuid
+  name            String
+  objective       String?
+  queryText       String
+  sources         Json?
+  language        String?
+  countries       Json?
+  status          String               @default("active")
+  metadata        Json?
+  createdByUserId String?              @db.Uuid
+  updatedByUserId String?              @db.Uuid
+  createdAt       DateTime             @default(now())
+  updatedAt       DateTime             @updatedAt
+  createdByUser   User?                @relation("AwarioProfileCreator", fields: [createdByUserId], references: [id], onDelete: SetNull)
+  updatedByUser   User?                @relation("AwarioProfileUpdater", fields: [updatedByUserId], references: [id], onDelete: SetNull)
+  bindings        AwarioAlertBinding[]
+
+  @@index([status, createdAt])
+  @@index([name])
+}
+
+model AwarioAlertBinding {
+  id                  String             @id @default(uuid()) @db.Uuid
+  profileId           String             @db.Uuid
+  connectorId         String?            @db.Uuid
+  awarioAlertId       String
+  status              String             @default("active")
+  validationStatus    String             @default("unknown")
+  lastValidatedAt     DateTime?
+  lastValidationError String?
+  metadata            Json?
+  createdByUserId     String?            @db.Uuid
+  updatedByUserId     String?            @db.Uuid
+  createdAt           DateTime           @default(now())
+  updatedAt           DateTime           @updatedAt
+  profile             AwarioQueryProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  connector           ConnectorConfig?   @relation(fields: [connectorId], references: [id], onDelete: SetNull)
+  createdByUser       User?              @relation("AwarioBindingCreator", fields: [createdByUserId], references: [id], onDelete: SetNull)
+  updatedByUser       User?              @relation("AwarioBindingUpdater", fields: [updatedByUserId], references: [id], onDelete: SetNull)
+
+  @@unique([profileId, awarioAlertId])
+  @@index([connectorId, status])
+  @@index([validationStatus, updatedAt])
 }
 
 model OwnedAccount {
@@ -519,9 +751,65 @@ model TaxonomyEntry {
   metadata    Json?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+  socialCampaignPosts SocialPostMetric[] @relation("SocialPostCampaign")
+  socialPostStrategies SocialPostStrategy[]
 
   @@unique([kind, key])
   @@index([kind, isActive, sortOrder])
+}
+
+model Hashtag {
+  id        String   @id @default(uuid()) @db.Uuid
+  slug      String   @unique
+  display   String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  posts     SocialPostHashtag[]
+
+  @@index([display])
+}
+
+model SocialPostHashtag {
+  id                 String           @id @default(uuid()) @db.Uuid
+  socialPostMetricId String           @db.Uuid
+  hashtagId          String           @db.Uuid
+  createdAt          DateTime         @default(now())
+  socialPostMetric   SocialPostMetric @relation(fields: [socialPostMetricId], references: [id], onDelete: Cascade)
+  hashtag            Hashtag          @relation(fields: [hashtagId], references: [id], onDelete: Cascade)
+
+  @@unique([socialPostMetricId, hashtagId])
+  @@index([hashtagId, createdAt])
+}
+
+model SocialPostStrategy {
+  id                 String           @id @default(uuid()) @db.Uuid
+  socialPostMetricId String           @db.Uuid
+  taxonomyEntryId    String           @db.Uuid
+  createdAt          DateTime         @default(now())
+  socialPostMetric   SocialPostMetric @relation(fields: [socialPostMetricId], references: [id], onDelete: Cascade)
+  taxonomyEntry      TaxonomyEntry    @relation(fields: [taxonomyEntryId], references: [id], onDelete: Cascade)
+
+  @@unique([socialPostMetricId, taxonomyEntryId])
+  @@index([taxonomyEntryId, createdAt])
+}
+
+model SocialKpiTarget {
+  id            String   @id @default(uuid()) @db.Uuid
+  year          Int
+  channel       String
+  baselineEr    Decimal  @default(0) @db.Decimal(9, 4)
+  momentumPct   Decimal  @default(0) @db.Decimal(9, 4)
+  autoGrowthPct Decimal  @default(0) @db.Decimal(9, 4)
+  targetEr      Decimal  @default(0) @db.Decimal(9, 4)
+  source        String   @default("auto")
+  overrideReason String?
+  updatedByUserId String? @db.Uuid
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  updatedByUser User?    @relation("SocialKpiTargetUpdater", fields: [updatedByUserId], references: [id], onDelete: SetNull)
+
+  @@unique([year, channel])
+  @@index([year, source])
 }
 
 model Incident {

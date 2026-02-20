@@ -487,6 +487,28 @@ resource "aws_iam_role_policy_attachment" "lambda_classification_scheduler_basic
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
 }
 
+resource "aws_iam_role" "lambda_social_scheduler" {
+  name = "${local.name_prefix}-lambda-social-scheduler-role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Action = "sts:AssumeRole"
+        Effect = "Allow"
+        Principal = {
+          Service = "lambda.amazonaws.com"
+        }
+      }
+    ]
+  })
+}
+
+resource "aws_iam_role_policy_attachment" "lambda_social_scheduler_basic" {
+  role       = aws_iam_role.lambda_social_scheduler.name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+}
+
 resource "aws_iam_role" "lambda_migrations" {
   name = "${local.name_prefix}-lambda-migrations-role"
 
@@ -523,7 +545,7 @@ resource "aws_lambda_function" "api" {
   filename         = var.lambda_package_path
   source_code_hash = filebase64sha256(var.lambda_package_path)
 
-  timeout     = 30
+  timeout     = 300
   memory_size = 512
 
   environment {
@@ -541,16 +563,21 @@ resource "aws_lambda_function" "api" {
       DB_NAME                     = var.db_name
       INGESTION_STATE_MACHINE_ARN = aws_sfn_state_machine.ingestion.arn
       RAW_BUCKET_NAME             = aws_s3_bucket.raw.bucket
+      SOCIAL_RAW_BUCKET_NAME      = var.social_raw_bucket_name
+      SOCIAL_RAW_PREFIX           = var.social_raw_prefix
+      SOCIAL_SCHEDULER_LAMBDA_NAME = aws_lambda_function.social_scheduler.function_name
       EXPORT_BUCKET_NAME          = aws_s3_bucket.exports.bucket
       EXPORT_QUEUE_URL            = aws_sqs_queue.export.url
       INCIDENT_QUEUE_URL          = aws_sqs_queue.incident_evaluation.url
       REPORT_QUEUE_URL            = aws_sqs_queue.report_generation.url
       ANALYSIS_QUEUE_URL          = aws_sqs_queue.analysis_generation.url
+      CLASSIFICATION_QUEUE_URL    = aws_sqs_queue.classification_generation.url
       REPORT_CONFIDENCE_THRESHOLD = tostring(var.report_confidence_threshold)
       REPORT_DEFAULT_TIMEZONE     = var.report_default_timezone
       REPORT_EMAIL_SENDER         = var.ses_sender_email
       EXPORT_SIGNED_URL_SECONDS   = "900"
       INGESTION_DEFAULT_TERMS     = var.ingestion_default_terms
+      SOCIAL_ANALYTICS_V2_ENABLED = "true"
     }
   }
 }
@@ -766,6 +793,35 @@ resource "aws_lambda_function" "classification_scheduler" {
   }
 }
 
+resource "aws_lambda_function" "social_scheduler" {
+  function_name = "${local.name_prefix}-social-scheduler"
+  role          = aws_iam_role.lambda_social_scheduler.arn
+  runtime       = "nodejs22.x"
+  handler       = "social/scheduler.main"
+
+  filename         = var.lambda_package_path
+  source_code_hash = filebase64sha256(var.lambda_package_path)
+
+  timeout                        = 300
+  memory_size                    = 1024
+  reserved_concurrent_executions = 1
+
+  environment {
+    variables = {
+      APP_ENV                = var.environment
+      DB_RESOURCE_ARN        = aws_rds_cluster.aurora.arn
+      DB_SECRET_ARN          = data.aws_secretsmanager_secret.database.arn
+      DB_NAME                = var.db_name
+      RAW_BUCKET_NAME        = aws_s3_bucket.raw.bucket
+      SOCIAL_RAW_BUCKET_NAME = var.social_raw_bucket_name
+      SOCIAL_RAW_PREFIX      = var.social_raw_prefix
+      CLASSIFICATION_QUEUE_URL = aws_sqs_queue.classification_generation.url
+      CLASSIFICATION_PROMPT_VERSION = "social-sentiment-v1"
+      BEDROCK_MODEL_ID       = "us.anthropic.claude-haiku-4-5-20251001-v1:0"
+    }
+  }
+}
+
 resource "aws_lambda_function" "report_scheduler" {
   function_name = "${local.name_prefix}-report-scheduler"
   role          = aws_iam_role.lambda_report.arn
@@ -894,6 +950,22 @@ resource "aws_apigatewayv2_route" "private_routes" {
     "POST /v1/reports/schedules/{id}/run",
     "GET /v1/feed/news",
     "GET /v1/monitor/overview",
+    "GET /v1/monitor/social/overview",
+    "GET /v1/monitor/social/accounts",
+    "GET /v1/monitor/social/posts",
+    "GET /v1/monitor/social/risk",
+    "GET /v1/monitor/social/charts/heatmap",
+    "GET /v1/monitor/social/charts/scatter",
+    "GET /v1/monitor/social/charts/er-breakdown",
+    "GET /v1/monitor/social/targets/er",
+    "PATCH /v1/monitor/social/targets/er",
+    "POST /v1/monitor/social/hashtags/backfill",
+    "GET /v1/monitor/social/etl-quality",
+    "GET /v1/monitor/social/export.xlsx",
+    "POST /v1/monitor/social/runs",
+    "GET /v1/monitor/social/runs",
+    "GET /v1/monitor/social/settings",
+    "PATCH /v1/monitor/social/settings",
     "GET /v1/monitor/incidents",
     "PATCH /v1/monitor/incidents/{id}",
     "GET /v1/monitor/incidents/{id}/notes",
@@ -1165,6 +1237,29 @@ resource "aws_lambda_permission" "classification_scheduler_eventbridge" {
   function_name = aws_lambda_function.classification_scheduler.function_name
   principal     = "events.amazonaws.com"
   source_arn    = aws_cloudwatch_event_rule.classification_schedule.arn
+}
+
+resource "aws_cloudwatch_event_rule" "social_daily_8am_bogota" {
+  name                = "${local.name_prefix}-social-daily-8am-bogota"
+  schedule_expression = "cron(0 13 * * ? *)"
+}
+
+resource "aws_cloudwatch_event_target" "social_daily_8am_bogota" {
+  rule      = aws_cloudwatch_event_rule.social_daily_8am_bogota.name
+  target_id = "social-scheduler-lambda"
+  arn       = aws_lambda_function.social_scheduler.arn
+  input = jsonencode({
+    request_id   = "scheduled"
+    requested_at = "eventbridge"
+  })
+}
+
+resource "aws_lambda_permission" "social_scheduler_eventbridge" {
+  statement_id  = "AllowExecutionFromEventBridgeSocialScheduler"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.social_scheduler.function_name
+  principal     = "events.amazonaws.com"
+  source_arn    = aws_cloudwatch_event_rule.social_daily_8am_bogota.arn
 }
 
 resource "aws_cloudwatch_event_rule" "digest_daily" {

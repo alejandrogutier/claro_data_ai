@@ -14,10 +14,12 @@ import { IncidentsPage } from "./pages/IncidentsPage";
 import { LoginPage } from "./pages/LoginPage";
 import { MonitorFeedPage } from "./pages/MonitorFeedPage";
 import { MonitorOverviewPage } from "./pages/MonitorOverviewPage";
+import { MonitorSocialOverviewPage } from "./pages/MonitorSocialOverviewPage";
 import { ReportsCenterPage } from "./pages/ReportsCenterPage";
 import { ReportsSchedulesPage } from "./pages/ReportsSchedulesPage";
 import { ReportTemplatesPage } from "./pages/ReportTemplatesPage";
 import { NotificationRecipientsPage } from "./pages/NotificationRecipientsPage";
+import { SocialSettingsPage } from "./pages/SocialSettingsPage";
 import { SourceScoringPage } from "./pages/SourceScoringPage";
 import { TaxonomyPage } from "./pages/TaxonomyPage";
 import { TermsPage } from "./pages/TermsPage";
@@ -43,6 +45,7 @@ export const App = () => {
         <Route path="terms" element={<Navigate to="/app/config/queries" replace />} />
 
         <Route path="monitor/overview" element={<MonitorOverviewPage />} />
+        <Route path="monitor/social-overview" element={<MonitorSocialOverviewPage />} />
         <Route
           path="monitor/feed-claro"
           element={
@@ -83,6 +86,7 @@ export const App = () => {
         <Route path="config/taxonomy" element={<TaxonomyPage />} />
         <Route path="config/source-scoring" element={<SourceScoringPage />} />
         <Route path="config/alerts" element={<NotificationRecipientsPage />} />
+        <Route path="config/social" element={<SocialSettingsPage />} />
         <Route path="config/report-templates" element={<Navigate to="/app/reports/templates" replace />} />
         <Route path="config/audit" element={<AuditPage />} />
       </Route>

@@ -10,6 +10,10 @@ export type AppEnv = {
   dbName?: string;
   ingestionStateMachineArn?: string;
   rawBucketName?: string;
+  socialRawBucketName?: string;
+  socialRawPrefix?: string;
+  socialSchedulerLambdaName?: string;
+  socialAnalyticsV2Enabled: boolean;
   exportBucketName?: string;
   exportQueueUrl?: string;
   exportSignedUrlSeconds?: number;
@@ -42,6 +46,10 @@ export const env: AppEnv = {
   dbName: process.env.DB_NAME,
   ingestionStateMachineArn: process.env.INGESTION_STATE_MACHINE_ARN,
   rawBucketName: process.env.RAW_BUCKET_NAME,
+  socialRawBucketName: process.env.SOCIAL_RAW_BUCKET_NAME,
+  socialRawPrefix: process.env.SOCIAL_RAW_PREFIX,
+  socialSchedulerLambdaName: process.env.SOCIAL_SCHEDULER_LAMBDA_NAME,
+  socialAnalyticsV2Enabled: ["1", "true", "yes", "on"].includes((process.env.SOCIAL_ANALYTICS_V2_ENABLED ?? "true").toLowerCase()),
   exportBucketName: process.env.EXPORT_BUCKET_NAME,
   exportQueueUrl: process.env.EXPORT_QUEUE_URL,
   exportSignedUrlSeconds: process.env.EXPORT_SIGNED_URL_SECONDS

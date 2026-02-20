@@ -351,6 +351,772 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/monitor/social/overview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Resumen social analytics V2 (no oficial) */
+        get: {
+            parameters: {
+                query?: {
+                    preset?: components["schemas"]["SocialDatePreset"];
+                    window_days?: 7 | 30 | 90;
+                    from?: string;
+                    to?: string;
+                    /** @description Canal o lista CSV de canales (`facebook,instagram,...`) */
+                    channel?: string;
+                    /** @description Cuenta o lista CSV de cuentas */
+                    account?: string;
+                    /** @description Tipo de post o lista CSV de tipos (`unknown` para vacios) */
+                    post_type?: string;
+                    trend_granularity?: components["schemas"]["SocialTrendGranularity"];
+                    sentiment?: components["schemas"]["SocialSentiment"];
+                    /** @description Campaña o lista CSV de campañas */
+                    campaign?: string;
+                    /** @description Estrategia o lista CSV de estrategias */
+                    strategy?: string;
+                    /** @description Hashtag o lista CSV de hashtags (con o sin */
+                    hashtag?: string;
+                    comparison_mode?: components["schemas"]["SocialComparisonMode"];
+                    comparison_days?: number;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Resumen KPI social */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["MonitorSocialOverviewResponse"];
+                    };
+                };
+                401: components["responses"]["Unauthorized"];
+                403: components["responses"]["Forbidden"];
+                422: components["responses"]["ValidationError"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/monitor/social/accounts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Ranking de cuentas social analytics V2 */
+        get: {
+            parameters: {
+                query?: {
+                    preset?: components["schemas"]["SocialDatePreset"];
+                    window_days?: 7 | 30 | 90;
+                    from?: string;
+                    to?: string;
+                    /** @description Canal o lista CSV de canales (`facebook,instagram,...`) */
+                    channel?: string;
+                    /** @description Cuenta o lista CSV de cuentas */
+                    account?: string;
+                    /** @description Tipo de post o lista CSV de tipos (`unknown` para vacios) */
+                    post_type?: string;
+                    sentiment?: components["schemas"]["SocialSentiment"];
+                    /** @description Campaña o lista CSV de campañas */
+                    campaign?: string;
+                    /** @description Estrategia o lista CSV de estrategias */
+                    strategy?: string;
+                    /** @description Hashtag o lista CSV de hashtags (con o sin */
+                    hashtag?: string;
+                    comparison_mode?: components["schemas"]["SocialComparisonMode"];
+                    comparison_days?: number;
+                    min_posts?: number;
+                    min_exposure?: number;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Ranking de cuentas */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["MonitorSocialAccountsResponse"];
+                    };
+                };
+                401: components["responses"]["Unauthorized"];
+                403: components["responses"]["Forbidden"];
+                422: components["responses"]["ValidationError"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/monitor/social/posts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Listado paginado de posts social analytics V2 */
+        get: {
+            parameters: {
+                query?: {
+                    /** @description Cursor opaco para paginacion */
+                    cursor?: components["parameters"]["Cursor"];
+                    limit?: components["parameters"]["Limit"];
+                    preset?: components["schemas"]["SocialDatePreset"];
+                    window_days?: 7 | 30 | 90;
+                    from?: string;
+                    to?: string;
+                    /** @description Canal o lista CSV de canales (`facebook,instagram,...`) */
+                    channel?: string;
+                    /** @description Cuenta o lista CSV de cuentas */
+                    account?: string;
+                    /** @description Tipo de post o lista CSV de tipos (`unknown` para vacios) */
+                    post_type?: string;
+                    sentiment?: components["schemas"]["SocialSentiment"];
+                    /** @description Campaña o lista CSV de campañas */
+                    campaign?: string;
+                    /** @description Estrategia o lista CSV de estrategias */
+                    strategy?: string;
+                    /** @description Hashtag o lista CSV de hashtags (con o sin */
+                    hashtag?: string;
+                    comparison_mode?: components["schemas"]["SocialComparisonMode"];
+                    comparison_days?: number;
+                    sort?: components["schemas"]["SocialPostSort"];
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Posts sociales */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["MonitorSocialPostsResponse"];
+                    };
+                };
+                401: components["responses"]["Unauthorized"];
+                403: components["responses"]["Forbidden"];
+                422: components["responses"]["ValidationError"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/monitor/social/risk": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Tendencias de riesgo y sentimiento social analytics V2 */
+        get: {
+            parameters: {
+                query?: {
+                    preset?: components["schemas"]["SocialDatePreset"];
+                    window_days?: 7 | 30 | 90;
+                    from?: string;
+                    to?: string;
+                    /** @description Canal o lista CSV de canales (`facebook,instagram,...`) */
+                    channel?: string;
+                    /** @description Cuenta o lista CSV de cuentas */
+                    account?: string;
+                    /** @description Tipo de post o lista CSV de tipos (`unknown` para vacios) */
+                    post_type?: string;
+                    /** @description Campaña o lista CSV de campañas */
+                    campaign?: string;
+                    /** @description Estrategia o lista CSV de estrategias */
+                    strategy?: string;
+                    /** @description Hashtag o lista CSV de hashtags (con o sin */
+                    hashtag?: string;
+                    comparison_mode?: components["schemas"]["SocialComparisonMode"];
+                    comparison_days?: number;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Riesgo social */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["MonitorSocialRiskResponse"];
+                    };
+                };
+                401: components["responses"]["Unauthorized"];
+                403: components["responses"]["Forbidden"];
+                422: components["responses"]["ValidationError"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/monitor/social/charts/heatmap": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Dataset heatmap dia x mes para metrica seleccionada */
+        get: {
+            parameters: {
+                query?: {
+                    preset?: components["schemas"]["SocialDatePreset"];
+                    window_days?: 7 | 30 | 90;
+                    from?: string;
+                    to?: string;
+                    /** @description Canal o lista CSV de canales (`facebook,instagram,...`) */
+                    channel?: string;
+                    /** @description Cuenta o lista CSV de cuentas */
+                    account?: string;
+                    /** @description Tipo de post o lista CSV de tipos (`unknown` para vacios) */
+                    post_type?: string;
+                    /** @description Campaña o lista CSV de campañas */
+                    campaign?: string;
+                    /** @description Estrategia o lista CSV de estrategias */
+                    strategy?: string;
+                    /** @description Hashtag o lista CSV de hashtags (con o sin */
+                    hashtag?: string;
+                    comparison_mode?: components["schemas"]["SocialComparisonMode"];
+                    comparison_days?: number;
+                    metric?: components["schemas"]["SocialHeatmapMetric"];
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Dataset heatmap */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["MonitorSocialHeatmapResponse"];
+                    };
+                };
+                401: components["responses"]["Unauthorized"];
+                403: components["responses"]["Forbidden"];
+                422: components["responses"]["ValidationError"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/monitor/social/charts/scatter": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Dataset scatter ER vs exposicion por dimension */
+        get: {
+            parameters: {
+                query?: {
+                    preset?: components["schemas"]["SocialDatePreset"];
+                    window_days?: 7 | 30 | 90;
+                    from?: string;
+                    to?: string;
+                    /** @description Canal o lista CSV de canales (`facebook,instagram,...`) */
+                    channel?: string;
+                    /** @description Cuenta o lista CSV de cuentas */
+                    account?: string;
+                    /** @description Tipo de post o lista CSV de tipos (`unknown` para vacios) */
+                    post_type?: string;
+                    /** @description Campaña o lista CSV de campañas */
+                    campaign?: string;
+                    /** @description Estrategia o lista CSV de estrategias */
+                    strategy?: string;
+                    /** @description Hashtag o lista CSV de hashtags (con o sin */
+                    hashtag?: string;
+                    comparison_mode?: components["schemas"]["SocialComparisonMode"];
+                    comparison_days?: number;
+                    dimension?: components["schemas"]["SocialScatterDimension"];
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Dataset scatter */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["MonitorSocialScatterResponse"];
+                    };
+                };
+                401: components["responses"]["Unauthorized"];
+                403: components["responses"]["Forbidden"];
+                422: components["responses"]["ValidationError"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/monitor/social/charts/er-breakdown": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Dataset agregado ER por dimension analitica */
+        get: {
+            parameters: {
+                query?: {
+                    preset?: components["schemas"]["SocialDatePreset"];
+                    window_days?: 7 | 30 | 90;
+                    from?: string;
+                    to?: string;
+                    /** @description Canal o lista CSV de canales (`facebook,instagram,...`) */
+                    channel?: string;
+                    /** @description Cuenta o lista CSV de cuentas */
+                    account?: string;
+                    /** @description Tipo de post o lista CSV de tipos (`unknown` para vacios) */
+                    post_type?: string;
+                    /** @description Campaña o lista CSV de campañas */
+                    campaign?: string;
+                    /** @description Estrategia o lista CSV de estrategias */
+                    strategy?: string;
+                    /** @description Hashtag o lista CSV de hashtags (con o sin */
+                    hashtag?: string;
+                    comparison_mode?: components["schemas"]["SocialComparisonMode"];
+                    comparison_days?: number;
+                    dimension?: components["schemas"]["SocialErBreakdownDimension"];
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Dataset ER por dimension */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["MonitorSocialErBreakdownResponse"];
+                    };
+                };
+                401: components["responses"]["Unauthorized"];
+                403: components["responses"]["Forbidden"];
+                422: components["responses"]["ValidationError"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/monitor/social/targets/er": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Metas ER por canal para 2026 (auto + overrides) */
+        get: {
+            parameters: {
+                query?: {
+                    year?: number;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Metas ER por canal */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["MonitorSocialErTargetsResponse"];
+                    };
+                };
+                401: components["responses"]["Unauthorized"];
+                403: components["responses"]["Forbidden"];
+                422: components["responses"]["ValidationError"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Actualizar metas ER por canal (solo Admin) */
+        patch: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["PatchMonitorSocialErTargetsRequest"];
+                };
+            };
+            responses: {
+                /** @description Metas ER actualizadas */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["MonitorSocialErTargetsResponse"];
+                    };
+                };
+                401: components["responses"]["Unauthorized"];
+                403: components["responses"]["Forbidden"];
+                422: components["responses"]["ValidationError"];
+            };
+        };
+        trace?: never;
+    };
+    "/v1/monitor/social/hashtags/backfill": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Ejecutar backfill idempotente de hashtags historicos */
+        post: {
+            parameters: {
+                query?: {
+                    limit?: number;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Backfill aceptado */
+                202: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["MonitorSocialHashtagBackfillResponse"];
+                    };
+                };
+                401: components["responses"]["Unauthorized"];
+                403: components["responses"]["Forbidden"];
+                422: components["responses"]["ValidationError"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/monitor/social/etl-quality": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Calidad ETL y reconciliacion S3-DB */
+        get: {
+            parameters: {
+                query?: {
+                    limit?: components["parameters"]["Limit"];
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Calidad ETL social */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["MonitorSocialEtlQualityResponse"];
+                    };
+                };
+                401: components["responses"]["Unauthorized"];
+                403: components["responses"]["Forbidden"];
+                422: components["responses"]["ValidationError"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/monitor/social/export.xlsx": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Export Excel social analytics V2 */
+        get: {
+            parameters: {
+                query?: {
+                    preset?: components["schemas"]["SocialDatePreset"];
+                    window_days?: 7 | 30 | 90;
+                    from?: string;
+                    to?: string;
+                    /** @description Canal o lista CSV de canales (`facebook,instagram,...`) */
+                    channel?: string;
+                    /** @description Cuenta o lista CSV de cuentas */
+                    account?: string;
+                    /** @description Tipo de post o lista CSV de tipos (`unknown` para vacios) */
+                    post_type?: string;
+                    sentiment?: components["schemas"]["SocialSentiment"];
+                    /** @description Campaña o lista CSV de campañas */
+                    campaign?: string;
+                    /** @description Estrategia o lista CSV de estrategias */
+                    strategy?: string;
+                    /** @description Hashtag o lista CSV de hashtags (con o sin */
+                    hashtag?: string;
+                    comparison_mode?: components["schemas"]["SocialComparisonMode"];
+                    comparison_days?: number;
+                    sort?: components["schemas"]["SocialPostSort"];
+                    min_posts?: number;
+                    min_exposure?: number;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Archivo Excel */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": string;
+                    };
+                };
+                401: components["responses"]["Unauthorized"];
+                403: components["responses"]["Forbidden"];
+                422: components["responses"]["ValidationError"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/monitor/social/runs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Historial de corridas de sync social */
+        get: {
+            parameters: {
+                query?: {
+                    /** @description Cursor opaco para paginacion */
+                    cursor?: components["parameters"]["Cursor"];
+                    limit?: components["parameters"]["Limit"];
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Corridas sociales */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["MonitorSocialRunsResponse"];
+                    };
+                };
+                401: components["responses"]["Unauthorized"];
+                403: components["responses"]["Forbidden"];
+                422: components["responses"]["ValidationError"];
+            };
+        };
+        put?: never;
+        /** Disparar corrida manual async de sync social */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["CreateMonitorSocialRunRequest"];
+                };
+            };
+            responses: {
+                /** @description Corrida aceptada */
+                202: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["MonitorSocialRunAccepted"];
+                    };
+                };
+                401: components["responses"]["Unauthorized"];
+                403: components["responses"]["Forbidden"];
+                422: components["responses"]["ValidationError"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/monitor/social/settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Obtener configuracion social de umbrales y metas */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Configuracion social */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["MonitorSocialSettings"];
+                    };
+                };
+                401: components["responses"]["Unauthorized"];
+                403: components["responses"]["Forbidden"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Actualizar configuracion social (Admin) */
+        patch: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["PatchMonitorSocialSettingsRequest"];
+                };
+            };
+            responses: {
+                /** @description Configuracion actualizada */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["MonitorSocialSettings"];
+                    };
+                };
+                401: components["responses"]["Unauthorized"];
+                403: components["responses"]["Forbidden"];
+                422: components["responses"]["ValidationError"];
+            };
+        };
+        trace?: never;
+    };
     "/v1/monitor/incidents": {
         parameters: {
             query?: never;
@@ -2414,6 +3180,10 @@ export interface components {
         AnalysisRunScope: "overview" | "channel" | "competitors" | "custom";
         /** @enum {string} */
         AnalysisRunStatus: "queued" | "running" | "completed" | "failed";
+        /** @enum {string} */
+        RunStatus: "queued" | "running" | "completed" | "failed";
+        /** @enum {string} */
+        TriggerType: "scheduled" | "manual";
         Term: {
             /** Format: uuid */
             id: string;
@@ -2922,6 +3692,509 @@ export interface components {
                 competencia: components["schemas"]["MonitorScopeKpi"];
             };
             diagnostics: components["schemas"]["MonitorDiagnostics"];
+        };
+        /** @enum {string} */
+        SocialChannel: "facebook" | "instagram" | "linkedin" | "tiktok";
+        /** @enum {string} */
+        SocialSentiment: "positive" | "negative" | "neutral" | "unknown";
+        /** @enum {string} */
+        SocialDatePreset: "all" | "y2024" | "y2025" | "ytd" | "90d" | "30d" | "7d" | "last_quarter" | "custom";
+        /** @enum {string} */
+        SocialComparisonMode: "weekday_aligned_week" | "exact_days" | "same_period_last_year";
+        /** @enum {string} */
+        SocialHeatmapMetric: "er" | "engagement_total" | "likes" | "comments" | "shares" | "views" | "view_rate";
+        /** @enum {string} */
+        SocialScatterDimension: "post_type" | "channel" | "account" | "campaign" | "strategy" | "hashtag";
+        /** @enum {string} */
+        SocialErBreakdownDimension: "hashtag" | "word" | "post_type" | "publish_frequency" | "weekday";
+        /** @enum {string} */
+        SocialTrendGranularity: "auto" | "day" | "week" | "month";
+        /** @enum {string} */
+        SocialPostSort: "published_at_desc" | "exposure_desc" | "engagement_desc";
+        /** @enum {string} */
+        SocialReconciliationStatus: "ok" | "warning" | "error" | "unknown";
+        /** @enum {string} */
+        SocialSyncPhase: "ingest" | "classify" | "aggregate" | "reconcile" | "alerts";
+        /** @enum {string} */
+        SocialSyncPhaseState: "pending" | "running" | "completed" | "failed" | "skipped";
+        SocialRunCounters: {
+            objects_discovered: number;
+            objects_processed: number;
+            objects_skipped: number;
+            rows_parsed: number;
+            rows_persisted: number;
+            rows_classified: number;
+            rows_pending_classification: number;
+            rows_unknown_sentiment: number;
+            malformed_rows: number;
+            anomalous_object_keys: number;
+        };
+        MonitorSocialKpis: {
+            posts: number;
+            exposure_total: number;
+            engagement_total: number;
+            er_global: number;
+            classified_items: number;
+            positivos: number;
+            negativos: number;
+            neutrales: number;
+            sentimiento_neto: number;
+            riesgo_activo: number;
+            shs: number;
+            focus_account: string | null;
+            focus_account_sov: number;
+        };
+        MonitorSocialDelta: {
+            posts: number;
+            exposure_total: number;
+            engagement_total: number;
+            er_global: number;
+            sentimiento_neto: number;
+            riesgo_activo: number;
+            shs: number;
+            focus_account_sov: number;
+        };
+        MonitorSocialComparison: {
+            mode_applied: components["schemas"]["SocialComparisonMode"];
+            /** Format: date-time */
+            current_window_start: string;
+            /** Format: date-time */
+            current_window_end: string;
+            /** Format: date-time */
+            previous_window_start: string;
+            /** Format: date-time */
+            previous_window_end: string;
+            label: string;
+        };
+        MonitorSocialPreviousPeriod: {
+            posts: number;
+            exposure_total: number;
+            engagement_total: number;
+            er_global: number;
+            sentimiento_neto: number;
+            riesgo_activo: number;
+            shs: number;
+            focus_account_sov: number;
+        };
+        MonitorSocialErTargetProgressItem: {
+            channel: components["schemas"]["SocialChannel"];
+            baseline_2025_er: number;
+            target_2026_er: number;
+            current_er: number;
+            gap: number;
+            progress_pct: number;
+            /** @enum {string} */
+            source: "auto" | "manual";
+        };
+        MonitorSocialTargetProgress: {
+            quarterly_sov_target_pp: number;
+            quarterly_sov_delta_pp: number;
+            quarterly_sov_progress_pct: number;
+            target_shs: number;
+            shs_gap: number;
+            shs_progress_pct: number;
+            er_by_channel: components["schemas"]["MonitorSocialErTargetProgressItem"][];
+        };
+        MonitorSocialTrendItem: {
+            date: string;
+            posts: number;
+            exposure_total: number;
+            engagement_total: number;
+            er_global: number;
+            sentimiento_neto: number;
+            riesgo_activo: number;
+        };
+        MonitorSocialTrendSeriesItem: {
+            /** Format: date-time */
+            bucket_start: string;
+            /** Format: date-time */
+            bucket_end: string;
+            bucket_label: string;
+            posts: number;
+            exposure_total: number;
+            engagement_total: number;
+            er_global: number;
+            sentimiento_neto: number;
+            riesgo_activo: number;
+            shs: number;
+        };
+        MonitorSocialByChannelItem: {
+            channel: components["schemas"]["SocialChannel"];
+            posts: number;
+            exposure_total: number;
+            engagement_total: number;
+            er_global: number;
+            sentimiento_neto: number;
+            riesgo_activo: number;
+            sov_interno: number;
+        };
+        MonitorSocialByAccountItem: {
+            account_name: string;
+            channel_mix: components["schemas"]["SocialChannel"][];
+            posts: number;
+            exposure_total: number;
+            engagement_total: number;
+            er_global: number;
+            sentimiento_neto: number;
+            riesgo_activo: number;
+            sov_interno: number;
+        };
+        MonitorSocialDiagnostics: {
+            insufficient_data: boolean;
+            unclassified_items: number;
+            unknown_sentiment_items: number;
+            last_run_status: string | null;
+            processed_objects: number;
+            anomalous_object_keys: number;
+            rows_pending_classification: number;
+            /** Format: date-time */
+            window_start: string;
+            /** Format: date-time */
+            window_end: string;
+        };
+        MonitorSocialCoverage: {
+            /** Format: date-time */
+            db_min_date: string | null;
+            /** Format: date-time */
+            db_max_date: string | null;
+            /** Format: date-time */
+            s3_min_date: string | null;
+            /** Format: date-time */
+            s3_max_date: string | null;
+        };
+        MonitorSocialSettings: {
+            /** Format: uuid */
+            id: string;
+            key: string;
+            focus_account: string | null;
+            target_quarterly_sov_pp: number;
+            target_shs: number;
+            risk_threshold: number;
+            sentiment_drop_threshold: number;
+            er_drop_threshold: number;
+            alert_cooldown_minutes: number;
+            metadata: {
+                [key: string]: unknown;
+            };
+            /** Format: uuid */
+            updated_by_user_id: string | null;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+        };
+        MonitorSocialOverviewResponse: {
+            /** Format: date-time */
+            generated_at: string;
+            /** Format: date-time */
+            last_etl_at: string | null;
+            /** @constant */
+            official: false;
+            preset: components["schemas"]["SocialDatePreset"];
+            window_days: number;
+            /** Format: date-time */
+            window_start: string;
+            /** Format: date-time */
+            window_end: string;
+            comparison: components["schemas"]["MonitorSocialComparison"];
+            trend_granularity_applied: components["schemas"]["SocialTrendGranularity"];
+            kpis: components["schemas"]["MonitorSocialKpis"];
+            previous_period: components["schemas"]["MonitorSocialPreviousPeriod"];
+            delta_vs_previous: components["schemas"]["MonitorSocialDelta"];
+            target_progress: components["schemas"]["MonitorSocialTargetProgress"];
+            trend_series: components["schemas"]["MonitorSocialTrendSeriesItem"][];
+            trend_daily: components["schemas"]["MonitorSocialTrendItem"][];
+            by_channel: components["schemas"]["MonitorSocialByChannelItem"][];
+            by_account: components["schemas"]["MonitorSocialByAccountItem"][];
+            diagnostics: components["schemas"]["MonitorSocialDiagnostics"];
+            coverage: components["schemas"]["MonitorSocialCoverage"];
+            reconciliation_status: components["schemas"]["SocialReconciliationStatus"];
+            settings: components["schemas"]["MonitorSocialSettings"];
+        };
+        MonitorSocialAccountItem: {
+            account_name: string;
+            channel_mix: components["schemas"]["SocialChannel"][];
+            posts: number;
+            exposure_total: number;
+            engagement_total: number;
+            er_ponderado: number;
+            sentimiento_neto: number;
+            riesgo_activo: number;
+            sov_interno: number;
+            delta_exposure: number;
+            delta_engagement: number;
+            delta_er: number;
+            meets_threshold: boolean;
+        };
+        MonitorSocialAccountsResponse: {
+            /** Format: date-time */
+            generated_at: string;
+            /** Format: date-time */
+            last_etl_at: string | null;
+            preset: components["schemas"]["SocialDatePreset"];
+            /** Format: date-time */
+            window_start: string;
+            /** Format: date-time */
+            window_end: string;
+            min_posts: number;
+            min_exposure: number;
+            items: components["schemas"]["MonitorSocialAccountItem"][];
+        };
+        MonitorSocialRiskTrendItem: {
+            date: string;
+            clasificados: number;
+            positivos: number;
+            negativos: number;
+            neutrales: number;
+            sentimiento_neto: number;
+            riesgo_activo: number;
+        };
+        MonitorSocialRiskChannelItem: {
+            channel: components["schemas"]["SocialChannel"];
+            clasificados: number;
+            negativos: number;
+            riesgo_activo: number;
+        };
+        MonitorSocialRiskAccountItem: {
+            account_name: string;
+            clasificados: number;
+            negativos: number;
+            riesgo_activo: number;
+        };
+        MonitorSocialAlertItem: {
+            /** Format: uuid */
+            id: string;
+            severity: components["schemas"]["MonitorSeverity"];
+            status: components["schemas"]["IncidentStatus"];
+            risk_score: number;
+            classified_items: number;
+            /** Format: date-time */
+            updated_at: string;
+            /** Format: date-time */
+            cooldown_until: string | null;
+        };
+        MonitorSocialRiskResponse: {
+            /** Format: date-time */
+            generated_at: string;
+            /** Format: date-time */
+            last_etl_at: string | null;
+            preset: components["schemas"]["SocialDatePreset"];
+            /** Format: date-time */
+            window_start: string;
+            /** Format: date-time */
+            window_end: string;
+            sentiment_trend: components["schemas"]["MonitorSocialRiskTrendItem"][];
+            by_channel: components["schemas"]["MonitorSocialRiskChannelItem"][];
+            by_account: components["schemas"]["MonitorSocialRiskAccountItem"][];
+            alerts: components["schemas"]["MonitorSocialAlertItem"][];
+        };
+        MonitorSocialPostItem: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            content_item_id: string;
+            channel: components["schemas"]["SocialChannel"];
+            account_name: string;
+            external_post_id: string;
+            post_url: string;
+            post_type: string | null;
+            /** Format: date-time */
+            published_at: string | null;
+            title: string;
+            text: string | null;
+            sentiment: components["schemas"]["SocialSentiment"];
+            sentiment_raw: string | null;
+            sentiment_confidence: number | null;
+            exposure: number;
+            engagement_total: number;
+            impressions: number;
+            reach: number;
+            clicks: number;
+            likes: number;
+            comments: number;
+            shares: number;
+            views: number;
+            source_score: number;
+            campaign: string | null;
+            strategies: string[];
+            hashtags: string[];
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+        };
+        MonitorSocialPostsResponse: {
+            items: components["schemas"]["MonitorSocialPostItem"][];
+            page_info: components["schemas"]["PageInfo"];
+        };
+        MonitorSocialHeatmapPoint: {
+            month: number;
+            weekday: number;
+            value: number;
+            posts: number;
+        };
+        MonitorSocialHeatmapResponse: {
+            /** Format: date-time */
+            generated_at: string;
+            metric: components["schemas"]["SocialHeatmapMetric"];
+            items: components["schemas"]["MonitorSocialHeatmapPoint"][];
+        };
+        MonitorSocialScatterItem: {
+            label: string;
+            exposure_total: number;
+            engagement_total: number;
+            er_global: number;
+            posts: number;
+        };
+        MonitorSocialScatterResponse: {
+            /** Format: date-time */
+            generated_at: string;
+            dimension: components["schemas"]["SocialScatterDimension"];
+            items: components["schemas"]["MonitorSocialScatterItem"][];
+        };
+        MonitorSocialErBreakdownItem: {
+            label: string;
+            posts: number;
+            exposure_total: number;
+            engagement_total: number;
+            er_global: number;
+        };
+        MonitorSocialErBreakdownResponse: {
+            /** Format: date-time */
+            generated_at: string;
+            dimension: components["schemas"]["SocialErBreakdownDimension"];
+            items: components["schemas"]["MonitorSocialErBreakdownItem"][];
+        };
+        MonitorSocialErTargetsResponse: {
+            /** Format: date-time */
+            generated_at: string;
+            /** Format: date-time */
+            last_etl_at: string | null;
+            year: number;
+            items: components["schemas"]["MonitorSocialErTargetProgressItem"][];
+        };
+        PatchMonitorSocialErTargetItem: {
+            channel: components["schemas"]["SocialChannel"];
+            /** @enum {string} */
+            source: "auto" | "manual";
+            target_2026_er?: number;
+            override_reason?: string;
+        };
+        PatchMonitorSocialErTargetsRequest: {
+            year?: number;
+            targets: components["schemas"]["PatchMonitorSocialErTargetItem"][];
+        };
+        MonitorSocialHashtagBackfillResponse: {
+            /** @enum {string} */
+            status: "accepted";
+            updated_rows: number;
+        };
+        MonitorSocialReconciliationItem: {
+            channel: components["schemas"]["SocialChannel"];
+            s3Rows: number;
+            dbRows: number;
+            deltaRows: number;
+            /** Format: date-time */
+            s3MinDate: string | null;
+            /** Format: date-time */
+            s3MaxDate: string | null;
+            /** Format: date-time */
+            dbMinDate: string | null;
+            /** Format: date-time */
+            dbMaxDate: string | null;
+            status: components["schemas"]["SocialReconciliationStatus"];
+            /** Format: uuid */
+            runId: string;
+            /** Format: date-time */
+            createdAt: string;
+        };
+        MonitorSocialRunItem: {
+            /** Format: uuid */
+            id: string;
+            trigger_type: components["schemas"]["TriggerType"];
+            status: components["schemas"]["RunStatus"];
+            request_id: string | null;
+            /** Format: date-time */
+            queued_at: string;
+            /** Format: date-time */
+            started_at: string | null;
+            /** Format: date-time */
+            finished_at: string | null;
+            current_phase: components["schemas"]["SocialSyncPhase"];
+            phase_status: {
+                [key: string]: unknown;
+            } | null;
+            counters: components["schemas"]["SocialRunCounters"];
+            metrics: {
+                [key: string]: unknown;
+            };
+            error_message: string | null;
+            /** Format: date-time */
+            created_at: string;
+        };
+        MonitorSocialRunsResponse: {
+            items: components["schemas"]["MonitorSocialRunItem"][];
+            page_info: components["schemas"]["PageInfo"];
+        };
+        MonitorSocialEtlQualityResponse: {
+            /** Format: date-time */
+            generated_at: string;
+            /** Format: date-time */
+            last_etl_at: string | null;
+            coverage: {
+                /** Format: date-time */
+                db_min_date: string | null;
+                /** Format: date-time */
+                db_max_date: string | null;
+                /** Format: date-time */
+                s3_min_date: string | null;
+                /** Format: date-time */
+                s3_max_date: string | null;
+            };
+            reconciliation_status: components["schemas"]["SocialReconciliationStatus"];
+            reconciliation_by_channel: components["schemas"]["MonitorSocialReconciliationItem"][];
+            runs: {
+                /** Format: uuid */
+                id: string;
+                triggerType: components["schemas"]["TriggerType"];
+                status: components["schemas"]["RunStatus"];
+                /** Format: date-time */
+                queuedAt: string;
+                /** Format: date-time */
+                startedAt: string | null;
+                /** Format: date-time */
+                finishedAt: string | null;
+                currentPhase: components["schemas"]["SocialSyncPhase"];
+                counters: components["schemas"]["SocialRunCounters"];
+                malformedRows: number;
+                errorMessage: string | null;
+            }[];
+        };
+        CreateMonitorSocialRunRequest: {
+            /** @default false */
+            force: boolean;
+            bucket?: string;
+            prefix?: string;
+        };
+        MonitorSocialRunAccepted: {
+            /** @constant */
+            status: "accepted";
+            /** Format: uuid */
+            run_id: string;
+            /** Format: date-time */
+            queued_at: string;
+        };
+        PatchMonitorSocialSettingsRequest: {
+            focus_account?: string | null;
+            target_quarterly_sov_pp?: number;
+            target_shs?: number;
+            risk_threshold?: number;
+            sentiment_drop_threshold?: number;
+            er_drop_threshold?: number;
+            alert_cooldown_minutes?: number;
+            metadata?: {
+                [key: string]: unknown;
+            };
         };
         AnalyzeOverviewDelta: {
             items: number;

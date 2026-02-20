@@ -138,6 +138,18 @@ variable "ingestion_default_terms" {
   default     = ""
 }
 
+variable "social_raw_bucket_name" {
+  type        = string
+  description = "Bucket de origen para ETL social (archivos CSV organic)."
+  default     = "claro-dataslayer-dump"
+}
+
+variable "social_raw_prefix" {
+  type        = string
+  description = "Prefijo de origen para ETL social dentro del bucket."
+  default     = "raw/organic/"
+}
+
 variable "cognito_domain_prefix" {
   type        = string
   description = "Prefijo de dominio Cognito Hosted UI (debe ser unico globalmente). Si es null, se construye automaticamente."
