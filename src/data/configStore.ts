@@ -1189,7 +1189,6 @@ class ConfigStore {
     const setupTx = await this.rds.beginTransaction();
     let connector: ConnectorRecord | null = null;
     let runId = "";
-    const startedAt = new Date();
 
     try {
       const connectorRes = await this.rds.execute(
