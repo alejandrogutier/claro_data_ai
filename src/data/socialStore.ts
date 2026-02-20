@@ -1152,6 +1152,21 @@ const parseMetricRow = (row: SqlRow | undefined): SocialMetricRow | null => {
   };
 };
 
+const isLegacySocialSchemaError = (error: unknown): boolean => {
+  const message = String((error as { message?: unknown })?.message ?? "").toLowerCase();
+  if (!message) return false;
+  const mentionsMissingObject =
+    message.includes("does not exist") || message.includes("undefined table") || message.includes("undefined column");
+  if (!mentionsMissingObject) return false;
+  return (
+    message.includes("socialpoststrategy") ||
+    message.includes("socialposthashtag") ||
+    message.includes("campaigntaxonomyid") ||
+    message.includes("socialpostcomment") ||
+    message.includes("\"hashtag\"")
+  );
+};
+
 const toMetricLong = (value: unknown): number => {
   if (typeof value === "number" && Number.isFinite(value)) return Math.max(0, Math.floor(value));
   if (typeof value === "string") {
@@ -1807,9 +1822,80 @@ class SocialStore {
         : sort === "engagement_desc"
           ? `spm."engagementTotal" DESC, COALESCE(spm."publishedAt", ci."publishedAt", ci."createdAt") DESC, spm."id" DESC`
           : `COALESCE(spm."publishedAt", ci."publishedAt", ci."createdAt") DESC, spm."id" DESC`;
+    const statementParams = [...params, sqlLong("limit", limit), sqlLong("offset", offset)];
+    const fullSql = `
+      SELECT
+        spm."id"::text,
+        spm."contentItemId"::text,
+        spm."channel",
+        spm."accountName",
+        spm."externalPostId",
+        spm."postUrl",
+        spm."postType",
+        COALESCE(spm."publishedAt", ci."publishedAt", ci."createdAt"),
+        ci."title",
+        COALESCE(ci."summary", ci."content"),
+        cls."sentimiento",
+        cls."confianza"::text,
+        spm."exposure"::text,
+        spm."engagementTotal"::text,
+        spm."impressions"::text,
+        spm."reach"::text,
+        spm."clicks"::text,
+        spm."likes"::text,
+        spm."comments"::text,
+        spm."shares"::text,
+        spm."views"::text,
+        COALESCE(awario_comments."awario_comments_count", '0')::text,
+        ci."sourceScore"::text,
+        te_campaign."key",
+        COALESCE(strategies."strategy_keys", '[]'::json)::text,
+        COALESCE(hashtags."hashtag_slugs", '[]'::json)::text,
+        spm."createdAt",
+        spm."updatedAt"
+      FROM "public"."SocialPostMetric" spm
+      JOIN "public"."ContentItem" ci ON ci."id" = spm."contentItemId"
+      LEFT JOIN "public"."TaxonomyEntry" te_campaign ON te_campaign."id" = spm."campaignTaxonomyId"
+      LEFT JOIN LATERAL (
+        SELECT
+          c."sentimiento",
+          c."confianza"
+        FROM "public"."Classification" c
+        WHERE c."contentItemId" = ci."id"
+        ORDER BY c."isOverride" DESC, c."updatedAt" DESC, c."createdAt" DESC
+        LIMIT 1
+      ) cls ON TRUE
+      LEFT JOIN LATERAL (
+        SELECT COUNT(*)::text AS awario_comments_count
+        FROM "public"."SocialPostComment" spc
+        WHERE spc."socialPostMetricId" = spm."id"
+      ) awario_comments ON TRUE
+      LEFT JOIN LATERAL (
+        SELECT to_json(COALESCE(array_agg(DISTINCT te_strategy."key"), ARRAY[]::text[])) AS strategy_keys
+        FROM "public"."SocialPostStrategy" sps
+        JOIN "public"."TaxonomyEntry" te_strategy ON te_strategy."id" = sps."taxonomyEntryId"
+        WHERE sps."socialPostMetricId" = spm."id"
+      ) strategies ON TRUE
+      LEFT JOIN LATERAL (
+        SELECT to_json(COALESCE(array_agg(DISTINCT h."slug"), ARRAY[]::text[])) AS hashtag_slugs
+        FROM "public"."SocialPostHashtag" sph
+        JOIN "public"."Hashtag" h ON h."id" = sph."hashtagId"
+        WHERE sph."socialPostMetricId" = spm."id"
+      ) hashtags ON TRUE
+      ${clause}
+      ORDER BY ${orderBy}
+      LIMIT :limit OFFSET :offset
+    `;
 
-    const response = await this.rds.execute(
-      `
+    try {
+      const response = await this.rds.execute(fullSql, statementParams);
+      return (response.records ?? []).map(parsePostRow).filter((item): item is SocialPostRecord => item !== null);
+    } catch (error) {
+      if (!isLegacySocialSchemaError(error)) {
+        throw error;
+      }
+
+      const legacySql = `
         SELECT
           spm."id"::text,
           spm."contentItemId"::text,
@@ -1832,16 +1918,15 @@ class SocialStore {
           spm."comments"::text,
           spm."shares"::text,
           spm."views"::text,
-          COALESCE(awario_comments."awario_comments_count", '0')::text,
+          '0'::text AS awario_comments_count,
           ci."sourceScore"::text,
-          te_campaign."key",
-          COALESCE(strategies."strategy_keys", '[]'::json)::text,
-          COALESCE(hashtags."hashtag_slugs", '[]'::json)::text,
+          NULL::text AS campaign_key,
+          '[]'::text AS strategy_keys,
+          '[]'::text AS hashtag_slugs,
           spm."createdAt",
           spm."updatedAt"
         FROM "public"."SocialPostMetric" spm
         JOIN "public"."ContentItem" ci ON ci."id" = spm."contentItemId"
-        LEFT JOIN "public"."TaxonomyEntry" te_campaign ON te_campaign."id" = spm."campaignTaxonomyId"
         LEFT JOIN LATERAL (
           SELECT
             c."sentimiento",
@@ -1851,31 +1936,14 @@ class SocialStore {
           ORDER BY c."isOverride" DESC, c."updatedAt" DESC, c."createdAt" DESC
           LIMIT 1
         ) cls ON TRUE
-        LEFT JOIN LATERAL (
-          SELECT COUNT(*)::text AS awario_comments_count
-          FROM "public"."SocialPostComment" spc
-          WHERE spc."socialPostMetricId" = spm."id"
-        ) awario_comments ON TRUE
-        LEFT JOIN LATERAL (
-          SELECT to_json(COALESCE(array_agg(DISTINCT te_strategy."key"), ARRAY[]::text[])) AS strategy_keys
-          FROM "public"."SocialPostStrategy" sps
-          JOIN "public"."TaxonomyEntry" te_strategy ON te_strategy."id" = sps."taxonomyEntryId"
-          WHERE sps."socialPostMetricId" = spm."id"
-        ) strategies ON TRUE
-        LEFT JOIN LATERAL (
-          SELECT to_json(COALESCE(array_agg(DISTINCT h."slug"), ARRAY[]::text[])) AS hashtag_slugs
-          FROM "public"."SocialPostHashtag" sph
-          JOIN "public"."Hashtag" h ON h."id" = sph."hashtagId"
-          WHERE sph."socialPostMetricId" = spm."id"
-        ) hashtags ON TRUE
         ${clause}
         ORDER BY ${orderBy}
         LIMIT :limit OFFSET :offset
-      `,
-      [...params, sqlLong("limit", limit), sqlLong("offset", offset)]
-    );
+      `;
 
-    return (response.records ?? []).map(parsePostRow).filter((item): item is SocialPostRecord => item !== null);
+      const response = await this.rds.execute(legacySql, statementParams);
+      return (response.records ?? []).map(parsePostRow).filter((item): item is SocialPostRecord => item !== null);
+    }
   }
 
   private async listMetricRowsRaw(
@@ -2599,7 +2667,21 @@ class SocialStore {
   async listAllPosts(filters: SocialOverviewFilters, sort: SortMode = "published_at_desc", limit = 10000): Promise<SocialPostRecord[]> {
     const safeLimit = Math.min(100000, Math.max(1, Math.floor(limit)));
     const { windowStart, windowEnd } = this.normalizeOverviewWindow(filters);
-    return this.listPostsRaw(filters, windowStart, windowEnd, sort, safeLimit, 0);
+    const pageSize = Math.min(500, safeLimit);
+    const items: SocialPostRecord[] = [];
+    let offset = 0;
+
+    while (items.length < safeLimit) {
+      const remaining = safeLimit - items.length;
+      const batchSize = Math.min(pageSize, remaining);
+      const page = await this.listPostsRaw(filters, windowStart, windowEnd, sort, batchSize, offset);
+      if (page.length === 0) break;
+      items.push(...page);
+      if (page.length < batchSize) break;
+      offset += page.length;
+    }
+
+    return items;
   }
 
   async listPostComments(filters: SocialPostCommentsFilters): Promise<SocialPostCommentsPage> {
