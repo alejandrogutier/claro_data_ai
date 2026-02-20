@@ -675,15 +675,81 @@ const parseJsonTextArray = (value: string | null): string[] => {
   }
 };
 
+const normalizeHashtagToken = (value: string): string =>
+  value
+    .trim()
+    .normalize("NFKC")
+    .toLocaleLowerCase("es-CO")
+    .replace(/^#+/u, "")
+    .replace(/[^\p{L}\p{N}_]+/gu, "");
+
 const extractHashtagsFromText = (value: string): string[] =>
   Array.from(
     new Set(
-      (value.match(/#[a-zA-Z0-9_]+/g) ?? [])
-        .map((item) => item.replace(/^#+/, "").toLowerCase())
-        .map((item) => item.replace(/[^a-z0-9_]/g, ""))
+      (value.match(/#[\p{L}\p{N}\p{M}_]+/gu) ?? [])
+        .map((item) => normalizeHashtagToken(item))
         .filter((item) => item.length >= 2)
     )
   ).slice(0, 20);
+
+const normalizeAccountToken = (value: string): string =>
+  value
+    .trim()
+    .normalize("NFKC")
+    .toLocaleLowerCase("es-CO")
+    .replace(/^@+/u, "")
+    .replace(/\s+/g, " ");
+
+const CANONICAL_ACCOUNT_GROUPS: Array<{ canonical: string; aliases: string[] }> = [
+  { canonical: "Claro Colombia", aliases: ["Claro Colombia", "clarocolombia"] },
+  { canonical: "Claro Empresas", aliases: ["Claro Empresas", "claroempresasco"] }
+];
+
+const ACCOUNT_CANONICAL_BY_KEY = new Map<string, string>();
+const ACCOUNT_GROUP_TOKENS_BY_KEY = new Map<string, string[]>();
+const ACCOUNT_CANONICAL_KEY_BY_ALIAS = new Map<string, string>();
+
+for (const group of CANONICAL_ACCOUNT_GROUPS) {
+  const canonicalKey = normalizeAccountToken(group.canonical);
+  if (!canonicalKey) continue;
+  const tokens = Array.from(
+    new Set(
+      [group.canonical, ...group.aliases]
+        .map((item) => normalizeAccountToken(item))
+        .filter((item) => item.length > 0)
+    )
+  );
+  ACCOUNT_CANONICAL_BY_KEY.set(canonicalKey, group.canonical);
+  ACCOUNT_GROUP_TOKENS_BY_KEY.set(canonicalKey, tokens);
+  for (const token of tokens) {
+    ACCOUNT_CANONICAL_KEY_BY_ALIAS.set(token, canonicalKey);
+  }
+}
+
+const canonicalizeAccountName = (value: string): string => {
+  const token = normalizeAccountToken(value);
+  if (!token) return value.trim();
+  const canonicalKey = ACCOUNT_CANONICAL_KEY_BY_ALIAS.get(token);
+  if (!canonicalKey) return value.trim();
+  return ACCOUNT_CANONICAL_BY_KEY.get(canonicalKey) ?? value.trim();
+};
+
+const expandAccountFilterTokens = (values: string[]): string[] => {
+  const expanded = new Set<string>();
+  for (const raw of values) {
+    const token = normalizeAccountToken(raw);
+    if (!token) continue;
+    const canonicalKey = ACCOUNT_CANONICAL_KEY_BY_ALIAS.get(token);
+    if (canonicalKey) {
+      for (const aliasToken of ACCOUNT_GROUP_TOKENS_BY_KEY.get(canonicalKey) ?? []) {
+        expanded.add(aliasToken);
+      }
+      continue;
+    }
+    expanded.add(token);
+  }
+  return Array.from(expanded);
+};
 
 const parseDecimal = (value: string | null, fallback = 0): number => {
   if (!value) return fallback;
@@ -1023,7 +1089,9 @@ const parsePostRow = (row: SqlRow | undefined): SocialPostRecord | null => {
   const sourceScore = parseDecimal(fieldString(row, 22), 0.5);
   const campaignKey = fieldString(row, 23);
   const strategyKeys = parseJsonTextArray(fieldString(row, 24));
-  const hashtags = parseJsonTextArray(fieldString(row, 25));
+  const hashtags = parseJsonTextArray(fieldString(row, 25))
+    .map((item) => normalizeHashtagToken(item))
+    .filter((item) => item.length >= 2);
   const createdAt = fieldDate(row, 26);
   const updatedAt = fieldDate(row, 27);
 
@@ -1035,7 +1103,7 @@ const parsePostRow = (row: SqlRow | undefined): SocialPostRecord | null => {
     id,
     contentItemId,
     channel,
-    accountName,
+    accountName: canonicalizeAccountName(accountName),
     externalPostId,
     postUrl,
     postType,
@@ -1143,7 +1211,7 @@ const parseMetricRow = (row: SqlRow | undefined): SocialMetricRow | null => {
 
   return {
     channel,
-    accountName,
+    accountName: canonicalizeAccountName(accountName),
     exposure,
     engagementTotal,
     sourceScore,
@@ -1684,21 +1752,21 @@ class SocialStore {
       }
     }
 
-    const accountValues = Array.from(
-      new Set(
-        [
-          ...(filters.accounts ?? []),
-          ...(filters.account && filters.account.trim() ? [filters.account.trim()] : [])
-        ]
-          .map((value) => value.trim())
-          .filter((value) => value.length > 0)
-          .map((value) => value.toLowerCase())
+    const accountValues = expandAccountFilterTokens(
+      Array.from(
+        new Set(
+          [...(filters.accounts ?? []), ...(filters.account && filters.account.trim() ? [filters.account.trim()] : [])]
+            .map((value) => value.trim())
+            .filter((value) => value.length > 0)
+        )
       )
     );
 
     if (accountValues.length > 0) {
       const placeholders = accountValues.map((_, index) => `:account_name_${index}`);
-      conditions.push(`LOWER(spm."accountName") IN (${placeholders.join(", ")})`);
+      conditions.push(
+        `LOWER(REGEXP_REPLACE(REGEXP_REPLACE(TRIM(COALESCE(spm."accountName", '')), '^@+', ''), '\\s+', ' ', 'g')) IN (${placeholders.join(", ")})`
+      );
       for (const [index, value] of accountValues.entries()) {
         params.push(sqlString(`account_name_${index}`, value));
       }
@@ -2379,8 +2447,7 @@ class SocialStore {
     const normalizedHashtags = Array.from(
       new Set(
         hashtags
-          .map((item) => item.trim().toLowerCase().replace(/^#+/, ""))
-          .map((item) => item.replace(/[^a-z0-9_]/g, ""))
+          .map((item) => normalizeHashtagToken(item))
           .filter((item) => item.length >= 2)
       )
     ).slice(0, 20);
@@ -3734,7 +3801,37 @@ class SocialStore {
     const grouped = new Map<string, { posts: number; exposure: number; engagement: number }>();
 
     const stopWords = new Set([
-      "de", "la", "el", "y", "en", "a", "que", "por", "con", "para", "del", "los", "las", "un", "una", "al", "se"
+      "de",
+      "la",
+      "el",
+      "y",
+      "en",
+      "a",
+      "que",
+      "por",
+      "con",
+      "para",
+      "del",
+      "los",
+      "las",
+      "un",
+      "una",
+      "al",
+      "se",
+      "es",
+      "lo",
+      "su",
+      "sus",
+      "como",
+      "más",
+      "mas",
+      "ya",
+      "si",
+      "sí",
+      "http",
+      "https",
+      "www",
+      "com"
     ]);
 
     const window = this.normalizeOverviewWindow(filters);
@@ -3751,20 +3848,33 @@ class SocialStore {
       if (dimension === "hashtag") {
         labels = post.hashtags.length > 0 ? post.hashtags : ["sin_hashtag"];
       } else if (dimension === "word") {
-        const source = `${post.title} ${post.text ?? ""}`.toLowerCase();
-        labels = source
-          .replace(/[^a-z0-9#_\\s]/g, " ")
-          .split(/\\s+/)
-          .map((item) => item.replace(/^#+/, ""))
-          .filter((item) => item.length >= 4 && !stopWords.has(item))
-          .slice(0, 3);
+        const source = `${post.title ?? ""} ${post.text ?? ""}`
+          .normalize("NFKC")
+          .toLocaleLowerCase("es-CO")
+          .replace(/https?:\/\/\S+/gi, " ")
+          .replace(/\bwww\.\S+/gi, " ");
+        const tokenCounts = new Map<string, number>();
+        for (const token of source
+          .replace(/[^\p{L}\p{N}#@_]+/gu, " ")
+          .split(/\s+/)
+          .map((item) => item.replace(/^[@#]+/u, ""))
+          .map((item) => item.replace(/_+/g, ""))
+          .filter((item) => item.length >= 3 && !stopWords.has(item))) {
+          tokenCounts.set(token, (tokenCounts.get(token) ?? 0) + 1);
+        }
+        labels = Array.from(tokenCounts.entries())
+          .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+          .slice(0, 3)
+          .map(([token]) => token);
         if (labels.length === 0) labels = ["sin_palabra"];
       } else if (dimension === "post_type") {
         labels = [post.postType ?? "unknown"];
       } else if (dimension === "publish_frequency") {
         const count = accountPosts.get(post.accountName) ?? 0;
-        const perDay = count / Math.max(windowDays, 1);
-        labels = [perDay >= 3 ? "alta" : perDay >= 1 ? "media" : "baja"];
+        const daysPerPost = windowDays / Math.max(count, 1);
+        labels = [
+          daysPerPost <= 1.5 ? "cada 1 día" : daysPerPost <= 3.5 ? "cada 2-3 días" : daysPerPost <= 7.5 ? "cada 4-7 días" : ">7 días"
+        ];
       } else {
         labels = [String(toBogotaWeekday(post.publishedAt ?? post.createdAt))];
       }

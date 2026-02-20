@@ -235,15 +235,53 @@ const normalizeText = (value: string | undefined, maxLen = 4000): string | null 
   return trimmed.length > maxLen ? trimmed.slice(0, maxLen) : trimmed;
 };
 
+const normalizeHashtagToken = (value: string): string =>
+  value
+    .trim()
+    .normalize("NFKC")
+    .toLocaleLowerCase("es-CO")
+    .replace(/^#+/u, "")
+    .replace(/[^\p{L}\p{N}_]+/gu, "");
+
 const extractHashtags = (value: string | null): string[] => {
   if (!value) return [];
-  const matches = value.match(/#[a-zA-Z0-9_]+/g) ?? [];
-  const normalized = matches
-    .map((item) => item.replace(/^#+/, "").toLowerCase())
-    .map((item) => item.replace(/[^a-z0-9_]/g, ""))
-    .filter((item) => item.length >= 2);
+  const matches = value.match(/#[\p{L}\p{N}\p{M}_]+/gu) ?? [];
+  const normalized = matches.map((item) => normalizeHashtagToken(item)).filter((item) => item.length >= 2);
   return Array.from(new Set(normalized)).slice(0, 20);
 };
+
+const extractHashtagsFromColumns = (row: CsvRecord): string[] => {
+  const candidates: string[] = [];
+  for (const [key, raw] of Object.entries(row)) {
+    if (!/hashtag/i.test(key)) continue;
+    const text = (raw ?? "").trim();
+    if (!text) continue;
+    const tagged = text.match(/#[\p{L}\p{N}\p{M}_]+/gu);
+    if (tagged && tagged.length > 0) {
+      candidates.push(...tagged);
+      continue;
+    }
+    candidates.push(...text.split(/[,\s;|]+/g));
+  }
+
+  return Array.from(
+    new Set(
+      candidates
+        .map((item) => normalizeHashtagToken(item))
+        .filter((item) => item.length >= 2)
+    )
+  ).slice(0, 20);
+};
+
+const mergeHashtags = (...collections: string[][]): string[] =>
+  Array.from(
+    new Set(
+      collections
+        .flat()
+        .map((item) => normalizeHashtagToken(item))
+        .filter((item) => item.length >= 2)
+    )
+  ).slice(0, 20);
 
 const normalizeUrl = (value: string | undefined, fallback: string): string => {
   const raw = (value ?? "").trim();
@@ -326,6 +364,7 @@ const normalizeRow = (channel: SocialChannel, row: CsvRecord, rowIndex: number, 
     const accountName = row["Page name"]?.trim();
     if (!externalPostId || !accountName) return null;
     const text = normalizeText(row["Post message"] ?? row["Post description"] ?? row["Post name"]);
+    const hashtags = mergeHashtags(extractHashtags(text), extractHashtagsFromColumns(row));
     const postUrl = normalizeUrl(row["Link to post"], `social://facebook/${externalPostId}`);
     const reach = toNumber(row["Organic post reach"]);
     const impressions = toNumber(row["Organic impressions"]);
@@ -357,7 +396,7 @@ const normalizeRow = (channel: SocialChannel, row: CsvRecord, rowIndex: number, 
       shares,
       views,
       diagnostics: { object_key: objectKey, row_index: rowIndex + 1 },
-      hashtags: extractHashtags(text)
+      hashtags
     };
   }
 
@@ -366,6 +405,7 @@ const normalizeRow = (channel: SocialChannel, row: CsvRecord, rowIndex: number, 
     const accountName = row["Username"]?.trim();
     if (!externalPostId || !accountName) return null;
     const text = normalizeText(row["Media caption"]);
+    const hashtags = mergeHashtags(extractHashtags(text), extractHashtagsFromColumns(row));
     const postUrl = normalizeUrl(row["Media permalink"] ?? row["Media URL"], `social://instagram/${externalPostId}`);
     const reach = toNumber(row["Media reach"]);
     const views = toNumber(row["Media views"]);
@@ -396,7 +436,7 @@ const normalizeRow = (channel: SocialChannel, row: CsvRecord, rowIndex: number, 
       shares,
       views,
       diagnostics: { object_key: objectKey, row_index: rowIndex + 1 },
-      hashtags: extractHashtags(text)
+      hashtags
     };
   }
 
@@ -405,6 +445,7 @@ const normalizeRow = (channel: SocialChannel, row: CsvRecord, rowIndex: number, 
     const accountName = row["Account Name"]?.trim();
     if (!externalPostId || !accountName) return null;
     const text = normalizeText(row["Post text"]);
+    const hashtags = mergeHashtags(extractHashtags(text), extractHashtagsFromColumns(row));
     const postUrl = normalizeUrl(row["Post url"], `social://linkedin/${externalPostId}`);
     const impressions = toNumber(row["Total impressions"]);
     const likes = toNumber(row["Total likes"]);
@@ -434,7 +475,7 @@ const normalizeRow = (channel: SocialChannel, row: CsvRecord, rowIndex: number, 
       shares,
       views,
       diagnostics: { object_key: objectKey, row_index: rowIndex + 1 },
-      hashtags: extractHashtags(text)
+      hashtags
     };
   }
 
@@ -442,6 +483,7 @@ const normalizeRow = (channel: SocialChannel, row: CsvRecord, rowIndex: number, 
   const accountName = row["Account nickname"]?.trim();
   if (!externalPostId || !accountName) return null;
   const text = normalizeText(row["Title"]);
+  const hashtags = mergeHashtags(extractHashtags(text), extractHashtagsFromColumns(row));
   const postUrl = normalizeUrl(row["Share URL"], `social://tiktok/${externalPostId}`);
   const views = toNumber(row["Video Views"]);
   const likes = toNumber(row["Likes"]);
@@ -469,7 +511,7 @@ const normalizeRow = (channel: SocialChannel, row: CsvRecord, rowIndex: number, 
     shares,
     views,
     diagnostics: { object_key: objectKey, row_index: rowIndex + 1 },
-    hashtags: extractHashtags(text)
+    hashtags
   };
 };
 

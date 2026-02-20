@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
 import { useSearchParams } from "react-router-dom";
 import {
   Bar,
@@ -10,13 +10,13 @@ import {
   LineChart,
   Pie,
   PieChart,
-  ReferenceLine,
   ResponsiveContainer,
   Scatter,
   ScatterChart,
   Tooltip,
   XAxis,
-  YAxis
+  YAxis,
+  ZAxis
 } from "recharts";
 import type {
   MonitorSocialAccountsResponse,
@@ -46,10 +46,12 @@ const TAB_OPTIONS = ["summary", "accounts", "posts", "risk", "etl"] as const;
 
 type SocialTab = (typeof TAB_OPTIONS)[number];
 type ScaleMode = "auto" | "linear" | "log";
+type AxisSide = "left" | "right";
 
 type NumberFormatMode = "number" | "percent" | "score";
 type AccountMetric = "er_ponderado" | "exposure_total" | "engagement_total" | "posts" | "sov_interno";
 type MixMetric = "posts" | "exposure_total" | "engagement_total" | "er_global" | "riesgo_activo" | "sov_interno";
+type TrendMetric = "posts" | "exposure_total" | "engagement_total" | "er_global" | "riesgo_activo" | "shs";
 
 type KpiCard = {
   id: string;
@@ -85,6 +87,20 @@ type PostRow = {
 
 type AwarioCommentRow = MonitorSocialPostCommentsResponse["items"][number];
 
+type ChartTooltipEntry = {
+  dataKey?: string | number;
+  name?: string;
+  value?: number | string;
+  color?: string;
+  payload?: Record<string, unknown>;
+};
+
+type ChartTooltipProps = {
+  active?: boolean;
+  label?: string | number;
+  payload?: ChartTooltipEntry[];
+};
+
 const KPI_INFO: Record<string, string> = {
   posts: "Total de publicaciones dentro de los filtros activos.",
   exposure_total: "Exposición consolidada. En social equivale al alcance o vistas según plataforma.",
@@ -108,9 +124,26 @@ const METRIC_META: Record<string, { label: string; format: NumberFormatMode }> =
   gap: { label: "Gap ER", format: "percent" }
 };
 
+const TREND_METRICS: TrendMetric[] = ["posts", "exposure_total", "engagement_total", "er_global", "riesgo_activo", "shs"];
+const MIX_METRICS: MixMetric[] = ["posts", "exposure_total", "engagement_total", "er_global", "riesgo_activo", "sov_interno"];
+const ACCOUNT_METRICS: AccountMetric[] = ["er_ponderado", "exposure_total", "engagement_total", "posts", "sov_interno"];
+
 const formatNumber = (value: number): string => new Intl.NumberFormat("es-CO", { maximumFractionDigits: 0 }).format(value);
 const formatPercent = (value: number): string => `${new Intl.NumberFormat("es-CO", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(value)}%`;
 const formatScore = (value: number): string => new Intl.NumberFormat("es-CO", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(value);
+const formatAxisPercentNoDecimals = (value: number): string => `${new Intl.NumberFormat("es-CO", { maximumFractionDigits: 0 }).format(value)}%`;
+const formatCompactAxisNumber = (value: number): string => {
+  if (!Number.isFinite(value)) return "0";
+  const abs = Math.abs(value);
+  const compact = (base: number, suffix: string) =>
+    `${new Intl.NumberFormat("es-CO", { maximumFractionDigits: 1 })
+      .format(value / base)
+      .replace(/([,.]0)$/u, "")}${suffix}`;
+  if (abs >= 1_000_000_000) return compact(1_000_000_000, "B");
+  if (abs >= 1_000_000) return compact(1_000_000, "M");
+  if (abs >= 1_000) return compact(1_000, "K");
+  return new Intl.NumberFormat("es-CO", { maximumFractionDigits: 0 }).format(value);
+};
 
 const formatMetricValue = (metric: string, value: number): string => {
   const meta = METRIC_META[metric];
@@ -118,6 +151,19 @@ const formatMetricValue = (metric: string, value: number): string => {
   if (meta.format === "percent") return formatPercent(value);
   if (meta.format === "score") return formatScore(value);
   return formatNumber(value);
+};
+
+const formatChartMetricValue = (metric: string, value: number): string => {
+  const meta = METRIC_META[metric];
+  if (meta?.format === "percent") return formatAxisPercentNoDecimals(value);
+  return formatCompactAxisNumber(value);
+};
+
+const formatChartAxisByMetrics = (metrics: string[], value: number): string => {
+  if (metrics.length > 0 && metrics.every((metric) => METRIC_META[metric]?.format === "percent")) {
+    return formatAxisPercentNoDecimals(value);
+  }
+  return formatCompactAxisNumber(value);
 };
 
 const formatDate = (value: string | null | undefined): string => {
@@ -169,6 +215,15 @@ const toComparisonLabel = (mode: SocialComparisonMode): string => {
   if (mode === "weekday_aligned_week") return "Última semana con coincidencia de días";
   if (mode === "exact_days") return "Última cantidad exacta de días";
   return "Mismo periodo del año pasado";
+};
+
+const toScatterDimensionLabel = (dimension: SocialScatterDimension): string => {
+  if (dimension === "post_type") return "Tipo de post";
+  if (dimension === "channel") return "Canal";
+  if (dimension === "account") return "Cuenta";
+  if (dimension === "campaign") return "Campaña";
+  if (dimension === "strategy") return "Estrategia";
+  return "Hashtag";
 };
 
 const normalizePostType = (value: string): string => {
@@ -225,6 +280,26 @@ const resolveScale = (mode: ScaleMode, values: number[]): "linear" | "log" => {
   if (mode === "linear") return "linear";
   if (mode === "log") return "log";
   return suggestLogScale(values) ? "log" : "linear";
+};
+
+const resolveAxisDomain = (scale: "linear" | "log", values: number[]): [number, "auto"] => {
+  if (scale === "log") {
+    const positives = values.filter((value) => Number.isFinite(value) && value > 0);
+    const minPositive = positives.length > 0 ? Math.max(Math.min(...positives), 0.01) : 0.01;
+    return [minPositive, "auto"];
+  }
+  return [0, "auto"];
+};
+
+const CHART_QUESTION_BY_KEY: Record<string, string> = {
+  trend: "¿Qué responde?: ¿Cómo evolucionan exposición, interacciones y ER en el período?",
+  mix: "¿Qué responde?: ¿Qué canal aporta más y cómo se comporta su segunda métrica?",
+  ranking: "¿Qué responde?: ¿Qué cuentas lideran según las métricas seleccionadas?",
+  gap: "¿Qué responde?: ¿Qué tan lejos está cada canal de su meta ER?",
+  scatter: "¿Qué responde?: ¿Qué grupos combinan mayor exposición con mejor ER?",
+  heatmap: "¿Qué responde?: ¿Qué días y meses concentran mejor rendimiento?",
+  breakdown: "¿Qué responde?: ¿Qué dimensión explica mejor variaciones del ER?",
+  share: "¿Qué responde?: ¿Cómo se distribuye el SOV interno entre cuentas?"
 };
 
 const toDeltaClass = (value: number): string => {
@@ -284,6 +359,7 @@ const KpiInfo = ({ id, text }: { id: string; text: string }) => (
 );
 
 type SmartMultiSelectProps = {
+  className?: string;
   label: string;
   summary: string;
   secondary: string;
@@ -298,6 +374,7 @@ type SmartMultiSelectProps = {
 };
 
 const SmartMultiSelect = ({
+  className,
   label,
   summary,
   secondary,
@@ -310,13 +387,13 @@ const SmartMultiSelect = ({
   onClear,
   toLabel
 }: SmartMultiSelectProps) => (
-  <details className="group relative">
+  <details className={`group relative min-w-0 ${className ?? ""}`}>
     <summary className="list-none cursor-pointer rounded-xl border border-slate-200 bg-white px-3 py-2 shadow-sm transition hover:border-slate-300">
-      <div className="flex items-start justify-between gap-2">
-        <div>
+      <div className="flex items-start justify-between gap-2 min-w-0">
+        <div className="min-w-0">
           <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{label}</p>
-          <p className="text-sm font-semibold text-slate-800">{summary}</p>
-          <p className="text-xs text-slate-500">{secondary}</p>
+          <p className="truncate text-sm font-semibold text-slate-800">{summary}</p>
+          <p className="truncate text-xs text-slate-500">{secondary}</p>
         </div>
         <span className="mt-1 text-xs text-slate-400">▾</span>
       </div>
@@ -373,8 +450,11 @@ const Heatmap = ({ data }: { data: MonitorSocialHeatmapResponse | null }) => {
   const values = (data?.items ?? []).map((item) => item.value);
   const min = Math.min(...values, 0);
   const max = Math.max(...values, 1);
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const [hovered, setHovered] = useState<{ label: string; value: number; posts: number; x: number; y: number } | null>(null);
 
   const byKey = new Map((data?.items ?? []).map((item) => [`${item.month}-${item.weekday}`, item]));
+  const tooltipMetric = data?.metric === "er" || data?.metric === "view_rate" ? "er_global" : "engagement_total";
 
   const toColor = (value: number) => {
     const ratio = (value - min) / Math.max(max - min, 0.0001);
@@ -383,8 +463,16 @@ const Heatmap = ({ data }: { data: MonitorSocialHeatmapResponse | null }) => {
     return `hsla(${hue}, 84%, 45%, ${alpha})`;
   };
 
+  const onHoverCell = (event: MouseEvent<HTMLDivElement>, label: string, value: number, posts: number) => {
+    const rect = containerRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    const x = Math.min(Math.max(event.clientX - rect.left, 12), rect.width - 170);
+    const y = Math.min(Math.max(event.clientY - rect.top, 20), rect.height - 10);
+    setHovered({ label, value, posts, x, y });
+  };
+
   return (
-    <div className="space-y-2">
+    <div ref={containerRef} className="relative space-y-2">
       <div className="grid grid-cols-8 gap-1 text-xs">
         <div />
         {weekdays.map((day) => (
@@ -393,7 +481,7 @@ const Heatmap = ({ data }: { data: MonitorSocialHeatmapResponse | null }) => {
           </div>
         ))}
         {months.map((month, monthIndex) => (
-          <>
+          <div key={month} className="contents">
             <div key={`${month}-label`} className="flex items-center justify-end pr-1 text-slate-500">
               {month}
             </div>
@@ -403,19 +491,30 @@ const Heatmap = ({ data }: { data: MonitorSocialHeatmapResponse | null }) => {
               return (
                 <div
                   key={`${month}-${dayIndex}`}
-                  title={`${month} ${weekdays[dayIndex]}: ${value.toFixed(2)} (${item?.posts ?? 0} posts)`}
                   className="h-6 rounded"
                   style={{ background: toColor(value) }}
+                  onMouseEnter={(event) => onHoverCell(event, `${month} ${weekdays[dayIndex]}`, value, item?.posts ?? 0)}
+                  onMouseMove={(event) => onHoverCell(event, `${month} ${weekdays[dayIndex]}`, value, item?.posts ?? 0)}
+                  onMouseLeave={() => setHovered(null)}
                 />
               );
             })}
-          </>
+          </div>
         ))}
       </div>
       <p className="text-xs text-slate-500">
-        Escala color: {formatMetricValue(data?.metric === "er" || data?.metric === "view_rate" ? "er_global" : "engagement_total", min)} - {" "}
-        {formatMetricValue(data?.metric === "er" || data?.metric === "view_rate" ? "er_global" : "engagement_total", max)}
+        Escala color: {formatMetricValue(tooltipMetric, min)} - {formatMetricValue(tooltipMetric, max)}
       </p>
+      {hovered ? (
+        <div
+          className="pointer-events-none absolute z-20 w-[165px] rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-xs shadow-lg"
+          style={{ left: hovered.x, top: hovered.y, transform: "translateY(-105%)" }}
+        >
+          <p className="font-semibold text-slate-800">{hovered.label}</p>
+          <p className="text-slate-600">Valor: {formatChartMetricValue(tooltipMetric, hovered.value)}</p>
+          <p className="text-slate-600">Posts: {formatCompactAxisNumber(hovered.posts)}</p>
+        </div>
+      ) : null}
     </div>
   );
 };
@@ -485,12 +584,20 @@ export const MonitorSocialOverviewPage = () => {
   const [scatterDimension, setScatterDimension] = useState<SocialScatterDimension>("channel");
   const [breakdownDimension, setBreakdownDimension] = useState<SocialErBreakdownDimension>("post_type");
 
+  const [trendLeftMetric, setTrendLeftMetric] = useState<TrendMetric>("exposure_total");
+  const [trendRightMetric, setTrendRightMetric] = useState<TrendMetric>("er_global");
+
   const [mixBarMetric, setMixBarMetric] = useState<MixMetric>("exposure_total");
   const [mixLineMetric, setMixLineMetric] = useState<MixMetric>("er_global");
+  const [mixBarAxis, setMixBarAxis] = useState<AxisSide>("left");
+  const [mixLineAxis, setMixLineAxis] = useState<AxisSide>("left");
   const [accountBarMetric, setAccountBarMetric] = useState<AccountMetric>("er_ponderado");
   const [accountLineMetric, setAccountLineMetric] = useState<AccountMetric>("exposure_total");
+  const [accountBarAxis, setAccountBarAxis] = useState<AxisSide>("left");
+  const [accountLineAxis, setAccountLineAxis] = useState<AxisSide>("left");
 
-  const [topAccountsScaleMode, setTopAccountsScaleMode] = useState<ScaleMode>("auto");
+  const [topAccountsLeftScaleMode, setTopAccountsLeftScaleMode] = useState<ScaleMode>("auto");
+  const [topAccountsRightScaleMode, setTopAccountsRightScaleMode] = useState<ScaleMode>("auto");
   const [breakdownScaleMode, setBreakdownScaleMode] = useState<ScaleMode>("auto");
 
   const [accountSearch, setAccountSearch] = useState("");
@@ -1009,10 +1116,54 @@ export const MonitorSocialOverviewPage = () => {
     return rows;
   }, [accountsData, accountBarMetric]);
 
-  const topAccountsScale = useMemo(
-    () => resolveScale(topAccountsScaleMode, topAccountsDual.map((item) => Number(item[accountBarMetric]))),
-    [topAccountsScaleMode, topAccountsDual, accountBarMetric]
+  const topAccountsAxisValues = useMemo(() => {
+    const leftValues: number[] = [];
+    const rightValues: number[] = [];
+    for (const item of topAccountsDual) {
+      const barValue = Number(item[accountBarMetric]);
+      const lineValue = Number(item[accountLineMetric]);
+      if (accountBarAxis === "left") leftValues.push(barValue);
+      else rightValues.push(barValue);
+      if (accountLineAxis === "left") leftValues.push(lineValue);
+      else rightValues.push(lineValue);
+    }
+    return { leftValues, rightValues };
+  }, [topAccountsDual, accountBarMetric, accountLineMetric, accountBarAxis, accountLineAxis]);
+
+  const topAccountsLeftScale = useMemo(
+    () => resolveScale(topAccountsLeftScaleMode, topAccountsAxisValues.leftValues),
+    [topAccountsLeftScaleMode, topAccountsAxisValues]
   );
+  const topAccountsRightScale = useMemo(
+    () => resolveScale(topAccountsRightScaleMode, topAccountsAxisValues.rightValues),
+    [topAccountsRightScaleMode, topAccountsAxisValues]
+  );
+
+  const topAccountsLeftMetrics = useMemo(() => {
+    const metrics: AccountMetric[] = [];
+    if (accountBarAxis === "left") metrics.push(accountBarMetric);
+    if (accountLineAxis === "left") metrics.push(accountLineMetric);
+    return Array.from(new Set(metrics));
+  }, [accountBarAxis, accountLineAxis, accountBarMetric, accountLineMetric]);
+
+  const topAccountsRightMetrics = useMemo(() => {
+    const metrics: AccountMetric[] = [];
+    if (accountBarAxis === "right") metrics.push(accountBarMetric);
+    if (accountLineAxis === "right") metrics.push(accountLineMetric);
+    return Array.from(new Set(metrics));
+  }, [accountBarAxis, accountLineAxis, accountBarMetric, accountLineMetric]);
+
+  const trendAxisValues = useMemo(() => {
+    const leftValues = trendSeries.map((item) => Number(item[trendLeftMetric]));
+    const rightValues = trendSeries.map((item) => Number(item[trendRightMetric]));
+    return { leftValues, rightValues };
+  }, [trendSeries, trendLeftMetric, trendRightMetric]);
+
+  const trendLeftScale = useMemo(() => resolveScale("auto", trendAxisValues.leftValues), [trendAxisValues.leftValues]);
+  const trendRightScale = useMemo(() => resolveScale("auto", trendAxisValues.rightValues), [trendAxisValues.rightValues]);
+
+  const trendLeftMetrics = useMemo(() => [trendLeftMetric], [trendLeftMetric]);
+  const trendRightMetrics = useMemo(() => [trendRightMetric], [trendRightMetric]);
 
   const erGapByChannel = useMemo(
     () =>
@@ -1025,6 +1176,39 @@ export const MonitorSocialOverviewPage = () => {
       })),
     [erTargets]
   );
+
+  const hasVisibleTargetByChannel = useMemo(() => erGapByChannel.some((item) => Math.abs(item.target_2026_er) > 0.0001), [erGapByChannel]);
+
+  const mixAxisValues = useMemo(() => {
+    const leftValues: number[] = [];
+    const rightValues: number[] = [];
+    for (const item of channelData) {
+      const barValue = Number(item[mixBarMetric]);
+      const lineValue = Number(item[mixLineMetric]);
+      if (mixBarAxis === "left") leftValues.push(barValue);
+      else rightValues.push(barValue);
+      if (mixLineAxis === "left") leftValues.push(lineValue);
+      else rightValues.push(lineValue);
+    }
+    return { leftValues, rightValues };
+  }, [channelData, mixBarMetric, mixLineMetric, mixBarAxis, mixLineAxis]);
+
+  const mixLeftScale = useMemo(() => resolveScale("auto", mixAxisValues.leftValues), [mixAxisValues.leftValues]);
+  const mixRightScale = useMemo(() => resolveScale("auto", mixAxisValues.rightValues), [mixAxisValues.rightValues]);
+
+  const mixLeftMetrics = useMemo(() => {
+    const metrics: MixMetric[] = [];
+    if (mixBarAxis === "left") metrics.push(mixBarMetric);
+    if (mixLineAxis === "left") metrics.push(mixLineMetric);
+    return Array.from(new Set(metrics));
+  }, [mixBarAxis, mixLineAxis, mixBarMetric, mixLineMetric]);
+
+  const mixRightMetrics = useMemo(() => {
+    const metrics: MixMetric[] = [];
+    if (mixBarAxis === "right") metrics.push(mixBarMetric);
+    if (mixLineAxis === "right") metrics.push(mixLineMetric);
+    return Array.from(new Set(metrics));
+  }, [mixBarAxis, mixLineAxis, mixBarMetric, mixLineMetric]);
 
   const breakdownScale = useMemo(
     () => resolveScale(breakdownScaleMode, (breakdownData?.items ?? []).map((item) => item.er_global)),
@@ -1040,6 +1224,19 @@ export const MonitorSocialOverviewPage = () => {
   }, [accountsData]);
 
   const pieColors = ["#e30613", "#1d4ed8", "#0f766e", "#f59f00", "#9333ea", "#64748b"];
+
+  const scatterChartData = useMemo(
+    () =>
+      (scatterData?.items ?? []).map((item) => ({
+        label: item.label,
+        exposure_total: Number(item.exposure_total ?? 0),
+        engagement_total: Number(item.engagement_total ?? 0),
+        er_global: Number(item.er_global ?? 0),
+        posts: Number(item.posts ?? 0),
+        z: Math.max(1, Number(item.posts ?? 0))
+      })),
+    [scatterData]
+  );
 
   const targetErGlobal = useMemo(() => {
     const rows = normalizedOverview.target_progress?.er_by_channel ?? [];
@@ -1193,14 +1390,14 @@ export const MonitorSocialOverviewPage = () => {
           </button>
         </div>
 
-        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-          <details className="group relative xl:col-span-2">
+        <div className="grid gap-3 xl:grid-cols-8">
+          <details className="group relative min-w-0 xl:col-span-2">
             <summary className="list-none cursor-pointer rounded-xl border border-slate-200 bg-white px-3 py-2 shadow-sm">
               <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Periodo y comparación</p>
-              <p className="text-sm font-semibold text-slate-800">
+              <p className="truncate text-sm font-semibold text-slate-800">
                 {toPresetLabel(preset)} | {toComparisonLabel(comparisonMode)}
               </p>
-              <p className="text-xs text-slate-500">
+              <p className="truncate text-xs text-slate-500">
                 {formatDate((normalizedOverview.comparison?.current_window_start ?? normalizedOverview.window_start) as string | undefined)} - {" "}
                 {formatDate((normalizedOverview.comparison?.current_window_end ?? normalizedOverview.window_end) as string | undefined)}
               </p>
@@ -1271,6 +1468,7 @@ export const MonitorSocialOverviewPage = () => {
           </details>
 
           <SmartMultiSelect
+            className="xl:col-span-1"
             label="Canal"
             summary={selectedChannels.length > 0 ? `${selectedChannels.length} seleccionados` : "Todos"}
             secondary={`${CHANNEL_OPTIONS.length} canales`}
@@ -1285,6 +1483,7 @@ export const MonitorSocialOverviewPage = () => {
           />
 
           <SmartMultiSelect
+            className="xl:col-span-1"
             label="Cuenta"
             summary={selectedAccounts.length > 0 ? `${selectedAccounts.length} seleccionadas` : "Todas"}
             secondary={`${accountOptions.length} disponibles`}
@@ -1298,6 +1497,7 @@ export const MonitorSocialOverviewPage = () => {
           />
 
           <SmartMultiSelect
+            className="xl:col-span-1"
             label="Tipo de post"
             summary={selectedPostTypes.length > 0 ? `${selectedPostTypes.length} seleccionados` : "Todos"}
             secondary={`${postTypeOptions.length} tipos`}
@@ -1312,6 +1512,7 @@ export const MonitorSocialOverviewPage = () => {
           />
 
           <SmartMultiSelect
+            className="xl:col-span-1"
             label="Campaña"
             summary={selectedCampaigns.length > 0 ? `${selectedCampaigns.length} seleccionadas` : "Todas"}
             secondary={`${campaignOptions.length} disponibles`}
@@ -1325,6 +1526,7 @@ export const MonitorSocialOverviewPage = () => {
           />
 
           <SmartMultiSelect
+            className="xl:col-span-1"
             label="Estrategia"
             summary={selectedStrategies.length > 0 ? `${selectedStrategies.length} seleccionadas` : "Todas"}
             secondary={`${strategyOptions.length} disponibles`}
@@ -1338,6 +1540,7 @@ export const MonitorSocialOverviewPage = () => {
           />
 
           <SmartMultiSelect
+            className="xl:col-span-1"
             label="Hashtag"
             summary={selectedHashtags.length > 0 ? `${selectedHashtags.length} seleccionados` : "Todos"}
             secondary={`${hashtagOptions.length} disponibles`}
@@ -1375,55 +1578,162 @@ export const MonitorSocialOverviewPage = () => {
 
       {tab === "summary" ? (
         <>
-          <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+          <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-6">
             {kpiCards.map((card) => (
-              <article key={card.id} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-panel">
+              <article key={card.id} className="min-w-0 rounded-2xl border border-slate-200 bg-white p-4 shadow-panel">
                 <div className="flex items-center justify-between gap-2">
-                  <h3 className="text-sm font-semibold text-slate-900">{card.title}</h3>
+                  <h3 className="truncate text-sm font-semibold text-slate-900">{card.title}</h3>
                   <KpiInfo id={`kpi-info-${card.id}`} text={card.info} />
                 </div>
                 <p className="mt-2 text-3xl font-bold text-red-700">{card.value}</p>
-                <p className="text-xs text-slate-600">Periodo anterior: {card.previous}</p>
-                <p className="mt-1 text-xs text-slate-600">{card.goal}</p>
-                <p className={`mt-1 text-xs font-semibold ${card.statusClass}`}>{card.status}</p>
+                <p className="truncate text-xs text-slate-600">Periodo anterior: {card.previous}</p>
+                <p className="mt-1 truncate text-xs text-slate-600">{card.goal}</p>
+                <p className={`mt-1 truncate text-xs font-semibold ${card.statusClass}`}>{card.status}</p>
               </article>
             ))}
           </section>
 
           <div className="space-y-3">
             <div className="grid grid-cols-1 gap-3 xl:grid-cols-3">
-              <article className="rounded-2xl border border-slate-200 bg-white p-4 shadow-panel xl:col-span-2">
-                <div className="mb-2 flex items-center justify-between">
-                  <h3 className="text-base font-semibold text-slate-900">Tendencia</h3>
-                  <span className="text-xs text-slate-500">{normalizedOverview.comparison?.label ?? "Comparación activa"}</span>
+              <article className="min-w-0 rounded-2xl border border-slate-200 bg-white p-4 shadow-panel xl:col-span-2">
+                <div className="mb-2 flex flex-wrap items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <h3 className="text-base font-semibold text-slate-900">Tendencia</h3>
+                    <p className="text-xs text-slate-500">{CHART_QUESTION_BY_KEY.trend}</p>
+                  </div>
+                  <span className="rounded-full border border-slate-200 px-2 py-0.5 text-[10px] font-semibold text-slate-500">
+                    {normalizedOverview.comparison?.label ?? "Comparación activa"}
+                  </span>
                 </div>
-                <div className="h-[290px] w-full">
+                <div className="mb-2 grid gap-2 sm:grid-cols-2">
+                  <label className="text-xs font-semibold text-slate-600">
+                    Eje izquierdo
+                    <select
+                      value={trendLeftMetric}
+                      onChange={(event) => setTrendLeftMetric(event.target.value as TrendMetric)}
+                      className="mt-1 w-full rounded-lg border border-slate-200 px-2 py-1.5 text-xs"
+                    >
+                      {TREND_METRICS.map((metric) => (
+                        <option key={metric} value={metric}>
+                          {METRIC_META[metric].label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="text-xs font-semibold text-slate-600">
+                    Eje derecho
+                    <select
+                      value={trendRightMetric}
+                      onChange={(event) => setTrendRightMetric(event.target.value as TrendMetric)}
+                      className="mt-1 w-full rounded-lg border border-slate-200 px-2 py-1.5 text-xs"
+                    >
+                      {TREND_METRICS.map((metric) => (
+                        <option key={metric} value={metric}>
+                          {METRIC_META[metric].label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
+                <div className="h-[320px] w-full min-w-0">
                   <ResponsiveContainer width="100%" height="100%">
-                    <LineChart data={trendSeries}>
+                    <LineChart data={trendSeries} margin={{ top: 8, right: 14, left: 4, bottom: 8 }}>
                       <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis dataKey="bucket_label" />
-                      <YAxis yAxisId="left" tickFormatter={(value) => formatMetricValue("exposure_total", Number(value))} />
-                      <YAxis yAxisId="right" orientation="right" tickFormatter={(value) => formatMetricValue("er_global", Number(value))} />
-                      <Tooltip />
+                      <XAxis dataKey="bucket_label" minTickGap={16} />
+                      <YAxis
+                        yAxisId="left"
+                        width={76}
+                        scale={trendLeftScale}
+                        domain={resolveAxisDomain(trendLeftScale, trendAxisValues.leftValues)}
+                        tickFormatter={(value) => formatChartAxisByMetrics(trendLeftMetrics, Number(value))}
+                        label={{ value: METRIC_META[trendLeftMetric].label, angle: -90, position: "insideLeft", offset: 4, fontSize: 11 }}
+                      />
+                      <YAxis
+                        yAxisId="right"
+                        width={76}
+                        orientation="right"
+                        scale={trendRightScale}
+                        domain={resolveAxisDomain(trendRightScale, trendAxisValues.rightValues)}
+                        tickFormatter={(value) => formatChartAxisByMetrics(trendRightMetrics, Number(value))}
+                        label={{ value: METRIC_META[trendRightMetric].label, angle: 90, position: "insideRight", offset: 4, fontSize: 11 }}
+                      />
+                      <Tooltip
+                        content={(tooltip: ChartTooltipProps) => {
+                          if (!tooltip.active || !tooltip.payload || tooltip.payload.length === 0) return null;
+                          const rows = tooltip.payload
+                            .filter((item) => item.dataKey !== undefined)
+                            .map((item) => {
+                              const metric = String(item.dataKey);
+                              return {
+                                metric,
+                                label: METRIC_META[metric]?.label ?? item.name ?? metric,
+                                value: formatChartMetricValue(metric, Number(item.value ?? 0)),
+                                color: item.color ?? "#334155"
+                              };
+                            });
+                          return (
+                            <div className="min-w-[170px] rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs shadow-lg">
+                              <p className="font-semibold text-slate-800">{tooltip.label ?? ""}</p>
+                              {rows.map((row) => (
+                                <p key={row.metric} style={{ color: row.color }} className="mt-1 flex items-center justify-between gap-2">
+                                  <span>{row.label}</span>
+                                  <strong>{row.value}</strong>
+                                </p>
+                              ))}
+                            </div>
+                          );
+                        }}
+                      />
                       <Legend />
-                      <Line yAxisId="left" type="monotone" dataKey="exposure_total" name="Exposición" stroke="#1d4ed8" strokeWidth={2} dot={false} />
-                      <Line yAxisId="left" type="monotone" dataKey="engagement_total" name="Interacciones" stroke="#f59f00" strokeWidth={2} dot={false} />
-                      <Line yAxisId="right" type="monotone" dataKey="er_global" name="ER" stroke="#e30613" strokeWidth={2} dot={false} />
+                      <Line
+                        yAxisId="left"
+                        type="monotone"
+                        dataKey={trendLeftMetric}
+                        name={METRIC_META[trendLeftMetric].label}
+                        stroke="#1d4ed8"
+                        strokeWidth={2.5}
+                        dot={false}
+                        activeDot={{ r: 4 }}
+                      />
+                      <Line
+                        yAxisId="right"
+                        type="monotone"
+                        dataKey={trendRightMetric}
+                        name={METRIC_META[trendRightMetric].label}
+                        stroke="#e30613"
+                        strokeWidth={2.5}
+                        dot={false}
+                        activeDot={{ r: 4 }}
+                      />
                     </LineChart>
                   </ResponsiveContainer>
                 </div>
               </article>
 
-              <article className="rounded-2xl border border-slate-200 bg-white p-4 shadow-panel xl:col-span-1">
-                <div className="mb-2 flex items-center justify-between">
-                  <h3 className="text-base font-semibold text-slate-900">Mix por canal</h3>
-                  <span className="text-xs text-slate-500">Línea en eje derecho</span>
+              <article className="min-w-0 rounded-2xl border border-slate-200 bg-white p-4 shadow-panel xl:col-span-1">
+                <div className="mb-2 flex flex-wrap items-start justify-between gap-2">
+                  <div>
+                    <h3 className="text-base font-semibold text-slate-900">Mix por canal</h3>
+                    <p className="text-xs text-slate-500">{CHART_QUESTION_BY_KEY.mix}</p>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-1">
+                    {mixLeftMetrics.length > 0 ? (
+                      <span className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold ${mixLeftScale === "log" ? "border-amber-300 bg-amber-50 text-amber-700" : "border-slate-200 text-slate-500"}`}>
+                        Izq {mixLeftScale === "log" ? "log (auto)" : "lineal"}
+                      </span>
+                    ) : null}
+                    {mixRightMetrics.length > 0 ? (
+                      <span className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold ${mixRightScale === "log" ? "border-amber-300 bg-amber-50 text-amber-700" : "border-slate-200 text-slate-500"}`}>
+                        Der {mixRightScale === "log" ? "log (auto)" : "lineal"}
+                      </span>
+                    ) : null}
+                  </div>
                 </div>
                 <div className="mb-2 grid grid-cols-2 gap-2">
                   <label className="text-xs font-semibold text-slate-600">
                     Barra
                     <select value={mixBarMetric} onChange={(event) => setMixBarMetric(event.target.value as MixMetric)} className="mt-1 w-full rounded-lg border border-slate-200 px-2 py-1.5 text-xs">
-                      {(["posts", "exposure_total", "engagement_total", "er_global", "riesgo_activo", "sov_interno"] as MixMetric[]).map((metric) => (
+                      {MIX_METRICS.map((metric) => (
                         <option key={metric} value={metric}>
                           {METRIC_META[metric].label}
                         </option>
@@ -1433,25 +1743,91 @@ export const MonitorSocialOverviewPage = () => {
                   <label className="text-xs font-semibold text-slate-600">
                     Línea
                     <select value={mixLineMetric} onChange={(event) => setMixLineMetric(event.target.value as MixMetric)} className="mt-1 w-full rounded-lg border border-slate-200 px-2 py-1.5 text-xs">
-                      {(["posts", "exposure_total", "engagement_total", "er_global", "riesgo_activo", "sov_interno"] as MixMetric[]).map((metric) => (
+                      {MIX_METRICS.map((metric) => (
                         <option key={metric} value={metric}>
                           {METRIC_META[metric].label}
                         </option>
                       ))}
                     </select>
                   </label>
+                  <label className="text-xs font-semibold text-slate-600">
+                    Eje barra
+                    <select value={mixBarAxis} onChange={(event) => setMixBarAxis(event.target.value as AxisSide)} className="mt-1 w-full rounded-lg border border-slate-200 px-2 py-1.5 text-xs">
+                      <option value="left">Izquierdo</option>
+                      <option value="right">Derecho</option>
+                    </select>
+                  </label>
+                  <label className="text-xs font-semibold text-slate-600">
+                    Eje línea
+                    <select value={mixLineAxis} onChange={(event) => setMixLineAxis(event.target.value as AxisSide)} className="mt-1 w-full rounded-lg border border-slate-200 px-2 py-1.5 text-xs">
+                      <option value="left">Izquierdo</option>
+                      <option value="right">Derecho</option>
+                    </select>
+                  </label>
                 </div>
-                <div className="h-[260px] w-full">
+                <div className="h-[320px] w-full min-w-0">
                   <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={channelData}>
+                    <BarChart data={channelData} margin={{ top: 8, right: 14, left: 4, bottom: 8 }}>
                       <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis dataKey="channel" tickFormatter={(value) => toChannelLabel(value as SocialChannel)} />
-                      <YAxis yAxisId="left" tickFormatter={(value) => formatMetricValue(mixBarMetric, Number(value))} />
-                      <YAxis yAxisId="right" orientation="right" tickFormatter={(value) => formatMetricValue(mixLineMetric, Number(value))} />
-                      <Tooltip />
+                      <XAxis dataKey="channel" tickFormatter={(value) => toChannelLabel(value as SocialChannel)} minTickGap={16} />
+                      <YAxis
+                        yAxisId="left"
+                        hide={mixLeftMetrics.length === 0}
+                        width={76}
+                        scale={mixLeftScale}
+                        domain={resolveAxisDomain(mixLeftScale, mixAxisValues.leftValues)}
+                        tickFormatter={(value) => formatChartAxisByMetrics(mixLeftMetrics, Number(value))}
+                        label={{ value: mixLeftMetrics.map((metric) => METRIC_META[metric].label).join(" / "), angle: -90, position: "insideLeft", offset: 4, fontSize: 11 }}
+                      />
+                      <YAxis
+                        yAxisId="right"
+                        hide={mixRightMetrics.length === 0}
+                        width={76}
+                        orientation="right"
+                        scale={mixRightScale}
+                        domain={resolveAxisDomain(mixRightScale, mixAxisValues.rightValues)}
+                        tickFormatter={(value) => formatChartAxisByMetrics(mixRightMetrics, Number(value))}
+                        label={{ value: mixRightMetrics.map((metric) => METRIC_META[metric].label).join(" / "), angle: 90, position: "insideRight", offset: 4, fontSize: 11 }}
+                      />
+                      <Tooltip
+                        content={(tooltip: ChartTooltipProps) => {
+                          if (!tooltip.active || !tooltip.payload || tooltip.payload.length === 0) return null;
+                          const rows = tooltip.payload
+                            .filter((item) => item.dataKey !== undefined)
+                            .map((item) => {
+                              const metric = String(item.dataKey);
+                              return {
+                                metric,
+                                label: METRIC_META[metric]?.label ?? item.name ?? metric,
+                                value: formatChartMetricValue(metric, Number(item.value ?? 0)),
+                                color: item.color ?? "#334155"
+                              };
+                            });
+                          return (
+                            <div className="min-w-[160px] rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs shadow-lg">
+                              <p className="font-semibold text-slate-800">{toChannelLabel(String(tooltip.label ?? "facebook") as SocialChannel)}</p>
+                              {rows.map((row) => (
+                                <p key={row.metric} style={{ color: row.color }} className="mt-1 flex items-center justify-between gap-2">
+                                  <span>{row.label}</span>
+                                  <strong>{row.value}</strong>
+                                </p>
+                              ))}
+                            </div>
+                          );
+                        }}
+                      />
                       <Legend />
-                      <Bar yAxisId="left" dataKey={mixBarMetric} name={METRIC_META[mixBarMetric].label} fill="#2563eb" />
-                      <Line yAxisId="right" type="monotone" dataKey={mixLineMetric} name={METRIC_META[mixLineMetric].label} stroke="#0f766e" strokeWidth={2} dot={false} />
+                      <Bar yAxisId={mixBarAxis} dataKey={mixBarMetric} name={METRIC_META[mixBarMetric].label} fill="#2563eb" />
+                      <Line
+                        yAxisId={mixLineAxis}
+                        type="monotone"
+                        dataKey={mixLineMetric}
+                        name={METRIC_META[mixLineMetric].label}
+                        stroke="#0f766e"
+                        strokeWidth={3}
+                        dot={{ r: 3, fill: "#0f766e" }}
+                        activeDot={{ r: 4 }}
+                      />
                     </BarChart>
                   </ResponsiveContainer>
                 </div>
@@ -1459,25 +1835,30 @@ export const MonitorSocialOverviewPage = () => {
             </div>
 
             <div className="grid grid-cols-1 gap-3 xl:grid-cols-3">
-              <article className="rounded-2xl border border-slate-200 bg-white p-4 shadow-panel xl:col-span-2">
-                <div className="mb-2 flex items-center justify-between">
-                  <h3 className="text-base font-semibold text-slate-900">Top cuentas ER (doble eje)</h3>
-                  <div className="flex items-center gap-2">
-                    <span className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold ${topAccountsScale === "log" ? "border-amber-300 bg-amber-50 text-amber-700" : "border-slate-200 text-slate-500"}`}>
-                      Escala {topAccountsScale === "log" ? "log (auto)" : "lineal"}
-                    </span>
-                    <select value={topAccountsScaleMode} onChange={(event) => setTopAccountsScaleMode(event.target.value as ScaleMode)} className="rounded-md border border-slate-200 px-2 py-1 text-xs">
-                      <option value="auto">Auto</option>
-                      <option value="linear">Lineal</option>
-                      <option value="log">Log</option>
-                    </select>
+              <article className="min-w-0 rounded-2xl border border-slate-200 bg-white p-4 shadow-panel xl:col-span-2">
+                <div className="mb-2 flex flex-wrap items-start justify-between gap-2">
+                  <div>
+                    <h3 className="text-base font-semibold text-slate-900">Ranking de cuentas</h3>
+                    <p className="text-xs text-slate-500">{CHART_QUESTION_BY_KEY.ranking}</p>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-1">
+                    {topAccountsLeftMetrics.length > 0 ? (
+                      <span className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold ${topAccountsLeftScale === "log" ? "border-amber-300 bg-amber-50 text-amber-700" : "border-slate-200 text-slate-500"}`}>
+                        Izq {topAccountsLeftScale === "log" ? "log (auto)" : "lineal"}
+                      </span>
+                    ) : null}
+                    {topAccountsRightMetrics.length > 0 ? (
+                      <span className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold ${topAccountsRightScale === "log" ? "border-amber-300 bg-amber-50 text-amber-700" : "border-slate-200 text-slate-500"}`}>
+                        Der {topAccountsRightScale === "log" ? "log (auto)" : "lineal"}
+                      </span>
+                    ) : null}
                   </div>
                 </div>
-                <div className="mb-2 grid grid-cols-2 gap-2">
+                <div className="mb-2 grid grid-cols-2 gap-2 lg:grid-cols-3">
                   <label className="text-xs font-semibold text-slate-600">
                     Métrica barra
                     <select value={accountBarMetric} onChange={(event) => setAccountBarMetric(event.target.value as AccountMetric)} className="mt-1 w-full rounded-lg border border-slate-200 px-2 py-1.5 text-xs">
-                      {(["er_ponderado", "exposure_total", "engagement_total", "posts", "sov_interno"] as AccountMetric[]).map((metric) => (
+                      {ACCOUNT_METRICS.map((metric) => (
                         <option key={metric} value={metric}>
                           {METRIC_META[metric].label}
                         </option>
@@ -1487,61 +1868,185 @@ export const MonitorSocialOverviewPage = () => {
                   <label className="text-xs font-semibold text-slate-600">
                     Métrica línea
                     <select value={accountLineMetric} onChange={(event) => setAccountLineMetric(event.target.value as AccountMetric)} className="mt-1 w-full rounded-lg border border-slate-200 px-2 py-1.5 text-xs">
-                      {(["er_ponderado", "exposure_total", "engagement_total", "posts", "sov_interno"] as AccountMetric[]).map((metric) => (
+                      {ACCOUNT_METRICS.map((metric) => (
                         <option key={metric} value={metric}>
                           {METRIC_META[metric].label}
                         </option>
                       ))}
                     </select>
                   </label>
+                  <label className="text-xs font-semibold text-slate-600">
+                    Eje barra
+                    <select value={accountBarAxis} onChange={(event) => setAccountBarAxis(event.target.value as AxisSide)} className="mt-1 w-full rounded-lg border border-slate-200 px-2 py-1.5 text-xs">
+                      <option value="left">Izquierdo</option>
+                      <option value="right">Derecho</option>
+                    </select>
+                  </label>
+                  <label className="text-xs font-semibold text-slate-600">
+                    Eje línea
+                    <select value={accountLineAxis} onChange={(event) => setAccountLineAxis(event.target.value as AxisSide)} className="mt-1 w-full rounded-lg border border-slate-200 px-2 py-1.5 text-xs">
+                      <option value="left">Izquierdo</option>
+                      <option value="right">Derecho</option>
+                    </select>
+                  </label>
+                  <label className="text-xs font-semibold text-slate-600">
+                    Escala eje izq
+                    <select value={topAccountsLeftScaleMode} onChange={(event) => setTopAccountsLeftScaleMode(event.target.value as ScaleMode)} className="mt-1 w-full rounded-lg border border-slate-200 px-2 py-1.5 text-xs">
+                      <option value="auto">Auto</option>
+                      <option value="linear">Lineal</option>
+                      <option value="log">Log</option>
+                    </select>
+                  </label>
+                  <label className="text-xs font-semibold text-slate-600">
+                    Escala eje der
+                    <select value={topAccountsRightScaleMode} onChange={(event) => setTopAccountsRightScaleMode(event.target.value as ScaleMode)} className="mt-1 w-full rounded-lg border border-slate-200 px-2 py-1.5 text-xs">
+                      <option value="auto">Auto</option>
+                      <option value="linear">Lineal</option>
+                      <option value="log">Log</option>
+                    </select>
+                  </label>
                 </div>
-                <div className="h-[290px] w-full">
+                <div className="h-[320px] w-full min-w-0">
                   <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={topAccountsDual}>
+                    <BarChart data={topAccountsDual} margin={{ top: 8, right: 14, left: 6, bottom: 8 }}>
                       <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis dataKey="account_name" tickFormatter={(value) => truncate(String(value), 16)} />
+                      <XAxis dataKey="account_name" tickFormatter={(value) => truncate(String(value), 16)} minTickGap={12} />
                       <YAxis
                         yAxisId="left"
-                        scale={topAccountsScale}
-                        domain={topAccountsScale === "log" ? [1, "auto"] : [0, "auto"]}
-                        tickFormatter={(value) => formatMetricValue(accountBarMetric, Number(value))}
+                        hide={topAccountsLeftMetrics.length === 0}
+                        width={76}
+                        scale={topAccountsLeftScale}
+                        domain={resolveAxisDomain(topAccountsLeftScale, topAccountsAxisValues.leftValues)}
+                        tickFormatter={(value) => formatChartAxisByMetrics(topAccountsLeftMetrics, Number(value))}
+                        label={{ value: topAccountsLeftMetrics.map((metric) => METRIC_META[metric].label).join(" / "), angle: -90, position: "insideLeft", offset: 4, fontSize: 11 }}
                       />
-                      <YAxis yAxisId="right" orientation="right" tickFormatter={(value) => formatMetricValue(accountLineMetric, Number(value))} />
-                      <Tooltip />
+                      <YAxis
+                        yAxisId="right"
+                        hide={topAccountsRightMetrics.length === 0}
+                        width={76}
+                        orientation="right"
+                        scale={topAccountsRightScale}
+                        domain={resolveAxisDomain(topAccountsRightScale, topAccountsAxisValues.rightValues)}
+                        tickFormatter={(value) => formatChartAxisByMetrics(topAccountsRightMetrics, Number(value))}
+                        label={{ value: topAccountsRightMetrics.map((metric) => METRIC_META[metric].label).join(" / "), angle: 90, position: "insideRight", offset: 4, fontSize: 11 }}
+                      />
+                      <Tooltip
+                        content={(tooltip: ChartTooltipProps) => {
+                          if (!tooltip.active || !tooltip.payload || tooltip.payload.length === 0) return null;
+                          const accountName = String(tooltip.label ?? "");
+                          const rows = tooltip.payload
+                            .filter((item) => item.dataKey !== undefined)
+                            .map((item) => {
+                              const metric = String(item.dataKey);
+                              return {
+                                metric,
+                                label: METRIC_META[metric]?.label ?? item.name ?? metric,
+                                value: formatChartMetricValue(metric, Number(item.value ?? 0)),
+                                color: item.color ?? "#334155"
+                              };
+                            });
+                          return (
+                            <div className="min-w-[180px] rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs shadow-lg">
+                              <p className="font-semibold text-slate-800">{accountName}</p>
+                              {rows.map((row) => (
+                                <p key={row.metric} style={{ color: row.color }} className="mt-1 flex items-center justify-between gap-2">
+                                  <span>{row.label}</span>
+                                  <strong>{row.value}</strong>
+                                </p>
+                              ))}
+                            </div>
+                          );
+                        }}
+                      />
                       <Legend />
-                      <Bar yAxisId="left" dataKey={accountBarMetric} name={METRIC_META[accountBarMetric].label} fill="#c90310" />
-                      <Line yAxisId="right" type="monotone" dataKey={accountLineMetric} name={METRIC_META[accountLineMetric].label} stroke="#1d4ed8" strokeWidth={2} dot={false} />
+                      <Bar yAxisId={accountBarAxis} dataKey={accountBarMetric} name={METRIC_META[accountBarMetric].label} fill="#c90310" />
+                      <Line
+                        yAxisId={accountLineAxis}
+                        type="monotone"
+                        dataKey={accountLineMetric}
+                        name={METRIC_META[accountLineMetric].label}
+                        stroke="#1d4ed8"
+                        strokeWidth={3}
+                        dot={{ r: 3, fill: "#1d4ed8" }}
+                        activeDot={{ r: 5 }}
+                      />
                     </BarChart>
                   </ResponsiveContainer>
                 </div>
               </article>
 
-              <article className="rounded-2xl border border-slate-200 bg-white p-4 shadow-panel xl:col-span-1">
-                <div className="mb-2 flex items-center justify-between">
-                  <h3 className="text-base font-semibold text-slate-900">Brecha ER vs Meta</h3>
+              <article className="min-w-0 rounded-2xl border border-slate-200 bg-white p-4 shadow-panel xl:col-span-1">
+                <div className="mb-2 flex flex-wrap items-start justify-between gap-2">
+                  <div>
+                    <h3 className="text-base font-semibold text-slate-900">Brecha ER vs Meta</h3>
+                    <p className="text-xs text-slate-500">{CHART_QUESTION_BY_KEY.gap}</p>
+                  </div>
                   <span className="text-xs text-slate-500">ER actual vs ER objetivo 2026</span>
                 </div>
-                <div className="h-[290px] w-full">
+                <div className="h-[320px] w-full min-w-0">
                   <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={erGapByChannel}>
+                    <BarChart data={erGapByChannel} margin={{ top: 8, right: 14, left: 4, bottom: 8 }}>
                       <CartesianGrid strokeDasharray="3 3" />
                       <XAxis dataKey="channel" tickFormatter={(value) => toChannelLabel(value as SocialChannel)} />
-                      <YAxis yAxisId="left" tickFormatter={(value) => formatPercent(Number(value))} />
-                      <YAxis yAxisId="right" orientation="right" tickFormatter={(value) => formatPercent(Number(value))} />
-                      <Tooltip />
+                      <YAxis yAxisId="left" width={68} tickFormatter={(value) => formatAxisPercentNoDecimals(Number(value))} label={{ value: "ER (%)", angle: -90, position: "insideLeft", offset: 2, fontSize: 11 }} />
+                      <Tooltip
+                        content={(tooltip: ChartTooltipProps) => {
+                          if (!tooltip.active || !tooltip.payload || tooltip.payload.length === 0) return null;
+                          const first = tooltip.payload[0]?.payload ?? {};
+                          const channel = String((first.channel as string | undefined) ?? tooltip.label ?? "");
+                          const currentEr = Number((first.current_er as number | undefined) ?? 0);
+                          const targetEr = Number((first.target_2026_er as number | undefined) ?? 0);
+                          const gap = Number((first.gap as number | undefined) ?? currentEr - targetEr);
+                          return (
+                            <div className="min-w-[170px] rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs shadow-lg">
+                              <p className="font-semibold text-slate-800">{toChannelLabel(channel as SocialChannel)}</p>
+                              <p className="mt-1 flex items-center justify-between gap-2">
+                                <span>ER actual</span>
+                                <strong>{formatAxisPercentNoDecimals(currentEr)}</strong>
+                              </p>
+                              <p className="mt-1 flex items-center justify-between gap-2">
+                                <span>Meta ER</span>
+                                <strong>{formatAxisPercentNoDecimals(targetEr)}</strong>
+                              </p>
+                              <p className="mt-1 flex items-center justify-between gap-2">
+                                <span>Gap</span>
+                                <strong>{formatAxisPercentNoDecimals(gap)}</strong>
+                              </p>
+                            </div>
+                          );
+                        }}
+                      />
                       <Legend />
                       <Bar yAxisId="left" dataKey="current_er" name="ER actual" fill="#e30613" />
-                      <Line yAxisId="right" type="monotone" dataKey="target_2026_er" name="Meta ER 2026" stroke="#0f766e" strokeWidth={2} dot={false} />
+                      <Line
+                        yAxisId="left"
+                        type="monotone"
+                        dataKey="target_2026_er"
+                        name="Meta ER 2026"
+                        stroke="#0f766e"
+                        strokeWidth={2.5}
+                        strokeDasharray="6 4"
+                        dot={{ r: 3, fill: "#0f766e" }}
+                        activeDot={{ r: 4 }}
+                      />
                     </BarChart>
                   </ResponsiveContainer>
                 </div>
+                {!hasVisibleTargetByChannel ? (
+                  <p className="mt-2 rounded-lg border border-amber-200 bg-amber-50 px-2 py-1 text-xs text-amber-700">
+                    No hay metas ER válidas (0/null) para los filtros activos.
+                  </p>
+                ) : null}
               </article>
             </div>
 
             <div className="grid grid-cols-1 gap-3 xl:grid-cols-3">
-              <article className="rounded-2xl border border-slate-200 bg-white p-4 shadow-panel xl:col-span-2">
-                <div className="mb-2 flex items-center justify-between">
-                  <h3 className="text-base font-semibold text-slate-900">ER vs Exposición (scatter)</h3>
+              <article className="min-w-0 rounded-2xl border border-slate-200 bg-white p-4 shadow-panel xl:col-span-2">
+                <div className="mb-2 flex flex-wrap items-start justify-between gap-2">
+                  <div>
+                    <h3 className="text-base font-semibold text-slate-900">ER vs Exposición (scatter)</h3>
+                    <p className="text-xs text-slate-500">{CHART_QUESTION_BY_KEY.scatter}</p>
+                  </div>
                   <label className="text-xs font-semibold text-slate-600">
                     Dimensión
                     <select value={scatterDimension} onChange={(event) => setScatterDimension(event.target.value as SocialScatterDimension)} className="ml-2 rounded-md border border-slate-200 px-2 py-1 text-xs">
@@ -1554,39 +2059,58 @@ export const MonitorSocialOverviewPage = () => {
                     </select>
                   </label>
                 </div>
-                <div className="h-[290px] w-full">
+                <div className="h-[320px] w-full min-w-0">
                   <ResponsiveContainer width="100%" height="100%">
-                    <ScatterChart margin={{ top: 10, right: 20, bottom: 20, left: 10 }}>
+                    <ScatterChart margin={{ top: 6, right: 20, bottom: 18, left: 18 }}>
                       <CartesianGrid />
-                      <XAxis type="number" dataKey="exposure_total" name="Exposición" tickFormatter={(value) => formatNumber(Number(value))} />
-                      <YAxis type="number" dataKey="er_global" name="ER" tickFormatter={(value) => formatPercent(Number(value))} />
+                      <XAxis
+                        type="number"
+                        dataKey="exposure_total"
+                        name="Exposición"
+                        tickFormatter={(value) => formatCompactAxisNumber(Number(value))}
+                        label={{ value: "Exposición", position: "insideBottom", offset: -6, fontSize: 11 }}
+                      />
+                      <YAxis
+                        type="number"
+                        dataKey="er_global"
+                        name="ER"
+                        tickFormatter={(value) => formatAxisPercentNoDecimals(Number(value))}
+                        label={{ value: "ER (%)", angle: -90, position: "insideLeft", offset: -2, fontSize: 11 }}
+                      />
+                      <ZAxis dataKey="z" name="Posts" range={[110, 680]} />
                       <Tooltip
-                        cursor={{ strokeDasharray: "3 3" }}
-                        formatter={(value, name) => {
-                          if (name === "ER") return formatPercent(Number(value));
-                          return formatNumber(Number(value));
+                        content={(tooltip: ChartTooltipProps) => {
+                          if (!tooltip.active || !tooltip.payload || tooltip.payload.length === 0) return null;
+                          const point = tooltip.payload[0]?.payload ?? {};
+                          const label = String((point.label as string | undefined) ?? "n/a");
+                          const exposure = Number((point.exposure_total as number | undefined) ?? 0);
+                          const engagement = Number((point.engagement_total as number | undefined) ?? 0);
+                          const er = Number((point.er_global as number | undefined) ?? 0);
+                          const postsCount = Number((point.posts as number | undefined) ?? 0);
+                          return (
+                            <div className="min-w-[210px] rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs shadow-lg">
+                              <p className="font-semibold text-slate-800">{label}</p>
+                              <p className="text-slate-600">Dimensión: {toScatterDimensionLabel(scatterDimension)}</p>
+                              <p className="mt-1 flex items-center justify-between gap-2"><span>Posts</span><strong>{formatCompactAxisNumber(postsCount)}</strong></p>
+                              <p className="mt-1 flex items-center justify-between gap-2"><span>Exposición</span><strong>{formatCompactAxisNumber(exposure)}</strong></p>
+                              <p className="mt-1 flex items-center justify-between gap-2"><span>Interacciones</span><strong>{formatCompactAxisNumber(engagement)}</strong></p>
+                              <p className="mt-1 flex items-center justify-between gap-2"><span>ER</span><strong>{formatAxisPercentNoDecimals(er)}</strong></p>
+                            </div>
+                          );
                         }}
-                        labelFormatter={(label) => `Grupo: ${String(label)}`}
                       />
-                      <Scatter
-                        name="Grupos"
-                        data={(scatterData?.items ?? []).map((item) => ({
-                          ...item,
-                          exposure_total: item.exposure_total,
-                          er_global: item.er_global,
-                          z: Math.max(item.posts, 1),
-                          label: item.label
-                        }))}
-                        fill="#0f766e"
-                      />
+                      <Scatter name="Grupos" data={scatterChartData} fill="#0f766e" />
                     </ScatterChart>
                   </ResponsiveContainer>
                 </div>
               </article>
 
-              <article className="rounded-2xl border border-slate-200 bg-white p-4 shadow-panel xl:col-span-1">
-                <div className="mb-2 flex items-center justify-between">
-                  <h3 className="text-base font-semibold text-slate-900">Heatmap actividad</h3>
+              <article className="min-w-0 rounded-2xl border border-slate-200 bg-white p-4 shadow-panel xl:col-span-1">
+                <div className="mb-2 flex flex-wrap items-start justify-between gap-2">
+                  <div>
+                    <h3 className="text-base font-semibold text-slate-900">Heatmap actividad</h3>
+                    <p className="text-xs text-slate-500">{CHART_QUESTION_BY_KEY.heatmap}</p>
+                  </div>
                   <label className="text-xs font-semibold text-slate-600">
                     Métrica
                     <select value={heatmapMetric} onChange={(event) => setHeatmapMetric(event.target.value as SocialHeatmapMetric)} className="ml-2 rounded-md border border-slate-200 px-2 py-1 text-xs">
@@ -1600,20 +2124,25 @@ export const MonitorSocialOverviewPage = () => {
                     </select>
                   </label>
                 </div>
-                <Heatmap data={heatmapData} />
+                <div className="min-h-[320px]">
+                  <Heatmap data={heatmapData} />
+                </div>
               </article>
             </div>
 
             <div className="grid grid-cols-1 gap-3 xl:grid-cols-3">
-              <article className="rounded-2xl border border-slate-200 bg-white p-4 shadow-panel xl:col-span-2">
-                <div className="mb-2 flex items-center justify-between">
-                  <h3 className="text-base font-semibold text-slate-900">ER por dimensión</h3>
+              <article className="min-w-0 rounded-2xl border border-slate-200 bg-white p-4 shadow-panel xl:col-span-2">
+                <div className="mb-2 flex flex-wrap items-start justify-between gap-2">
+                  <div>
+                    <h3 className="text-base font-semibold text-slate-900">ER por dimensión</h3>
+                    <p className="text-xs text-slate-500">{CHART_QUESTION_BY_KEY.breakdown}</p>
+                  </div>
                   <div className="flex items-center gap-2">
                     <select value={breakdownDimension} onChange={(event) => setBreakdownDimension(event.target.value as SocialErBreakdownDimension)} className="rounded-md border border-slate-200 px-2 py-1 text-xs">
                       <option value="hashtag">Hashtag</option>
-                      <option value="word">Palabra más usada</option>
+                      <option value="word">Término más usado</option>
                       <option value="post_type">Tipo de post</option>
-                      <option value="publish_frequency">Frecuencia publicación</option>
+                      <option value="publish_frequency">Frecuencia (días entre posts)</option>
                       <option value="weekday">Día publicación</option>
                     </select>
                     <span className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold ${breakdownScale === "log" ? "border-amber-300 bg-amber-50 text-amber-700" : "border-slate-200 text-slate-500"}`}>
@@ -1626,38 +2155,59 @@ export const MonitorSocialOverviewPage = () => {
                     </select>
                   </div>
                 </div>
-                <div className="h-[290px] w-full">
+                <div className="h-[320px] w-full min-w-0">
                   <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={breakdownData?.items ?? []} layout="vertical" margin={{ left: 24 }}>
+                    <BarChart data={breakdownData?.items ?? []} layout="vertical" margin={{ top: 6, right: 14, bottom: 8, left: 20 }}>
                       <CartesianGrid strokeDasharray="3 3" />
                       <XAxis
                         type="number"
                         scale={breakdownScale}
-                        domain={breakdownScale === "log" ? [1, "auto"] : [0, "auto"]}
-                        tickFormatter={(value) => formatPercent(Number(value))}
+                        domain={resolveAxisDomain(breakdownScale, (breakdownData?.items ?? []).map((item) => item.er_global))}
+                        tickFormatter={(value) => formatAxisPercentNoDecimals(Number(value))}
+                        label={{ value: "ER (%)", position: "insideBottom", offset: -6, fontSize: 11 }}
                       />
                       <YAxis type="category" dataKey="label" width={180} tickFormatter={(value) => truncate(String(value), 24)} />
-                      <Tooltip formatter={(value) => formatPercent(Number(value))} />
+                      <Tooltip
+                        content={(tooltip: ChartTooltipProps) => {
+                          if (!tooltip.active || !tooltip.payload || tooltip.payload.length === 0) return null;
+                          const row = tooltip.payload[0]?.payload ?? {};
+                          const label = String((row.label as string | undefined) ?? tooltip.label ?? "");
+                          const er = Number((row.er_global as number | undefined) ?? 0);
+                          const postsCount = Number((row.posts as number | undefined) ?? 0);
+                          const exposure = Number((row.exposure_total as number | undefined) ?? 0);
+                          return (
+                            <div className="min-w-[180px] rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs shadow-lg">
+                              <p className="font-semibold text-slate-800">{label}</p>
+                              <p className="mt-1 flex items-center justify-between gap-2"><span>ER</span><strong>{formatAxisPercentNoDecimals(er)}</strong></p>
+                              <p className="mt-1 flex items-center justify-between gap-2"><span>Posts</span><strong>{formatCompactAxisNumber(postsCount)}</strong></p>
+                              <p className="mt-1 flex items-center justify-between gap-2"><span>Exposición</span><strong>{formatCompactAxisNumber(exposure)}</strong></p>
+                            </div>
+                          );
+                        }}
+                      />
                       <Bar dataKey="er_global" name="ER" fill="#7c3aed" />
                     </BarChart>
                   </ResponsiveContainer>
                 </div>
               </article>
 
-              <article className="rounded-2xl border border-slate-200 bg-white p-4 shadow-panel xl:col-span-1">
-                <div className="mb-2 flex items-center justify-between">
-                  <h3 className="text-base font-semibold text-slate-900">Share por cuenta</h3>
+              <article className="min-w-0 rounded-2xl border border-slate-200 bg-white p-4 shadow-panel xl:col-span-1">
+                <div className="mb-2 flex flex-wrap items-start justify-between gap-2">
+                  <div>
+                    <h3 className="text-base font-semibold text-slate-900">Share por cuenta</h3>
+                    <p className="text-xs text-slate-500">{CHART_QUESTION_BY_KEY.share}</p>
+                  </div>
                   <span className="text-xs text-slate-500">SOV interno</span>
                 </div>
-                <div className="h-[290px] w-full">
+                <div className="h-[320px] w-full min-w-0">
                   <ResponsiveContainer width="100%" height="100%">
                     <PieChart>
-                      <Pie data={sovPieData} dataKey="value" nameKey="name" outerRadius={90} label={(entry) => truncate(String(entry.name), 14)}>
+                      <Pie data={sovPieData} dataKey="value" nameKey="name" outerRadius={98} label={(entry) => truncate(String(entry.name), 14)}>
                         {sovPieData.map((_, index) => (
                           <Cell key={index} fill={pieColors[index % pieColors.length]} />
                         ))}
                       </Pie>
-                      <Tooltip formatter={(value) => formatPercent(Number(value))} />
+                      <Tooltip formatter={(value) => formatAxisPercentNoDecimals(Number(value))} />
                     </PieChart>
                   </ResponsiveContainer>
                 </div>
