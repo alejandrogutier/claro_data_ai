@@ -887,7 +887,7 @@ resource "aws_apigatewayv2_api" "http" {
 
   cors_configuration {
     allow_headers = ["authorization", "content-type", "x-requested-with"]
-    allow_methods = ["GET", "POST", "PATCH", "OPTIONS"]
+    allow_methods = ["GET", "POST", "PATCH", "DELETE", "OPTIONS"]
     allow_origins = distinct(concat(
       ["https://${aws_cloudfront_distribution.frontend.domain_name}"],
       var.api_additional_allowed_origins
