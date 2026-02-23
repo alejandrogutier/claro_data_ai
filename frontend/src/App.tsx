@@ -1,3 +1,4 @@
+import { Suspense, lazy } from "react";
 import { Navigate, Route, Routes } from "react-router-dom";
 import { RequireAuth } from "./auth/RequireAuth";
 import { AppShell } from "./components/AppShell";
@@ -14,7 +15,6 @@ import { IncidentsPage } from "./pages/IncidentsPage";
 import { LoginPage } from "./pages/LoginPage";
 import { MonitorFeedPage } from "./pages/MonitorFeedPage";
 import { MonitorOverviewPage } from "./pages/MonitorOverviewPage";
-import { MonitorSocialOverviewPage } from "./pages/MonitorSocialOverviewPage";
 import { ReportsCenterPage } from "./pages/ReportsCenterPage";
 import { ReportsSchedulesPage } from "./pages/ReportsSchedulesPage";
 import { ReportTemplatesPage } from "./pages/ReportTemplatesPage";
@@ -23,6 +23,10 @@ import { SocialSettingsPage } from "./pages/SocialSettingsPage";
 import { SourceScoringPage } from "./pages/SourceScoringPage";
 import { TaxonomyPage } from "./pages/TaxonomyPage";
 import { TermsPage } from "./pages/TermsPage";
+
+const MonitorSocialOverviewPage = lazy(() =>
+  import("./pages/MonitorSocialOverviewPage").then((module) => ({ default: module.MonitorSocialOverviewPage }))
+);
 
 export const App = () => {
   return (
@@ -45,7 +49,14 @@ export const App = () => {
         <Route path="terms" element={<Navigate to="/app/config/queries" replace />} />
 
         <Route path="monitor/overview" element={<MonitorOverviewPage />} />
-        <Route path="monitor/social-overview" element={<MonitorSocialOverviewPage />} />
+        <Route
+          path="monitor/social-overview"
+          element={
+            <Suspense fallback={<section className="rounded-xl border border-slate-200 bg-white p-4 text-sm text-slate-600">Cargando Social Analytics...</section>}>
+              <MonitorSocialOverviewPage />
+            </Suspense>
+          }
+        />
         <Route
           path="monitor/feed-claro"
           element={

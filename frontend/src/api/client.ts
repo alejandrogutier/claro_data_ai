@@ -10,7 +10,9 @@ export type SocialChannel = components["schemas"]["SocialChannel"];
 export type SocialSentiment = components["schemas"]["SocialSentiment"];
 export type SocialDatePreset = components["schemas"]["SocialDatePreset"];
 export type SocialPostSort = components["schemas"]["SocialPostSort"];
+export type SocialAccountsSort = components["schemas"]["SocialAccountsSort"];
 export type MonitorSocialOverviewResponse = components["schemas"]["MonitorSocialOverviewResponse"];
+export type MonitorSocialFacetsResponse = components["schemas"]["MonitorSocialFacetsResponse"];
 export type MonitorSocialAccountsResponse = components["schemas"]["MonitorSocialAccountsResponse"];
 export type MonitorSocialPostsResponse = components["schemas"]["MonitorSocialPostsResponse"];
 export type MonitorSocialComment = components["schemas"]["MonitorSocialCommentItem"];
@@ -340,8 +342,15 @@ export class ApiClient {
   getMonitorSocialAccounts(query: MonitorSocialQuery & {
     min_posts?: number;
     min_exposure?: number;
+    sort?: SocialAccountsSort;
+    limit?: number;
+    cursor?: string;
   } = {}): Promise<MonitorSocialAccountsResponse> {
     return this.request<MonitorSocialAccountsResponse>("/v1/monitor/social/accounts", { query });
+  }
+
+  getMonitorSocialFacets(query: MonitorSocialQuery = {}): Promise<MonitorSocialFacetsResponse> {
+    return this.request<MonitorSocialFacetsResponse>("/v1/monitor/social/facets", { query });
   }
 
   getMonitorSocialRisk(query: MonitorSocialQuery = {}): Promise<MonitorSocialRiskResponse> {

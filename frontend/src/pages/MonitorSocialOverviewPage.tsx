@@ -10,6 +10,7 @@ import {
   LineChart,
   Pie,
   PieChart,
+  ReferenceLine,
   ResponsiveContainer,
   Scatter,
   ScatterChart,
@@ -23,6 +24,7 @@ import type {
   MonitorSocialErBreakdownResponse,
   MonitorSocialErTargetsResponse,
   MonitorSocialEtlQualityResponse,
+  MonitorSocialFacetsResponse,
   MonitorSocialHeatmapResponse,
   MonitorSocialOverviewResponse,
   MonitorSocialPostCommentsResponse,
@@ -30,23 +32,30 @@ import type {
   MonitorSocialRiskResponse,
   MonitorSocialRunItem,
   MonitorSocialScatterResponse,
+  SocialAccountsSort,
   SocialChannel,
   SocialComparisonMode,
   SocialDatePreset,
   SocialErBreakdownDimension,
   SocialHeatmapMetric,
+  SocialPostSort,
   SocialScatterDimension
 } from "../api/client";
+import { ApiError } from "../api/client";
 import { useApiClient } from "../api/useApiClient";
 import { useAuth } from "../auth/AuthContext";
 
 const CHANNEL_OPTIONS: SocialChannel[] = ["facebook", "instagram", "linkedin", "tiktok"];
 const PRESET_OPTIONS: SocialDatePreset[] = ["ytd", "90d", "30d", "y2024", "y2025", "last_quarter", "custom", "all"];
 const TAB_OPTIONS = ["summary", "accounts", "posts", "risk", "etl"] as const;
+const POST_SORT_OPTIONS: SocialPostSort[] = ["published_at_desc", "exposure_desc", "engagement_desc"];
+const ACCOUNT_SORT_OPTIONS: SocialAccountsSort[] = ["riesgo_desc", "er_desc", "exposure_desc", "engagement_desc", "posts_desc", "sov_desc", "account_asc"];
+const FACET_SENTIMENT_OPTIONS = ["positive", "negative", "neutral", "unknown"] as const;
 
 type SocialTab = (typeof TAB_OPTIONS)[number];
 type ScaleMode = "auto" | "linear" | "log";
 type AxisSide = "left" | "right";
+type MonitorSocialUiError = "none" | "permission_denied" | "error_retriable";
 
 type NumberFormatMode = "number" | "percent" | "score";
 type AccountMetric = "er_ponderado" | "exposure_total" | "engagement_total" | "posts" | "sov_interno";
@@ -80,6 +89,9 @@ type PostRow = {
   shares: number;
   views: number;
   sentiment: string;
+  sentiment_confidence: number | null;
+  source_score: number;
+  text?: string | null;
   campaign?: string | null;
   strategies?: string[];
   hashtags?: string[];
@@ -261,6 +273,32 @@ const parseComparisonMode = (raw: string | null): SocialComparisonMode => {
   return "same_period_last_year";
 };
 
+const parsePostSort = (raw: string | null): SocialPostSort => {
+  const value = (raw ?? "published_at_desc").trim().toLowerCase() as SocialPostSort;
+  return POST_SORT_OPTIONS.includes(value) ? value : "published_at_desc";
+};
+
+const parseAccountsSort = (raw: string | null): SocialAccountsSort => {
+  const value = (raw ?? "riesgo_desc").trim().toLowerCase() as SocialAccountsSort;
+  return ACCOUNT_SORT_OPTIONS.includes(value) ? value : "riesgo_desc";
+};
+
+const parseSentimentFilter = (raw: string | null): "all" | (typeof FACET_SENTIMENT_OPTIONS)[number] => {
+  const value = (raw ?? "all").trim().toLowerCase();
+  if (value === "all") return "all";
+  if ((FACET_SENTIMENT_OPTIONS as readonly string[]).includes(value)) {
+    return value as (typeof FACET_SENTIMENT_OPTIONS)[number];
+  }
+  return "all";
+};
+
+const parseIntFromQuery = (raw: string | null, fallback: number, min: number, max: number): number => {
+  if (!raw) return fallback;
+  const parsed = Number.parseInt(raw, 10);
+  if (!Number.isFinite(parsed)) return fallback;
+  return Math.min(max, Math.max(min, parsed));
+};
+
 const percentile = (values: number[], p: number): number => {
   if (values.length === 0) return 0;
   const sorted = [...values].sort((a, b) => a - b);
@@ -308,6 +346,36 @@ const toDeltaClass = (value: number): string => {
   return "text-slate-500";
 };
 
+const toPostSortLabel = (value: SocialPostSort): string => {
+  if (value === "exposure_desc") return "Exposición desc";
+  if (value === "engagement_desc") return "Engagement desc";
+  return "Fecha desc";
+};
+
+const toAccountsSortLabel = (value: SocialAccountsSort): string => {
+  if (value === "er_desc") return "ER desc";
+  if (value === "exposure_desc") return "Exposición desc";
+  if (value === "engagement_desc") return "Engagement desc";
+  if (value === "posts_desc") return "Posts desc";
+  if (value === "sov_desc") return "SOV desc";
+  if (value === "account_asc") return "Cuenta A-Z";
+  return "Riesgo desc";
+};
+
+const toRiskTagClass = (risk: number): string => {
+  if (risk >= 80) return "bg-rose-100 text-rose-700";
+  if (risk >= 60) return "bg-amber-100 text-amber-700";
+  if (risk >= 40) return "bg-orange-100 text-orange-700";
+  return "bg-emerald-100 text-emerald-700";
+};
+
+const toSlaBySeverity = (severity: string): string => {
+  if (severity === "SEV1") return "SLA <= 30 min";
+  if (severity === "SEV2") return "SLA <= 4 h";
+  if (severity === "SEV3") return "SLA <= 24 h";
+  return "SLA monitoreo";
+};
+
 const csvEscape = (value: string | number | null | undefined): string => {
   const raw = value === null || value === undefined ? "" : String(value);
   if (raw.includes('"') || raw.includes(",") || raw.includes("\n")) {
@@ -337,6 +405,11 @@ const downloadBlobFile = (blob: Blob, filename: string): void => {
   anchor.click();
   anchor.remove();
   URL.revokeObjectURL(url);
+};
+
+const getErrorKind = (error: unknown): MonitorSocialUiError => {
+  if (error instanceof ApiError && error.status === 403) return "permission_denied";
+  return "error_retriable";
 };
 
 const KpiInfo = ({ id, text }: { id: string; text: string }) => (
@@ -547,20 +620,35 @@ export const MonitorSocialOverviewPage = () => {
   const selectedCampaigns = useMemo(() => parseCsvList(searchParams.get("campaign")).map((item) => item.toLowerCase()), [searchParams]);
   const selectedStrategies = useMemo(() => parseCsvList(searchParams.get("strategy")).map((item) => item.toLowerCase()), [searchParams]);
   const selectedHashtags = useMemo(() => parseCsvList(searchParams.get("hashtag")).map((item) => item.toLowerCase().replace(/^#+/, "")), [searchParams]);
+  const selectedSentiment = useMemo(() => parseSentimentFilter(searchParams.get("sentiment")), [searchParams]);
+
+  const postsSort = useMemo(() => parsePostSort(searchParams.get("posts_sort") ?? searchParams.get("sort")), [searchParams]);
+  const accountsSort = useMemo(() => parseAccountsSort(searchParams.get("accounts_sort") ?? searchParams.get("sort")), [searchParams]);
+  const accountsCursor = useMemo(() => searchParams.get("accounts_cursor") ?? undefined, [searchParams]);
+  const accountsLimit = useMemo(() => parseIntFromQuery(searchParams.get("accounts_limit"), 100, 1, 500), [searchParams]);
+  const minPosts = useMemo(() => parseIntFromQuery(searchParams.get("min_posts"), 5, 1, 2000), [searchParams]);
+  const minExposure = useMemo(() => parseIntFromQuery(searchParams.get("min_exposure"), 5000, 0, 10_000_000_000), [searchParams]);
 
   const [loading, setLoading] = useState(true);
+  const [loadingFacets, setLoadingFacets] = useState(false);
+  const [loadingAccounts, setLoadingAccounts] = useState(false);
+  const [loadingPosts, setLoadingPosts] = useState(false);
+  const [loadingRisk, setLoadingRisk] = useState(false);
   const [loadingMorePosts, setLoadingMorePosts] = useState(false);
   const [refreshingRun, setRefreshingRun] = useState(false);
   const [exportingCsv, setExportingCsv] = useState(false);
   const [exportingExcel, setExportingExcel] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [uiError, setUiError] = useState<MonitorSocialUiError>("none");
 
   const [overview, setOverview] = useState<MonitorSocialOverviewResponse | null>(null);
+  const [facetsData, setFacetsData] = useState<MonitorSocialFacetsResponse | null>(null);
   const [accountsData, setAccountsData] = useState<MonitorSocialAccountsResponse | null>(null);
   const [riskData, setRiskData] = useState<MonitorSocialRiskResponse | null>(null);
   const [etlData, setEtlData] = useState<MonitorSocialEtlQualityResponse | null>(null);
   const [runs, setRuns] = useState<MonitorSocialRunItem[]>([]);
   const [posts, setPosts] = useState<PostRow[]>([]);
+  const [selectedPostDetail, setSelectedPostDetail] = useState<PostRow | null>(null);
   const [postsCursor, setPostsCursor] = useState<string | null>(null);
   const [postsHasNext, setPostsHasNext] = useState(false);
   const [selectedPostComments, setSelectedPostComments] = useState<PostRow | null>(null);
@@ -600,11 +688,22 @@ export const MonitorSocialOverviewPage = () => {
   const [topAccountsRightScaleMode, setTopAccountsRightScaleMode] = useState<ScaleMode>("auto");
   const [breakdownScaleMode, setBreakdownScaleMode] = useState<ScaleMode>("auto");
 
+  const [channelSearch, setChannelSearch] = useState("");
   const [accountSearch, setAccountSearch] = useState("");
   const [postTypeSearch, setPostTypeSearch] = useState("");
   const [campaignSearch, setCampaignSearch] = useState("");
   const [strategySearch, setStrategySearch] = useState("");
   const [hashtagSearch, setHashtagSearch] = useState("");
+  const [minPostsInput, setMinPostsInput] = useState(String(minPosts));
+  const [minExposureInput, setMinExposureInput] = useState(String(minExposure));
+
+  useEffect(() => {
+    setMinPostsInput(String(minPosts));
+  }, [minPosts]);
+
+  useEffect(() => {
+    setMinExposureInput(String(minExposure));
+  }, [minExposure]);
 
   const setQueryPatch = (patch: Record<string, string | null | undefined>) => {
     const next = new URLSearchParams(searchParams);
@@ -632,6 +731,7 @@ export const MonitorSocialOverviewPage = () => {
       campaign: selectedCampaigns.length > 0 ? selectedCampaigns.join(",") : undefined,
       strategy: selectedStrategies.length > 0 ? selectedStrategies.join(",") : undefined,
       hashtag: selectedHashtags.length > 0 ? selectedHashtags.join(",") : undefined,
+      sentiment: selectedSentiment === "all" ? undefined : selectedSentiment,
       comparison_mode: comparisonMode,
       comparison_days: comparisonMode === "exact_days" ? comparisonDays : undefined
     };
@@ -642,7 +742,7 @@ export const MonitorSocialOverviewPage = () => {
     }
 
     return query;
-  }, [preset, selectedChannels, selectedAccounts, selectedPostTypes, selectedCampaigns, selectedStrategies, selectedHashtags, comparisonMode, comparisonDays, from, to]);
+  }, [preset, selectedChannels, selectedAccounts, selectedPostTypes, selectedCampaigns, selectedStrategies, selectedHashtags, selectedSentiment, comparisonMode, comparisonDays, from, to]);
 
   const normalizePosts = (items: MonitorSocialPostsResponse["items"]): PostRow[] =>
     (items ?? []).map((item) => {
@@ -663,65 +763,175 @@ export const MonitorSocialOverviewPage = () => {
         shares: Number(row.shares ?? 0),
         views: Number(row.views ?? 0),
         sentiment: row.sentiment,
+        sentiment_confidence: (item as unknown as { sentiment_confidence?: number | null }).sentiment_confidence ?? null,
+        source_score: Number((item as unknown as { source_score?: number }).source_score ?? 0),
+        text: row.text ?? null,
         campaign: (item as unknown as { campaign?: string | null }).campaign ?? null,
         strategies: (item as unknown as { strategies?: string[] }).strategies ?? [],
         hashtags: (item as unknown as { hashtags?: string[] }).hashtags ?? []
       };
     });
 
-  const loadDashboard = async () => {
+  const applyRequestError = (requestError: unknown) => {
+    setError((requestError as Error)?.message ?? "No fue posible completar la solicitud");
+    setUiError(getErrorKind(requestError));
+  };
+
+  const loadCoreDashboard = async () => {
     setLoading(true);
     setError(null);
+    setUiError("none");
 
     try {
-      const [overviewResponse, postsResponse, runsResponse, accountsResponse, riskResponse, etlResponse, heatmapResponse, scatterResponse, breakdownResponse, targetsResponse] =
-        await Promise.all([
-          client.getMonitorSocialOverview({ ...commonQuery, trend_granularity: "auto" }),
-          client.listMonitorSocialPosts({ ...commonQuery, sort: "published_at_desc", limit: 50 }),
-          client.listMonitorSocialRuns(20),
-          client.getMonitorSocialAccounts(commonQuery),
-          client.getMonitorSocialRisk(commonQuery),
-          client.getMonitorSocialEtlQuality(20),
-          client.getMonitorSocialHeatmap({ ...commonQuery, metric: heatmapMetric }),
-          client.getMonitorSocialScatter({ ...commonQuery, dimension: scatterDimension }),
-          client.getMonitorSocialErBreakdown({ ...commonQuery, dimension: breakdownDimension }),
-          client.getMonitorSocialErTargets({ ...commonQuery, year: 2026 })
-        ]);
-
+      const [overviewResponse, runsResponse, etlResponse, targetsResponse] = await Promise.all([
+        client.getMonitorSocialOverview({ ...commonQuery, trend_granularity: "auto" }),
+        client.listMonitorSocialRuns(20),
+        client.getMonitorSocialEtlQuality(20),
+        client.getMonitorSocialErTargets({ ...commonQuery, year: 2026 })
+      ]);
       setOverview(overviewResponse);
-      setAccountsData(accountsResponse);
-      setRiskData(riskResponse);
-      setEtlData(etlResponse);
       setRuns(runsResponse.items ?? []);
-      setPosts(normalizePosts(postsResponse.items ?? []));
-      setPostsCursor(postsResponse.page_info.next_cursor ?? null);
-      setPostsHasNext(Boolean(postsResponse.page_info.has_next));
-      setHeatmapData(heatmapResponse);
-      setScatterData(scatterResponse);
-      setBreakdownData(breakdownResponse);
+      setEtlData(etlResponse);
       setErTargets(targetsResponse);
-    } catch (loadError) {
-      setError((loadError as Error).message);
+    } catch (requestError) {
+      applyRequestError(requestError);
       setOverview(null);
-      setAccountsData(null);
-      setRiskData(null);
-      setEtlData(null);
       setRuns([]);
-      setPosts([]);
-      setPostsCursor(null);
-      setPostsHasNext(false);
-      setHeatmapData(null);
-      setScatterData(null);
-      setBreakdownData(null);
+      setEtlData(null);
       setErTargets(null);
     } finally {
       setLoading(false);
     }
   };
 
+  const loadFacets = async () => {
+    setLoadingFacets(true);
+    try {
+      const response = await client.getMonitorSocialFacets(commonQuery);
+      setFacetsData(response);
+    } catch (requestError) {
+      applyRequestError(requestError);
+      setFacetsData(null);
+    } finally {
+      setLoadingFacets(false);
+    }
+  };
+
+  const loadAccounts = async () => {
+    setLoadingAccounts(true);
+    try {
+      const response = await client.getMonitorSocialAccounts({
+        ...commonQuery,
+        min_posts: minPosts,
+        min_exposure: minExposure,
+        sort: accountsSort,
+        limit: accountsLimit,
+        cursor: accountsCursor
+      });
+      setAccountsData(response);
+    } catch (requestError) {
+      applyRequestError(requestError);
+      setAccountsData(null);
+    } finally {
+      setLoadingAccounts(false);
+    }
+  };
+
+  const loadRisk = async () => {
+    setLoadingRisk(true);
+    try {
+      const response = await client.getMonitorSocialRisk(commonQuery);
+      setRiskData(response);
+    } catch (requestError) {
+      applyRequestError(requestError);
+      setRiskData(null);
+    } finally {
+      setLoadingRisk(false);
+    }
+  };
+
+  const loadPostsFirstPage = async () => {
+    setLoadingPosts(true);
+    try {
+      const response = await client.listMonitorSocialPosts({
+        ...commonQuery,
+        sort: postsSort,
+        limit: 50
+      });
+      setPosts(normalizePosts(response.items ?? []));
+      setPostsCursor(response.page_info.next_cursor ?? null);
+      setPostsHasNext(Boolean(response.page_info.has_next));
+    } catch (requestError) {
+      applyRequestError(requestError);
+      setPosts([]);
+      setPostsCursor(null);
+      setPostsHasNext(false);
+    } finally {
+      setLoadingPosts(false);
+    }
+  };
+
+  const loadHeatmap = async () => {
+    try {
+      const response = await client.getMonitorSocialHeatmap({ ...commonQuery, metric: heatmapMetric });
+      setHeatmapData(response);
+    } catch (requestError) {
+      applyRequestError(requestError);
+      setHeatmapData(null);
+    }
+  };
+
+  const loadScatter = async () => {
+    try {
+      const response = await client.getMonitorSocialScatter({ ...commonQuery, dimension: scatterDimension });
+      setScatterData(response);
+    } catch (requestError) {
+      applyRequestError(requestError);
+      setScatterData(null);
+    }
+  };
+
+  const loadBreakdown = async () => {
+    try {
+      const response = await client.getMonitorSocialErBreakdown({ ...commonQuery, dimension: breakdownDimension });
+      setBreakdownData(response);
+    } catch (requestError) {
+      applyRequestError(requestError);
+      setBreakdownData(null);
+    }
+  };
+
   useEffect(() => {
-    void loadDashboard();
-  }, [client, commonQuery, reloadVersion, heatmapMetric, scatterDimension, breakdownDimension]);
+    void loadCoreDashboard();
+  }, [client, commonQuery, reloadVersion]);
+
+  useEffect(() => {
+    void loadFacets();
+  }, [client, commonQuery, reloadVersion]);
+
+  useEffect(() => {
+    void loadAccounts();
+  }, [client, commonQuery, minPosts, minExposure, accountsSort, accountsLimit, accountsCursor, reloadVersion]);
+
+  useEffect(() => {
+    void loadRisk();
+  }, [client, commonQuery, reloadVersion]);
+
+  useEffect(() => {
+    void loadPostsFirstPage();
+  }, [client, commonQuery, postsSort, reloadVersion]);
+
+  useEffect(() => {
+    void loadHeatmap();
+  }, [client, commonQuery, heatmapMetric, reloadVersion]);
+
+  useEffect(() => {
+    void loadScatter();
+  }, [client, commonQuery, scatterDimension, reloadVersion]);
+
+  useEffect(() => {
+    void loadBreakdown();
+  }, [client, commonQuery, breakdownDimension, reloadVersion]);
 
   useEffect(() => {
     if (!pendingRunId) return undefined;
@@ -740,7 +950,7 @@ export const MonitorSocialOverviewPage = () => {
           }
         })
         .catch((pollError) => {
-          setError((pollError as Error).message);
+          applyRequestError(pollError);
           setPendingRunId(null);
         });
     }, 4000);
@@ -753,15 +963,33 @@ export const MonitorSocialOverviewPage = () => {
     void loadPostComments(selectedPostComments);
   }, [selectedPostComments, commentSentimentFilter, commentSpamFilter, commentRelatedFilter]);
 
+  useEffect(() => {
+    if (!selectedPostDetail) return;
+    const refreshed = posts.find((item) => item.id === selectedPostDetail.id);
+    if (!refreshed) {
+      setSelectedPostDetail(null);
+      return;
+    }
+    if (refreshed !== selectedPostDetail) {
+      setSelectedPostDetail(refreshed);
+    }
+  }, [posts, selectedPostDetail]);
+
+  useEffect(() => {
+    if (selectedPostDetail || posts.length === 0) return;
+    setSelectedPostDetail(posts[0]);
+  }, [posts, selectedPostDetail]);
+
   const loadMorePosts = async () => {
     if (!postsHasNext || !postsCursor || loadingMorePosts) return;
     setLoadingMorePosts(true);
     setError(null);
+    setUiError("none");
 
     try {
       const response = await client.listMonitorSocialPosts({
         ...commonQuery,
-        sort: "published_at_desc",
+        sort: postsSort,
         limit: 50,
         cursor: postsCursor
       });
@@ -769,7 +997,7 @@ export const MonitorSocialOverviewPage = () => {
       setPostsCursor(response.page_info.next_cursor ?? null);
       setPostsHasNext(Boolean(response.page_info.has_next));
     } catch (loadError) {
-      setError((loadError as Error).message);
+      applyRequestError(loadError);
     } finally {
       setLoadingMorePosts(false);
     }
@@ -786,6 +1014,7 @@ export const MonitorSocialOverviewPage = () => {
   const loadPostComments = async (post: PostRow, cursor?: string, append = false) => {
     setLoadingPostComments(true);
     setError(null);
+    setUiError("none");
     try {
       const response = await client.listMonitorSocialPostComments(post.id, buildPostCommentsQuery(cursor));
       const incoming = response.items ?? [];
@@ -793,7 +1022,7 @@ export const MonitorSocialOverviewPage = () => {
       setPostCommentsCursor(response.page_info.next_cursor ?? null);
       setPostCommentsHasNext(Boolean(response.page_info.has_next));
     } catch (loadError) {
-      setError((loadError as Error).message);
+      applyRequestError(loadError);
       if (!append) {
         setPostComments([]);
         setPostCommentsCursor(null);
@@ -809,7 +1038,6 @@ export const MonitorSocialOverviewPage = () => {
     setPostComments([]);
     setPostCommentsCursor(null);
     setPostCommentsHasNext(false);
-    void loadPostComments(post);
   };
 
   const closeCommentsModal = () => {
@@ -835,11 +1063,12 @@ export const MonitorSocialOverviewPage = () => {
     if (!canOverrideComments || updatingCommentId) return;
     setUpdatingCommentId(commentId);
     setError(null);
+    setUiError("none");
     try {
       const updated = await client.patchMonitorSocialComment(commentId, payload);
       setPostComments((current) => current.map((item) => (item.id === commentId ? updated : item)));
     } catch (patchError) {
-      setError((patchError as Error).message);
+      applyRequestError(patchError);
     } finally {
       setUpdatingCommentId(null);
     }
@@ -849,12 +1078,13 @@ export const MonitorSocialOverviewPage = () => {
     if (!canRefresh || refreshingRun) return;
     setRefreshingRun(true);
     setError(null);
+    setUiError("none");
     try {
       const accepted = await client.createMonitorSocialRun({ force: false });
       setPendingRunId(accepted.run_id);
       setReloadVersion((current) => current + 1);
     } catch (runError) {
-      setError((runError as Error).message);
+      applyRequestError(runError);
     } finally {
       setRefreshingRun(false);
     }
@@ -864,6 +1094,7 @@ export const MonitorSocialOverviewPage = () => {
     if (!canExport || exportingCsv) return;
     setExportingCsv(true);
     setError(null);
+    setUiError("none");
     try {
       const allPosts: PostRow[] = [];
       let cursor: string | undefined;
@@ -872,7 +1103,7 @@ export const MonitorSocialOverviewPage = () => {
       while (hasNext) {
         const page = await client.listMonitorSocialPosts({
           ...commonQuery,
-          sort: "published_at_desc",
+          sort: postsSort,
           limit: 200,
           cursor
         });
@@ -950,7 +1181,7 @@ export const MonitorSocialOverviewPage = () => {
       const filename = `social-overview-${new Date().toISOString().slice(0, 19).replaceAll(":", "-")}.csv`;
       downloadTextFile(rows.join("\n"), filename, "text/csv;charset=utf-8;");
     } catch (csvError) {
-      setError((csvError as Error).message);
+      applyRequestError(csvError);
     } finally {
       setExportingCsv(false);
     }
@@ -960,15 +1191,18 @@ export const MonitorSocialOverviewPage = () => {
     if (!canExport || exportingExcel) return;
     setExportingExcel(true);
     setError(null);
+    setUiError("none");
     try {
       const blob = await client.downloadMonitorSocialExcel({
         ...commonQuery,
-        sort: "published_at_desc"
+        sort: postsSort,
+        min_posts: minPosts,
+        min_exposure: minExposure
       });
       const filename = `social-analytics-${new Date().toISOString().slice(0, 19).replaceAll(":", "-")}.xlsx`;
       downloadBlobFile(blob, filename);
     } catch (downloadError) {
-      setError((downloadError as Error).message);
+      applyRequestError(downloadError);
     } finally {
       setExportingExcel(false);
     }
@@ -978,7 +1212,10 @@ export const MonitorSocialOverviewPage = () => {
     const normalized = value.trim();
     const exists = values.includes(normalized);
     const next = exists ? values.filter((item) => item !== normalized) : [...values, normalized];
-    setQueryPatch({ [key]: next.length > 0 ? next.join(",") : null });
+    setQueryPatch({
+      [key]: next.length > 0 ? next.join(",") : null,
+      accounts_cursor: null
+    });
   };
 
   const normalizedOverview = (overview ?? {}) as unknown as {
@@ -1045,40 +1282,38 @@ export const MonitorSocialOverviewPage = () => {
 
   const accountOptions = useMemo(() => {
     const values = new Set<string>();
-    for (const row of (overview as unknown as { by_account?: Array<{ account_name: string }> })?.by_account ?? []) values.add(row.account_name);
-    for (const row of accountsData?.items ?? []) values.add(row.account_name);
-    for (const row of posts) values.add(row.account_name);
+    for (const item of facetsData?.facets?.account ?? []) values.add(item.value);
     for (const row of selectedAccounts) values.add(row);
     return Array.from(values).sort((a, b) => a.localeCompare(b));
-  }, [overview, accountsData, posts, selectedAccounts]);
+  }, [facetsData, selectedAccounts]);
 
   const postTypeOptions = useMemo(() => {
     const values = new Set<string>(["unknown"]);
-    for (const row of posts) values.add(normalizePostType(row.post_type ?? "unknown"));
+    for (const item of facetsData?.facets?.post_type ?? []) values.add(normalizePostType(item.value));
     for (const row of selectedPostTypes) values.add(normalizePostType(row));
     return Array.from(values).sort((a, b) => a.localeCompare(b));
-  }, [posts, selectedPostTypes]);
+  }, [facetsData, selectedPostTypes]);
 
   const campaignOptions = useMemo(() => {
     const values = new Set<string>();
-    for (const row of posts) if (row.campaign) values.add(row.campaign.toLowerCase());
+    for (const item of facetsData?.facets?.campaign ?? []) values.add(item.value.toLowerCase());
     for (const row of selectedCampaigns) values.add(row);
     return Array.from(values).sort((a, b) => a.localeCompare(b));
-  }, [posts, selectedCampaigns]);
+  }, [facetsData, selectedCampaigns]);
 
   const strategyOptions = useMemo(() => {
     const values = new Set<string>();
-    for (const row of posts) for (const strategy of row.strategies ?? []) values.add(strategy.toLowerCase());
+    for (const item of facetsData?.facets?.strategy ?? []) values.add(item.value.toLowerCase());
     for (const row of selectedStrategies) values.add(row);
     return Array.from(values).sort((a, b) => a.localeCompare(b));
-  }, [posts, selectedStrategies]);
+  }, [facetsData, selectedStrategies]);
 
   const hashtagOptions = useMemo(() => {
     const values = new Set<string>();
-    for (const row of posts) for (const hashtag of row.hashtags ?? []) values.add(hashtag.toLowerCase());
+    for (const item of facetsData?.facets?.hashtag ?? []) values.add(item.value.toLowerCase().replace(/^#+/, ""));
     for (const row of selectedHashtags) values.add(row);
     return Array.from(values).sort((a, b) => a.localeCompare(b));
-  }, [posts, selectedHashtags]);
+  }, [facetsData, selectedHashtags]);
 
   const filterBySearch = (values: string[], term: string): string[] => {
     const normalized = term.trim().toLowerCase();
@@ -1086,6 +1321,7 @@ export const MonitorSocialOverviewPage = () => {
     return values.filter((item) => item.toLowerCase().includes(normalized));
   };
 
+  const filteredChannelOptions = useMemo(() => filterBySearch(CHANNEL_OPTIONS, channelSearch), [channelSearch]);
   const filteredAccountOptions = useMemo(() => filterBySearch(accountOptions, accountSearch), [accountOptions, accountSearch]);
   const filteredPostTypeOptions = useMemo(() => filterBySearch(postTypeOptions, postTypeSearch), [postTypeOptions, postTypeSearch]);
   const filteredCampaignOptions = useMemo(() => filterBySearch(campaignOptions, campaignSearch), [campaignOptions, campaignSearch]);
@@ -1094,12 +1330,14 @@ export const MonitorSocialOverviewPage = () => {
 
   const dataStatus = useMemo(() => {
     if (loading) return "loading";
+    if (uiError === "permission_denied") return "permission_denied";
     if (error) return "error";
     if ((normalizedOverview.kpis?.posts as number | undefined) === 0 && posts.length === 0) return "empty";
     if ((normalizedOverview.reconciliation_status ?? "ok") !== "ok") return "recon_warning";
     if (Boolean(normalizedOverview.diagnostics?.insufficient_data)) return "partial_data";
+    if (riskData?.stale_data) return "stale_data";
     return "ready";
-  }, [loading, error, normalizedOverview, posts.length]);
+  }, [loading, uiError, error, normalizedOverview, posts.length, riskData?.stale_data]);
 
   const topAccountsDual = useMemo(() => {
     const rows = [...(accountsData?.items ?? [])]
@@ -1238,6 +1476,22 @@ export const MonitorSocialOverviewPage = () => {
     [scatterData]
   );
 
+  const riskTopChannels = useMemo(
+    () =>
+      [...(riskData?.by_channel ?? [])]
+        .sort((a, b) => b.riesgo_activo - a.riesgo_activo || b.negativos - a.negativos)
+        .slice(0, 8),
+    [riskData]
+  );
+
+  const riskTopAccounts = useMemo(
+    () =>
+      [...(riskData?.by_account ?? [])]
+        .sort((a, b) => b.riesgo_activo - a.riesgo_activo || b.negativos - a.negativos)
+        .slice(0, 8),
+    [riskData]
+  );
+
   const targetErGlobal = useMemo(() => {
     const rows = normalizedOverview.target_progress?.er_by_channel ?? [];
     if (rows.length === 0) return 0;
@@ -1360,6 +1614,16 @@ export const MonitorSocialOverviewPage = () => {
       {role === "Viewer" ? <div className="rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-blue-800">Rol Viewer: lectura habilitada.</div> : null}
       {pendingRunId ? <div className="rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-blue-800">Corrida manual en progreso: {pendingRunId}</div> : null}
       {error ? <div className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-800">{error}</div> : null}
+      {dataStatus === "permission_denied" ? (
+        <div className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-800">
+          Estado permission_denied: no tienes permisos para una o más consultas de Social Analytics.
+        </div>
+      ) : null}
+      {dataStatus === "stale_data" ? (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+          Estado stale_data: la última ETL está fuera del umbral de frescura configurado para operación.
+        </div>
+      ) : null}
       {dataStatus === "partial_data" ? <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">Estado partial_data: hay clasificación pendiente o muestra insuficiente.</div> : null}
       {dataStatus === "recon_warning" ? <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">Estado recon_warning: la reconciliación S3-DB tiene deltas.</div> : null}
       {dataStatus === "empty" ? <div className="rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-blue-800">Estado empty: no hay datos para los filtros seleccionados.</div> : null}
@@ -1382,7 +1646,14 @@ export const MonitorSocialOverviewPage = () => {
                 post_type: null,
                 campaign: null,
                 strategy: null,
-                hashtag: null
+                hashtag: null,
+                sentiment: null,
+                posts_sort: null,
+                accounts_sort: null,
+                accounts_cursor: null,
+                accounts_limit: null,
+                min_posts: null,
+                min_exposure: null
               })
             }
           >
@@ -1472,11 +1743,11 @@ export const MonitorSocialOverviewPage = () => {
             label="Canal"
             summary={selectedChannels.length > 0 ? `${selectedChannels.length} seleccionados` : "Todos"}
             secondary={`${CHANNEL_OPTIONS.length} canales`}
-            options={CHANNEL_OPTIONS}
+            options={filteredChannelOptions}
             selected={selectedChannels}
-            search={""}
+            search={channelSearch}
             placeholder="Buscar canal"
-            onSearch={() => undefined}
+            onSearch={setChannelSearch}
             onToggle={(value) => toggleMultiValue("channel", selectedChannels, value)}
             onClear={() => setQueryPatch({ channel: null })}
             toLabel={(value) => toChannelLabel(value as SocialChannel)}
@@ -1553,6 +1824,24 @@ export const MonitorSocialOverviewPage = () => {
             onClear={() => setQueryPatch({ hashtag: null })}
             toLabel={(value) => `#${value}`}
           />
+
+          <div className="rounded-xl border border-slate-200 bg-white px-3 py-2 shadow-sm xl:col-span-1">
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Sentimiento</p>
+            <select
+              value={selectedSentiment}
+              onChange={(event) => setQueryPatch({ sentiment: event.target.value === "all" ? null : event.target.value })}
+              className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+            >
+              <option value="all">Todos</option>
+              <option value="positive">Positivo</option>
+              <option value="negative">Negativo</option>
+              <option value="neutral">Neutro</option>
+              <option value="unknown">Unknown</option>
+            </select>
+            <p className="mt-1 text-[11px] text-slate-500">
+              {loadingFacets ? "Actualizando facetas..." : `${formatNumber(facetsData?.totals?.posts ?? 0)} posts en universo filtrado`}
+            </p>
+          </div>
         </div>
 
         <p className="mt-3 text-xs text-slate-500">
@@ -2219,13 +2508,80 @@ export const MonitorSocialOverviewPage = () => {
 
       {tab === "accounts" ? (
         <section className="rounded-2xl border border-slate-200 bg-white/90 p-4 shadow-panel">
-          <div className="mb-2 flex items-center justify-between">
-            <h3 className="text-base font-semibold text-slate-900">Cuentas</h3>
-            <span className="text-xs text-slate-500">Desempeño por cuenta con deltas vs periodo comparado.</span>
+          <div className="mb-3 flex flex-wrap items-start justify-between gap-2">
+            <div>
+              <h3 className="text-base font-semibold text-slate-900">Cuentas</h3>
+              <span className="text-xs text-slate-500">Ranking operativo por cuenta con umbrales y deltas completos.</span>
+            </div>
+            <div className="flex flex-wrap items-end gap-2">
+              <label className="text-xs font-semibold text-slate-600">
+                Orden
+                <select
+                  value={accountsSort}
+                  onChange={(event) => setQueryPatch({ accounts_sort: event.target.value, accounts_cursor: null })}
+                  className="ml-2 rounded-md border border-slate-200 px-2 py-1 text-xs"
+                >
+                  {ACCOUNT_SORT_OPTIONS.map((sort) => (
+                    <option key={sort} value={sort}>
+                      {toAccountsSortLabel(sort)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="text-xs font-semibold text-slate-600">
+                Límite
+                <select
+                  value={accountsLimit}
+                  onChange={(event) => setQueryPatch({ accounts_limit: event.target.value, accounts_cursor: null })}
+                  className="ml-2 rounded-md border border-slate-200 px-2 py-1 text-xs"
+                >
+                  {[25, 50, 100, 200].map((limitOption) => (
+                    <option key={limitOption} value={limitOption}>
+                      {limitOption}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="text-xs font-semibold text-slate-600">
+                Min posts
+                <input
+                  value={minPostsInput}
+                  onChange={(event) => setMinPostsInput(event.target.value)}
+                  className="ml-2 w-20 rounded-md border border-slate-200 px-2 py-1 text-xs"
+                  inputMode="numeric"
+                />
+              </label>
+              <label className="text-xs font-semibold text-slate-600">
+                Min exposición
+                <input
+                  value={minExposureInput}
+                  onChange={(event) => setMinExposureInput(event.target.value)}
+                  className="ml-2 w-28 rounded-md border border-slate-200 px-2 py-1 text-xs"
+                  inputMode="numeric"
+                />
+              </label>
+              <button
+                type="button"
+                className="rounded-md border border-slate-200 px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                onClick={() =>
+                  setQueryPatch({
+                    min_posts: String(parseIntFromQuery(minPostsInput, minPosts, 1, 2000)),
+                    min_exposure: String(parseIntFromQuery(minExposureInput, minExposure, 0, 10_000_000_000)),
+                    accounts_cursor: null
+                  })
+                }
+              >
+                Aplicar umbrales
+              </button>
+            </div>
           </div>
 
+          <p className="mb-2 text-xs text-slate-500">
+            Orden aplicado por backend: <strong>{toAccountsSortLabel(accountsData?.sort_applied ?? accountsSort)}</strong> | thresholds: {formatNumber(minPosts)} posts / {formatNumber(minExposure)} exposición
+          </p>
+
           <div className="overflow-x-auto">
-            <table className="min-w-[980px] w-full border-collapse text-sm">
+            <table className="min-w-[1320px] w-full border-collapse text-sm">
               <thead>
                 <tr className="border-b border-slate-200 text-left text-xs uppercase tracking-wide text-slate-500">
                   <th className="px-2 py-2">Cuenta</th>
@@ -2234,9 +2590,13 @@ export const MonitorSocialOverviewPage = () => {
                   <th className="px-2 py-2">Exposición</th>
                   <th className="px-2 py-2">Engagement</th>
                   <th className="px-2 py-2">ER pond.</th>
+                  <th className="px-2 py-2">Riesgo</th>
+                  <th className="px-2 py-2">Delta exposición</th>
+                  <th className="px-2 py-2">Delta engagement</th>
                   <th className="px-2 py-2">Delta ER</th>
                   <th className="px-2 py-2">SOV interno</th>
                   <th className="px-2 py-2">Threshold</th>
+                  <th className="px-2 py-2">Acción</th>
                 </tr>
               </thead>
               <tbody>
@@ -2248,84 +2608,196 @@ export const MonitorSocialOverviewPage = () => {
                     <td className="px-2 py-2">{formatNumber(item.exposure_total)}</td>
                     <td className="px-2 py-2">{formatNumber(item.engagement_total)}</td>
                     <td className="px-2 py-2">{formatPercent(item.er_ponderado)}</td>
+                    <td className="px-2 py-2">
+                      <span className={`inline-flex rounded-full px-2 py-0.5 text-[11px] font-semibold ${toRiskTagClass(item.riesgo_activo)}`}>
+                        {formatPercent(item.riesgo_activo)}
+                      </span>
+                    </td>
+                    <td className={`px-2 py-2 ${toDeltaClass(item.delta_exposure)}`}>{formatNumber(item.delta_exposure)}</td>
+                    <td className={`px-2 py-2 ${toDeltaClass(item.delta_engagement)}`}>{formatNumber(item.delta_engagement)}</td>
                     <td className={`px-2 py-2 ${toDeltaClass(item.delta_er)}`}>{formatPercent(item.delta_er)}</td>
                     <td className="px-2 py-2">{formatPercent(item.sov_interno)}</td>
                     <td className="px-2 py-2">{item.meets_threshold ? "OK" : "Bajo"}</td>
+                    <td className="px-2 py-2">
+                      <button
+                        type="button"
+                        className="rounded-md border border-slate-200 px-2 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                        onClick={() => setQueryPatch({ tab: "posts", account: item.account_name })}
+                      >
+                        Ver posts
+                      </button>
+                    </td>
                   </tr>
                 ))}
               </tbody>
             </table>
+          </div>
+
+          {!loadingAccounts && (accountsData?.items?.length ?? 0) === 0 ? <p className="mt-3 text-sm text-slate-600">Sin cuentas para estos filtros.</p> : null}
+
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+              onClick={() => setQueryPatch({ accounts_cursor: null })}
+              disabled={!accountsCursor}
+            >
+              Primera página
+            </button>
+            <button
+              type="button"
+              className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+              onClick={() => setQueryPatch({ accounts_cursor: accountsData?.page_info?.next_cursor ?? null })}
+              disabled={!accountsData?.page_info?.has_next || !accountsData?.page_info?.next_cursor}
+            >
+              Siguiente página
+            </button>
+            {loadingAccounts ? <span className="text-xs text-slate-500">Cargando cuentas...</span> : null}
           </div>
         </section>
       ) : null}
 
       {tab === "posts" ? (
         <section className="rounded-2xl border border-slate-200 bg-white/90 p-4 shadow-panel">
-          <div className="mb-2 flex items-center justify-between">
-            <h3 className="text-base font-semibold text-slate-900">Posts</h3>
-            <span className="text-xs text-slate-500">Incluye campaña, estrategias y hashtags detectados.</span>
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <h3 className="text-base font-semibold text-slate-900">Posts</h3>
+              <span className="text-xs text-slate-500">Triage operativo con sentimiento, confianza y score de fuente.</span>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <label className="text-xs font-semibold text-slate-600">
+                Orden
+                <select
+                  value={postsSort}
+                  onChange={(event) => setQueryPatch({ posts_sort: event.target.value })}
+                  className="ml-2 rounded-md border border-slate-200 px-2 py-1 text-xs"
+                >
+                  {POST_SORT_OPTIONS.map((sortOption) => (
+                    <option key={sortOption} value={sortOption}>
+                      {toPostSortLabel(sortOption)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              {loadingPosts ? <span className="text-xs text-slate-500">Actualizando posts...</span> : null}
+            </div>
           </div>
 
-          {!loading && posts.length === 0 ? <p className="text-sm text-slate-600">Sin posts para estos filtros.</p> : null}
+          {!loadingPosts && posts.length === 0 ? <p className="text-sm text-slate-600">Sin posts para estos filtros.</p> : null}
 
           {posts.length > 0 ? (
-            <div className="overflow-x-auto">
-              <table className="min-w-[1250px] w-full border-collapse text-sm">
-                <thead>
-                  <tr className="border-b border-slate-200 text-left text-xs uppercase tracking-wide text-slate-500">
-                    <th className="px-2 py-2">Fecha</th>
-                    <th className="px-2 py-2">Canal</th>
-                    <th className="px-2 py-2">Cuenta</th>
-                    <th className="px-2 py-2">Tipo</th>
-                    <th className="px-2 py-2">Campaña</th>
-                    <th className="px-2 py-2">Estrategias</th>
-                    <th className="px-2 py-2">Hashtags</th>
-                    <th className="px-2 py-2">Post</th>
-                    <th className="px-2 py-2">Comentarios (Awario)</th>
-                    <th className="px-2 py-2">Exposición</th>
-                    <th className="px-2 py-2">Engagement</th>
-                    <th className="px-2 py-2">ER</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {posts.map((post) => {
-                    const er = (post.engagement_total / Math.max(post.exposure, 1)) * 100;
-                    return (
-                      <tr key={post.id} className="border-b border-slate-100">
-                        <td className="px-2 py-2">{formatDate(post.published_at)}</td>
-                        <td className="px-2 py-2">{toChannelLabel(post.channel)}</td>
-                        <td className="px-2 py-2">{post.account_name}</td>
-                        <td className="px-2 py-2">{post.post_type ?? "Sin tipo"}</td>
-                        <td className="px-2 py-2">{post.campaign ?? "--"}</td>
-                        <td className="px-2 py-2">{post.strategies?.join(", ") || "--"}</td>
-                        <td className="px-2 py-2">{post.hashtags?.map((item) => `#${item}`).join(" ") || "--"}</td>
-                        <td className="px-2 py-2">
-                          <div className="grid gap-1">
-                            <strong>{truncate(post.title, 52)}</strong>
-                            <a href={post.post_url} target="_blank" rel="noreferrer" className="text-xs text-red-700 underline">
-                              Ver post
-                            </a>
-                          </div>
-                        </td>
-                        <td className="px-2 py-2">
-                          <button
-                            type="button"
-                            className={`rounded-md px-2 py-1 text-xs font-semibold ${
-                              post.awario_comments_count > 0 ? "bg-red-50 text-red-700 hover:bg-red-100" : "bg-slate-100 text-slate-500"
-                            }`}
-                            onClick={() => openCommentsModal(post)}
-                          >
-                            {formatNumber(post.awario_comments_count)}
-                          </button>
-                        </td>
-                        <td className="px-2 py-2">{formatNumber(post.exposure)}</td>
-                        <td className="px-2 py-2">{formatNumber(post.engagement_total)}</td>
-                        <td className="px-2 py-2">{formatPercent(er)}</td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+            <div className="grid grid-cols-1 gap-3 xl:grid-cols-[2fr_1fr]">
+              <div className="overflow-x-auto rounded-xl border border-slate-200">
+                <table className="min-w-[1360px] w-full border-collapse text-sm">
+                  <thead>
+                    <tr className="border-b border-slate-200 bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500">
+                      <th className="px-2 py-2">Fecha</th>
+                      <th className="px-2 py-2">Canal</th>
+                      <th className="px-2 py-2">Cuenta</th>
+                      <th className="px-2 py-2">Tipo</th>
+                      <th className="px-2 py-2">Sentimiento</th>
+                      <th className="px-2 py-2">Confianza</th>
+                      <th className="px-2 py-2">Source score</th>
+                      <th className="px-2 py-2">Campaña</th>
+                      <th className="px-2 py-2">Estrategias</th>
+                      <th className="px-2 py-2">Hashtags</th>
+                      <th className="px-2 py-2">Post</th>
+                      <th className="px-2 py-2">Comentarios (Awario)</th>
+                      <th className="px-2 py-2">Exposición</th>
+                      <th className="px-2 py-2">Engagement</th>
+                      <th className="px-2 py-2">ER</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {posts.map((post) => {
+                      const er = (post.engagement_total / Math.max(post.exposure, 1)) * 100;
+                      const sentimentClass =
+                        post.sentiment === "positive"
+                          ? "bg-emerald-100 text-emerald-700"
+                          : post.sentiment === "negative"
+                            ? "bg-rose-100 text-rose-700"
+                            : post.sentiment === "neutral"
+                              ? "bg-sky-100 text-sky-700"
+                              : "bg-slate-100 text-slate-700";
+                      const isSelected = selectedPostDetail?.id === post.id;
+                      return (
+                        <tr
+                          key={post.id}
+                          className={`border-b border-slate-100 ${isSelected ? "bg-red-50/40" : "hover:bg-slate-50"} cursor-pointer`}
+                          onClick={() => setSelectedPostDetail(post)}
+                        >
+                          <td className="px-2 py-2">{formatDate(post.published_at)}</td>
+                          <td className="px-2 py-2">{toChannelLabel(post.channel)}</td>
+                          <td className="px-2 py-2">{post.account_name}</td>
+                          <td className="px-2 py-2">{post.post_type ?? "Sin tipo"}</td>
+                          <td className="px-2 py-2">
+                            <span className={`inline-flex rounded-full px-2 py-0.5 text-[11px] font-semibold ${sentimentClass}`}>{post.sentiment}</span>
+                          </td>
+                          <td className="px-2 py-2">{post.sentiment_confidence === null ? "n/a" : formatScore(post.sentiment_confidence)}</td>
+                          <td className="px-2 py-2">{formatScore(post.source_score)}</td>
+                          <td className="px-2 py-2">{post.campaign ?? "--"}</td>
+                          <td className="px-2 py-2">{post.strategies?.join(", ") || "--"}</td>
+                          <td className="px-2 py-2">{post.hashtags?.map((item) => `#${item}`).join(" ") || "--"}</td>
+                          <td className="px-2 py-2">
+                            <div className="grid gap-1">
+                              <strong>{truncate(post.title, 52)}</strong>
+                              <a href={post.post_url} target="_blank" rel="noreferrer" className="text-xs text-red-700 underline" onClick={(event) => event.stopPropagation()}>
+                                Ver post
+                              </a>
+                            </div>
+                          </td>
+                          <td className="px-2 py-2">
+                            <button
+                              type="button"
+                              className={`rounded-md px-2 py-1 text-xs font-semibold ${
+                                post.awario_comments_count > 0 ? "bg-red-50 text-red-700 hover:bg-red-100" : "bg-slate-100 text-slate-500"
+                              }`}
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                openCommentsModal(post);
+                              }}
+                            >
+                              {formatNumber(post.awario_comments_count)}
+                            </button>
+                          </td>
+                          <td className="px-2 py-2">{formatNumber(post.exposure)}</td>
+                          <td className="px-2 py-2">{formatNumber(post.engagement_total)}</td>
+                          <td className="px-2 py-2">{formatPercent(er)}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+
+              <aside className="rounded-xl border border-slate-200 bg-white p-3">
+                <h4 className="text-sm font-semibold text-slate-900">Detalle del post</h4>
+                {!selectedPostDetail ? <p className="mt-2 text-xs text-slate-500">Selecciona un post para ver detalle y señales operativas.</p> : null}
+                {selectedPostDetail ? (
+                  <div className="mt-2 space-y-2 text-sm text-slate-700">
+                    <p className="font-semibold text-slate-900">{selectedPostDetail.title}</p>
+                    <p className="text-xs text-slate-500">
+                      {formatDateTime(selectedPostDetail.published_at)} · {toChannelLabel(selectedPostDetail.channel)} · {selectedPostDetail.account_name}
+                    </p>
+                    <p className="text-xs text-slate-600">{selectedPostDetail.text || "Sin texto disponible."}</p>
+                    <ul className="space-y-1 text-xs">
+                      <li className="flex items-center justify-between"><span>Sentimiento</span><strong>{selectedPostDetail.sentiment}</strong></li>
+                      <li className="flex items-center justify-between"><span>Confianza</span><strong>{selectedPostDetail.sentiment_confidence === null ? "n/a" : formatScore(selectedPostDetail.sentiment_confidence)}</strong></li>
+                      <li className="flex items-center justify-between"><span>Source score</span><strong>{formatScore(selectedPostDetail.source_score)}</strong></li>
+                      <li className="flex items-center justify-between"><span>Exposición</span><strong>{formatNumber(selectedPostDetail.exposure)}</strong></li>
+                      <li className="flex items-center justify-between"><span>Engagement</span><strong>{formatNumber(selectedPostDetail.engagement_total)}</strong></li>
+                      <li className="flex items-center justify-between"><span>Comentarios Awario</span><strong>{formatNumber(selectedPostDetail.awario_comments_count)}</strong></li>
+                    </ul>
+                    <div className="flex flex-wrap gap-1">
+                      {(selectedPostDetail.strategies ?? []).slice(0, 6).map((value) => (
+                        <span key={value} className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] text-slate-700">
+                          {value}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
+              </aside>
             </div>
           ) : null}
 
@@ -2339,21 +2811,41 @@ export const MonitorSocialOverviewPage = () => {
 
       {tab === "risk" ? (
         <section className="rounded-2xl border border-slate-200 bg-white/90 p-4 shadow-panel">
-          <div className="mb-2 flex items-center justify-between">
-            <h3 className="text-base font-semibold text-slate-900">Riesgo</h3>
-            <span className="text-xs text-slate-500">Seguimiento de negativos y riesgo activo.</span>
+          <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <h3 className="text-base font-semibold text-slate-900">Riesgo</h3>
+              <span className="text-xs text-slate-500">Detección y respuesta con umbrales, hotspots y alertas activas.</span>
+            </div>
+            <div className="flex flex-wrap items-center gap-2 text-xs">
+              <span className={`rounded-full px-2 py-0.5 font-semibold ${riskData?.stale_data ? "bg-amber-100 text-amber-700" : "bg-emerald-100 text-emerald-700"}`}>
+                {riskData?.stale_data ? "stale_data" : "fresh_data"}
+              </span>
+              <span className="rounded-full border border-slate-200 px-2 py-0.5 text-slate-600">
+                Umbral riesgo: {formatPercent(riskData?.thresholds?.risk_threshold ?? 0)}
+              </span>
+              {loadingRisk ? <span className="text-slate-500">Actualizando...</span> : null}
+            </div>
           </div>
-          <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
-            <article className="rounded-xl border border-slate-200 p-3">
+
+          <div className="grid grid-cols-1 gap-3 xl:grid-cols-3">
+            <article className="rounded-xl border border-slate-200 p-3 xl:col-span-2">
+              <h4 className="mb-2 text-sm font-semibold text-slate-800">Tendencia de riesgo vs sentimiento</h4>
               <div className="h-[280px] w-full">
                 <ResponsiveContainer width="100%" height="100%">
                   <LineChart data={riskData?.sentiment_trend ?? []}>
                     <CartesianGrid strokeDasharray="3 3" />
                     <XAxis dataKey="date" />
                     <YAxis yAxisId="left" />
-                    <YAxis yAxisId="right" orientation="right" />
+                    <YAxis yAxisId="right" orientation="right" tickFormatter={(value) => formatAxisPercentNoDecimals(Number(value))} />
                     <Tooltip />
                     <Legend />
+                    <ReferenceLine
+                      yAxisId="right"
+                      y={riskData?.thresholds?.risk_threshold ?? 0}
+                      stroke="#dc2626"
+                      strokeDasharray="5 4"
+                      label={{ value: "Umbral", fill: "#dc2626", fontSize: 11 }}
+                    />
                     <Line yAxisId="left" type="monotone" dataKey="negativos" stroke="#b91c1c" strokeWidth={2} dot={false} />
                     <Line yAxisId="right" type="monotone" dataKey="riesgo_activo" stroke="#f59f00" strokeWidth={2} dot={false} />
                     <Line yAxisId="right" type="monotone" dataKey="sentimiento_neto" stroke="#0f766e" strokeWidth={2} dot={false} />
@@ -2361,8 +2853,48 @@ export const MonitorSocialOverviewPage = () => {
                 </ResponsiveContainer>
               </div>
             </article>
+
             <article className="rounded-xl border border-slate-200 p-3">
-              <h4 className="mb-2 text-sm font-semibold text-slate-800">Alertas activas</h4>
+              <h4 className="mb-2 text-sm font-semibold text-slate-800">Hotspots por canal</h4>
+              <ul className="space-y-2 text-xs">
+                {riskTopChannels.map((item) => (
+                  <li key={item.channel} className="rounded-lg border border-slate-200 px-2 py-1">
+                    <div className="flex items-center justify-between gap-2">
+                      <strong>{toChannelLabel(item.channel)}</strong>
+                      <span className={`rounded-full px-2 py-0.5 font-semibold ${toRiskTagClass(item.riesgo_activo)}`}>{formatPercent(item.riesgo_activo)}</span>
+                    </div>
+                    <p className="mt-1 text-slate-600">Negativos: {formatNumber(item.negativos)} · Clasificados: {formatNumber(item.clasificados)}</p>
+                  </li>
+                ))}
+                {riskTopChannels.length === 0 ? <li className="text-slate-500">Sin datos por canal.</li> : null}
+              </ul>
+            </article>
+          </div>
+
+          <div className="mt-3 grid grid-cols-1 gap-3 xl:grid-cols-2">
+            <article className="rounded-xl border border-slate-200 p-3">
+              <h4 className="mb-2 text-sm font-semibold text-slate-800">Hotspots por cuenta</h4>
+              <ul className="space-y-2 text-xs">
+                {riskTopAccounts.map((item) => (
+                  <li key={item.account_name} className="rounded-lg border border-slate-200 px-2 py-1">
+                    <div className="flex items-center justify-between gap-2">
+                      <strong>{item.account_name}</strong>
+                      <span className={`rounded-full px-2 py-0.5 font-semibold ${toRiskTagClass(item.riesgo_activo)}`}>{formatPercent(item.riesgo_activo)}</span>
+                    </div>
+                    <p className="mt-1 text-slate-600">Negativos: {formatNumber(item.negativos)} · Clasificados: {formatNumber(item.clasificados)}</p>
+                  </li>
+                ))}
+                {riskTopAccounts.length === 0 ? <li className="text-slate-500">Sin datos por cuenta.</li> : null}
+              </ul>
+            </article>
+
+            <article className="rounded-xl border border-slate-200 p-3">
+              <div className="mb-2 flex items-center justify-between gap-2">
+                <h4 className="text-sm font-semibold text-slate-800">Alertas activas</h4>
+                <a href="/app/monitor/incidents" className="rounded-md border border-slate-200 px-2 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50">
+                  Ir a Incidentes
+                </a>
+              </div>
               <ul className="space-y-2">
                 {(riskData?.alerts ?? []).map((alert) => (
                   <li key={alert.id} className="rounded-lg border border-slate-200 px-2 py-1 text-xs text-slate-700">
@@ -2372,6 +2904,7 @@ export const MonitorSocialOverviewPage = () => {
                       <span>risk {formatScore(alert.risk_score)}</span>
                       <span>{formatDateTime(alert.updated_at)}</span>
                     </div>
+                    <p className="mt-1 text-slate-600">{toSlaBySeverity(alert.severity)} · cooldown: {alert.cooldown_until ? formatDateTime(alert.cooldown_until) : "sin cooldown"}</p>
                   </li>
                 ))}
                 {(riskData?.alerts?.length ?? 0) === 0 ? <li className="text-xs text-slate-500">Sin alertas activas.</li> : null}
