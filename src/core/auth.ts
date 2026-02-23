@@ -1,6 +1,6 @@
 import type { APIGatewayProxyEventV2 } from "aws-lambda";
 
-export type UserRole = "Admin" | "Analyst" | "Viewer";
+export type UserRole = "Admin" | "Analyst" | "Viewer" | "SocialOverviewViewer";
 export type AuthPrincipal = {
   sub: string | null;
   email: string | null;
@@ -11,6 +11,7 @@ export type AuthPrincipal = {
 };
 
 const rolePriority: Record<UserRole, number> = {
+  SocialOverviewViewer: 0,
   Viewer: 1,
   Analyst: 2,
   Admin: 3
@@ -53,6 +54,7 @@ export const getRole = (event: APIGatewayProxyEventV2): UserRole => {
 
   if (groups.includes("Admin")) return "Admin";
   if (groups.includes("Analyst")) return "Analyst";
+  if (groups.includes("SocialOverviewViewer")) return "SocialOverviewViewer";
   return "Viewer";
 };
 

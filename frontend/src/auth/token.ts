@@ -1,4 +1,4 @@
-export type UserRole = "Admin" | "Analyst" | "Viewer";
+export type UserRole = "Admin" | "Analyst" | "Viewer" | "SocialOverviewViewer";
 
 type JwtClaims = {
   sub?: string;
@@ -55,6 +55,7 @@ const parseGroups = (raw: unknown): string[] => {
 const inferRole = (groups: string[]): UserRole => {
   if (groups.includes("Admin")) return "Admin";
   if (groups.includes("Analyst")) return "Analyst";
+  if (groups.includes("SocialOverviewViewer")) return "SocialOverviewViewer";
   return "Viewer";
 };
 

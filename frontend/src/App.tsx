@@ -38,7 +38,7 @@ export const App = () => {
       <Route
         path="/app"
         element={
-          <RequireAuth allowedRoles={["Admin", "Analyst", "Viewer"]}>
+          <RequireAuth allowedRoles={["Admin", "Analyst", "Viewer", "SocialOverviewViewer"]}>
             <AppShell />
           </RequireAuth>
         }

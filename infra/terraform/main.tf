@@ -259,6 +259,11 @@ resource "aws_cognito_user_group" "viewer" {
   user_pool_id = aws_cognito_user_pool.main.id
 }
 
+resource "aws_cognito_user_group" "social_overview_viewer" {
+  name         = "SocialOverviewViewer"
+  user_pool_id = aws_cognito_user_pool.main.id
+}
+
 resource "aws_iam_role" "lambda_api" {
   name = "${local.name_prefix}-lambda-api-role"
 

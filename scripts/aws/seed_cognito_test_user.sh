@@ -2,7 +2,7 @@
 set -euo pipefail
 
 if [[ $# -lt 3 ]]; then
-  echo "Usage: $0 <username> <password> <role:Admin|Analyst|Viewer>"
+  echo "Usage: $0 <username> <password> <role:Admin|Analyst|Viewer|SocialOverviewViewer>"
   exit 1
 fi
 
@@ -10,7 +10,7 @@ USERNAME="$1"
 PASSWORD="$2"
 ROLE="$3"
 
-if [[ "$ROLE" != "Admin" && "$ROLE" != "Analyst" && "$ROLE" != "Viewer" ]]; then
+if [[ "$ROLE" != "Admin" && "$ROLE" != "Analyst" && "$ROLE" != "Viewer" && "$ROLE" != "SocialOverviewViewer" ]]; then
   echo "Invalid role: $ROLE"
   exit 1
 fi
@@ -54,7 +54,7 @@ aws cognito-idp admin-set-user-password \
   --password "$PASSWORD" \
   --permanent >/dev/null
 
-for GROUP in Admin Analyst Viewer; do
+for GROUP in Admin Analyst Viewer SocialOverviewViewer; do
   if [[ "$GROUP" != "$ROLE" ]]; then
     aws cognito-idp admin-remove-user-from-group \
       --region "$AWS_REGION" \
