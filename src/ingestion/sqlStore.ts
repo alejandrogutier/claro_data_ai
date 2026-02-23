@@ -1,6 +1,14 @@
 import { randomUUID } from "crypto";
-import { RdsDataClient, fieldDate, fieldString, sqlJson, sqlLong, sqlString, sqlTimestamp, sqlUuid } from "../data/rdsData";
+import { RdsDataClient, fieldDate, fieldLong, fieldString, sqlJson, sqlLong, sqlString, sqlTimestamp, sqlUuid } from "../data/rdsData";
 import type { NormalizedArticle } from "./providers";
+import {
+  type QueryDefinition,
+  type QueryExecutionConfig,
+  buildSimpleQueryDefinition,
+  compileQueryDefinition,
+  sanitizeExecutionConfig,
+  validateQueryDefinition
+} from "../queryBuilder";
 
 type TriggerType = "scheduled" | "manual";
 type RunStatus = "queued" | "running" | "completed" | "failed";
@@ -33,8 +41,20 @@ type PersistableContentItem = {
   termId: string | null;
   runId: string;
   term: string;
+  termScope: "claro" | "competencia";
   triggerType: TriggerType;
   rawPayloadS3Key: string;
+};
+
+type IngestionQueryTarget = {
+  id: string;
+  name: string;
+  language: string;
+  scope: "claro" | "competencia";
+  maxArticlesPerRun: number;
+  definition: QueryDefinition;
+  execution: QueryExecutionConfig;
+  compiledDefinition: Record<string, unknown>;
 };
 
 type UpsertedContentRef = {
@@ -117,23 +137,34 @@ class IngestionSqlStore {
   }
 
   async ensureTrackedTerm(term: string, language: string, maxArticlesPerRun: number): Promise<string | null> {
+    const definition = buildSimpleQueryDefinition(term);
+    const execution = sanitizeExecutionConfig({});
+    const compiled = compileQueryDefinition(definition);
+
     const response = await this.rds.execute(
       `
         INSERT INTO "public"."TrackedTerm"
-          ("id", "name", "language", "isActive", "maxArticlesPerRun", "createdAt", "updatedAt")
+          ("id", "name", "language", "scope", "isActive", "priority", "maxArticlesPerRun", "definition", "execution", "compiledDefinition", "currentRevision", "createdAt", "updatedAt")
         VALUES
-          (CAST(:id AS UUID), :name, :language, TRUE, :max_articles_per_run, NOW(), NOW())
+          (CAST(:id AS UUID), :name, :language, CAST('claro' AS "public"."TermScope"), TRUE, 3, :max_articles_per_run, CAST(:definition AS JSONB), CAST(:execution AS JSONB), CAST(:compiled_definition AS JSONB), 1, NOW(), NOW())
         ON CONFLICT ("name", "language") DO UPDATE SET
           "isActive" = TRUE,
           "updatedAt" = NOW(),
-          "maxArticlesPerRun" = GREATEST("public"."TrackedTerm"."maxArticlesPerRun", EXCLUDED."maxArticlesPerRun")
+          "maxArticlesPerRun" = GREATEST("public"."TrackedTerm"."maxArticlesPerRun", EXCLUDED."maxArticlesPerRun"),
+          "definition" = COALESCE("public"."TrackedTerm"."definition", EXCLUDED."definition"),
+          "execution" = COALESCE("public"."TrackedTerm"."execution", EXCLUDED."execution"),
+          "compiledDefinition" = COALESCE("public"."TrackedTerm"."compiledDefinition", EXCLUDED."compiledDefinition"),
+          "currentRevision" = GREATEST("public"."TrackedTerm"."currentRevision", EXCLUDED."currentRevision")
         RETURNING "id"::text
       `,
       [
         sqlUuid("id", randomUUID()),
         sqlString("name", term),
         sqlString("language", language),
-        sqlLong("max_articles_per_run", maxArticlesPerRun)
+        sqlLong("max_articles_per_run", maxArticlesPerRun),
+        sqlJson("definition", definition),
+        sqlJson("execution", execution),
+        sqlJson("compiled_definition", compiled)
       ]
     );
 
@@ -161,6 +192,99 @@ class IngestionSqlStore {
       .filter((name): name is string => Boolean(name));
   }
 
+  async resolveTermIdsToQueries(termIds: string[]): Promise<IngestionQueryTarget[]> {
+    const ids = [...new Set(termIds)].slice(0, 50);
+    if (ids.length === 0) return [];
+
+    const placeholders = ids.map((_, index) => `CAST(:term_id_${index} AS UUID)`);
+    const params = ids.map((id, index) => sqlUuid(`term_id_${index}`, id));
+
+    const response = await this.rds.execute(
+      `
+        SELECT
+          "id"::text,
+          "name",
+          "language",
+          "scope"::text,
+          "maxArticlesPerRun",
+          "definition"::text,
+          "execution"::text,
+          "compiledDefinition"::text
+        FROM "public"."TrackedTerm"
+        WHERE "id" IN (${placeholders.join(",")})
+        ORDER BY "updatedAt" DESC, "createdAt" DESC
+      `,
+      params
+    );
+
+    return (response.records ?? [])
+      .map((row) => {
+        const id = fieldString(row, 0);
+        const name = fieldString(row, 1);
+        const language = fieldString(row, 2) ?? "es";
+        const scopeRaw = fieldString(row, 3);
+        const maxArticlesPerRun = fieldLong(row, 4) ?? 100;
+        const definitionRaw = fieldString(row, 5);
+        const executionRaw = fieldString(row, 6);
+        const compiledRaw = fieldString(row, 7);
+
+        if (!id || !name) return null;
+        const scope = scopeRaw === "competencia" ? "competencia" : "claro";
+
+        let definition: QueryDefinition = buildSimpleQueryDefinition(name);
+        if (definitionRaw) {
+          try {
+            const parsed = JSON.parse(definitionRaw) as unknown;
+            const validated = validateQueryDefinition(parsed);
+            if (validated.valid) {
+              definition = parsed as QueryDefinition;
+            }
+          } catch {
+            // fallback to simple definition
+          }
+        }
+
+        const execution = sanitizeExecutionConfig(
+          executionRaw
+            ? (() => {
+                try {
+                  return JSON.parse(executionRaw) as unknown;
+                } catch {
+                  return {};
+                }
+              })()
+            : {}
+        );
+
+        const compiledDefinition =
+          compiledRaw
+            ? (() => {
+                try {
+                  const parsed = JSON.parse(compiledRaw) as unknown;
+                  if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+                    return parsed as Record<string, unknown>;
+                  }
+                  return compileQueryDefinition(definition) as unknown as Record<string, unknown>;
+                } catch {
+                  return compileQueryDefinition(definition) as unknown as Record<string, unknown>;
+                }
+              })()
+            : (compileQueryDefinition(definition) as unknown as Record<string, unknown>);
+
+        return {
+          id,
+          name,
+          language,
+          scope,
+          maxArticlesPerRun: Math.max(1, maxArticlesPerRun),
+          definition,
+          execution,
+          compiledDefinition
+        } satisfies IngestionQueryTarget;
+      })
+      .filter((item): item is IngestionQueryTarget => item !== null);
+  }
+
   async listActiveTermNames(limit = 50): Promise<string[]> {
     const safeLimit = Math.min(100, Math.max(1, limit));
     const response = await this.rds.execute(
@@ -179,16 +303,108 @@ class IngestionSqlStore {
       .filter((name): name is string => Boolean(name));
   }
 
+  async listActiveQueries(limit = 50): Promise<IngestionQueryTarget[]> {
+    const safeLimit = Math.min(100, Math.max(1, limit));
+    const response = await this.rds.execute(
+      `
+        SELECT
+          "id"::text,
+          "name",
+          "language",
+          "scope"::text,
+          "maxArticlesPerRun",
+          "definition"::text,
+          "execution"::text,
+          "compiledDefinition"::text
+        FROM "public"."TrackedTerm"
+        WHERE "isActive" = TRUE
+        ORDER BY "priority" ASC, "updatedAt" DESC, "createdAt" DESC
+        LIMIT :limit
+      `,
+      [sqlLong("limit", safeLimit)]
+    );
+
+    return (response.records ?? [])
+      .map((row) => {
+        const id = fieldString(row, 0);
+        const name = fieldString(row, 1);
+        const language = fieldString(row, 2) ?? "es";
+        const scopeRaw = fieldString(row, 3);
+        const maxArticlesPerRun = fieldLong(row, 4) ?? 100;
+        const definitionRaw = fieldString(row, 5);
+        const executionRaw = fieldString(row, 6);
+        const compiledRaw = fieldString(row, 7);
+
+        if (!id || !name) return null;
+        const scope = scopeRaw === "competencia" ? "competencia" : "claro";
+
+        let definition: QueryDefinition = buildSimpleQueryDefinition(name);
+        if (definitionRaw) {
+          try {
+            const parsed = JSON.parse(definitionRaw) as unknown;
+            const validated = validateQueryDefinition(parsed);
+            if (validated.valid) {
+              definition = parsed as QueryDefinition;
+            }
+          } catch {
+            // fallback to simple definition
+          }
+        }
+
+        const execution = sanitizeExecutionConfig(
+          executionRaw
+            ? (() => {
+                try {
+                  return JSON.parse(executionRaw) as unknown;
+                } catch {
+                  return {};
+                }
+              })()
+            : {}
+        );
+
+        const compiledDefinition =
+          compiledRaw
+            ? (() => {
+                try {
+                  const parsed = JSON.parse(compiledRaw) as unknown;
+                  if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+                    return parsed as Record<string, unknown>;
+                  }
+                  return compileQueryDefinition(definition) as unknown as Record<string, unknown>;
+                } catch {
+                  return compileQueryDefinition(definition) as unknown as Record<string, unknown>;
+                }
+              })()
+            : (compileQueryDefinition(definition) as unknown as Record<string, unknown>);
+
+        return {
+          id,
+          name,
+          language,
+          scope,
+          maxArticlesPerRun: Math.max(1, maxArticlesPerRun),
+          definition,
+          execution,
+          compiledDefinition
+        } satisfies IngestionQueryTarget;
+      })
+      .filter((item): item is IngestionQueryTarget => item !== null);
+  }
+
   async upsertContentItems(items: PersistableContentItem[]): Promise<UpsertedContentRef[]> {
     if (items.length === 0) return [];
 
     const sql = `
       INSERT INTO "public"."ContentItem"
-        ("id", "sourceType", "termId", "provider", "sourceName", "sourceId", "title", "summary", "content", "canonicalUrl", "imageUrl", "language", "category", "publishedAt", "rawPayloadS3Key", "metadata", "createdAt", "updatedAt")
+        ("id", "sourceType", "termId", "queryIdSnapshot", "queryNameSnapshot", "queryScopeSnapshot", "provider", "sourceName", "sourceId", "title", "summary", "content", "canonicalUrl", "imageUrl", "language", "category", "publishedAt", "rawPayloadS3Key", "metadata", "createdAt", "updatedAt")
       VALUES
-        (CAST(:id AS UUID), CAST(:source_type AS "public"."SourceType"), CAST(:term_id AS UUID), :provider, :source_name, :source_id, :title, :summary, :content, :canonical_url, :image_url, :language, :category, CAST(:published_at AS TIMESTAMP), :raw_payload_s3_key, CAST(:metadata AS JSONB), NOW(), NOW())
+        (CAST(:id AS UUID), CAST(:source_type AS "public"."SourceType"), CAST(:term_id AS UUID), CAST(:query_id_snapshot AS UUID), :query_name_snapshot, CAST(:query_scope_snapshot AS "public"."TermScope"), :provider, :source_name, :source_id, :title, :summary, :content, :canonical_url, :image_url, :language, :category, CAST(:published_at AS TIMESTAMP), :raw_payload_s3_key, CAST(:metadata AS JSONB), NOW(), NOW())
       ON CONFLICT ("canonicalUrl") DO UPDATE SET
         "provider" = EXCLUDED."provider",
+        "queryIdSnapshot" = COALESCE("public"."ContentItem"."queryIdSnapshot", EXCLUDED."queryIdSnapshot"),
+        "queryNameSnapshot" = COALESCE("public"."ContentItem"."queryNameSnapshot", EXCLUDED."queryNameSnapshot"),
+        "queryScopeSnapshot" = COALESCE("public"."ContentItem"."queryScopeSnapshot", EXCLUDED."queryScopeSnapshot"),
         "sourceName" = COALESCE(EXCLUDED."sourceName", "public"."ContentItem"."sourceName"),
         "sourceId" = COALESCE(EXCLUDED."sourceId", "public"."ContentItem"."sourceId"),
         "title" = EXCLUDED."title",
@@ -226,6 +442,9 @@ class IngestionSqlStore {
         sqlUuid("id", randomUUID()),
         sqlString("source_type", item.article.sourceType),
         sqlUuid("term_id", item.termId),
+        sqlUuid("query_id_snapshot", item.termId),
+        sqlString("query_name_snapshot", item.term),
+        sqlString("query_scope_snapshot", item.termScope),
         sqlString("provider", item.article.provider),
         sqlString("source_name", item.article.sourceName),
         sqlString("source_id", item.article.sourceId),
@@ -338,4 +557,4 @@ export const createIngestionSqlStore = (): IngestionSqlStore | null => {
   return new IngestionSqlStore(client);
 };
 
-export type { PersistableContentItem, PersistableRunItem, TriggerType, RunSnapshot };
+export type { IngestionQueryTarget, PersistableContentItem, PersistableRunItem, TriggerType, RunSnapshot };

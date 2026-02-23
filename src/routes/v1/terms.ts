@@ -1,10 +1,13 @@
 import type { APIGatewayProxyEventV2 } from "aws-lambda";
-import { AppStoreError, createAppStore, type TermRecord, type TermScope, type UpdateTermInput } from "../../data/appStore";
-import { getRole, hasRole } from "../../core/auth";
-import { json, parseBody } from "../../core/http";
+import { getAuthPrincipal, getRole, hasRole } from "../../core/auth";
+import { getRequestId, json, parseBody } from "../../core/http";
+import { AppStoreError, createAppStore } from "../../data/appStore";
+import { createQueryConfigStore, type QueryUpdateInput } from "../../data/queryConfigStore";
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-const TERM_SCOPES: TermScope[] = ["claro", "competencia"];
+const TERM_SCOPES = ["claro", "competencia"] as const;
+
+type TermScope = (typeof TERM_SCOPES)[number];
 
 type CreateTermBody = {
   name?: unknown;
@@ -21,7 +24,24 @@ type UpdateTermBody = {
   max_articles_per_run?: unknown;
 };
 
-const toApiTerm = (term: TermRecord) => ({
+const withLegacyHeader = (response: ReturnType<typeof json>) => ({
+  ...response,
+  headers: {
+    ...response.headers,
+    "X-Legacy-Endpoint": "true"
+  }
+});
+
+const toApiTerm = (term: {
+  id: string;
+  name: string;
+  language: string;
+  scope: TermScope;
+  isActive: boolean;
+  maxArticlesPerRun: number;
+  createdAt: Date;
+  updatedAt: Date;
+}) => ({
   id: term.id,
   name: term.name,
   language: term.language,
@@ -75,66 +95,114 @@ const normalizeMaxArticles = (value: unknown): number | null => {
 const mapStoreError = (error: unknown) => {
   if (error instanceof AppStoreError) {
     if (error.code === "conflict") {
-      return json(409, {
-        error: "term_conflict",
-        message: error.message
-      });
+      return withLegacyHeader(
+        json(409, {
+          error: "term_conflict",
+          message: error.message
+        })
+      );
     }
 
     if (error.code === "validation") {
-      return json(422, {
-        error: "validation_error",
-        message: error.message
-      });
+      return withLegacyHeader(
+        json(422, {
+          error: "validation_error",
+          message: error.message
+        })
+      );
+    }
+
+    if (error.code === "not_found") {
+      return withLegacyHeader(
+        json(404, {
+          error: "not_found",
+          message: error.message
+        })
+      );
     }
   }
 
-  return json(500, {
-    error: "internal_error",
-    message: (error as Error).message
-  });
+  return withLegacyHeader(
+    json(500, {
+      error: "internal_error",
+      message: (error as Error).message
+    })
+  );
+};
+
+const assertStores = () => {
+  const queryStore = createQueryConfigStore();
+  const appStore = createAppStore();
+  if (!queryStore || !appStore) {
+    return {
+      error: withLegacyHeader(
+        json(500, {
+          error: "misconfigured",
+          message: "Database runtime is not configured"
+        })
+      )
+    };
+  }
+
+  return { queryStore, appStore };
 };
 
 export const listTerms = async (event: APIGatewayProxyEventV2) => {
-  const store = createAppStore();
-  if (!store) {
-    return json(500, {
-      error: "misconfigured",
-      message: "Database runtime is not configured"
-    });
-  }
+  const stores = assertStores();
+  if (stores.error) return stores.error;
 
   const query = event.queryStringParameters ?? {};
   const limit = parseLimit(query.limit);
   if (limit === null) {
-    return json(422, {
-      error: "validation_error",
-      message: "limit must be an integer between 1 and 200"
-    });
+    return withLegacyHeader(
+      json(422, {
+        error: "validation_error",
+        message: "limit must be an integer between 1 and 200"
+      })
+    );
   }
 
-  const cursor = query.cursor ?? undefined;
   let scope: TermScope | undefined;
   if (query.scope !== undefined) {
     const parsedScope = normalizeScope(query.scope, "claro");
     if (!parsedScope) {
-      return json(422, {
-        error: "validation_error",
-        message: "scope must be one of: claro, competencia"
-      });
+      return withLegacyHeader(
+        json(422, {
+          error: "validation_error",
+          message: "scope must be one of: claro, competencia"
+        })
+      );
     }
     scope = parsedScope;
   }
 
   try {
-    const result = await store.listTerms(limit, cursor, scope);
-    return json(200, {
-      items: result.items.map(toApiTerm),
-      page_info: {
-        next_cursor: result.nextCursor,
-        has_next: result.hasNext
-      }
+    const result = await stores.queryStore.listQueries(limit, query.cursor, {
+      scope,
+      language: query.language,
+      q: query.q
     });
+
+    return withLegacyHeader(
+      json(200, {
+        items: result.items.map((item) =>
+          toApiTerm({
+            id: item.id,
+            name: item.name,
+            language: item.language,
+            scope: item.scope,
+            isActive: item.isActive,
+            maxArticlesPerRun: item.maxArticlesPerRun,
+            createdAt: item.createdAt,
+            updatedAt: item.updatedAt
+          })
+        ),
+        page_info: {
+          next_cursor: result.nextCursor,
+          has_next: result.hasNext
+        }
+      })
+    );
   } catch (error) {
     return mapStoreError(error);
   }
@@ -143,23 +211,20 @@ export const listTerms = async (event: APIGatewayProxyEventV2) => {
 export const createTerm = async (event: APIGatewayProxyEventV2) => {
   const role = getRole(event);
   if (!hasRole(role, "Admin")) {
-    return json(403, { error: "forbidden", message: "Solo Admin puede crear terminos" });
+    return withLegacyHeader(json(403, { error: "forbidden", message: "Solo Admin puede crear terminos" }));
   }
 
-  const store = createAppStore();
-  if (!store) {
-    return json(500, {
-      error: "misconfigured",
-      message: "Database runtime is not configured"
-    });
-  }
+  const stores = assertStores();
+  if (stores.error) return stores.error;
 
   const body = parseBody<CreateTermBody>(event);
   if (!body) {
-    return json(400, {
-      error: "invalid_json",
-      message: "Body JSON invalido"
-    });
+    return withLegacyHeader(
+      json(400, {
+        error: "invalid_json",
+        message: "Body JSON invalido"
+      })
+    );
   }
 
   const name = normalizeName(body.name);
@@ -168,21 +233,43 @@ export const createTerm = async (event: APIGatewayProxyEventV2) => {
   const maxArticlesPerRun = normalizeMaxArticles(body.max_articles_per_run);
 
   if (!name || !language || !scope || maxArticlesPerRun === null) {
-    return json(422, {
-      error: "validation_error",
-      message: "name (2-160), language (1-8), scope (claro|competencia) y max_articles_per_run (1-500) son requeridos"
-    });
+    return withLegacyHeader(
+      json(422, {
+        error: "validation_error",
+        message: "name (2-160), language (1-8), scope (claro|competencia) y max_articles_per_run (1-500) son requeridos"
+      })
+    );
   }
 
   try {
-    const term = await store.createTerm({
-      name,
-      language,
-      scope,
-      maxArticlesPerRun
-    });
+    const principal = getAuthPrincipal(event);
+    const actorUserId = await stores.appStore.upsertUserFromPrincipal(principal);
+    const created = await stores.queryStore.createQuery(
+      {
+        name,
+        language,
+        scope,
+        maxArticlesPerRun
+      },
+      actorUserId,
+      getRequestId(event)
+    );
 
-    return json(201, toApiTerm(term));
+    return withLegacyHeader(
+      json(
+        201,
+        toApiTerm({
+          id: created.id,
+          name: created.name,
+          language: created.language,
+          scope: created.scope,
+          isActive: created.isActive,
+          maxArticlesPerRun: created.maxArticlesPerRun,
+          createdAt: created.createdAt,
+          updatedAt: created.updatedAt
+        })
+      )
+    );
   } catch (error) {
     return mapStoreError(error);
   }
@@ -191,42 +278,43 @@ export const createTerm = async (event: APIGatewayProxyEventV2) => {
 export const updateTerm = async (event: APIGatewayProxyEventV2) => {
   const role = getRole(event);
   if (!hasRole(role, "Admin")) {
-    return json(403, { error: "forbidden", message: "Solo Admin puede editar terminos" });
+    return withLegacyHeader(json(403, { error: "forbidden", message: "Solo Admin puede editar terminos" }));
   }
 
   const id = event.pathParameters?.id;
   if (!id || !UUID_REGEX.test(id)) {
-    return json(422, {
-      error: "validation_error",
-      message: "id debe ser UUID valido"
-    });
+    return withLegacyHeader(
+      json(422, {
+        error: "validation_error",
+        message: "id debe ser UUID valido"
+      })
+    );
   }
 
-  const store = createAppStore();
-  if (!store) {
-    return json(500, {
-      error: "misconfigured",
-      message: "Database runtime is not configured"
-    });
-  }
+  const stores = assertStores();
+  if (stores.error) return stores.error;
 
   const body = parseBody<UpdateTermBody>(event);
   if (!body) {
-    return json(400, {
-      error: "invalid_json",
-      message: "Body JSON invalido"
-    });
+    return withLegacyHeader(
+      json(400, {
+        error: "invalid_json",
+        message: "Body JSON invalido"
+      })
+    );
   }
 
-  const update: UpdateTermInput = {};
+  const update: QueryUpdateInput = {};
 
   if (body.name !== undefined) {
     const name = normalizeName(body.name);
     if (!name) {
-      return json(422, {
-        error: "validation_error",
-        message: "name debe tener entre 2 y 160 caracteres"
-      });
+      return withLegacyHeader(
+        json(422, {
+          error: "validation_error",
+          message: "name debe tener entre 2 y 160 caracteres"
+        })
+      );
     }
     update.name = name;
   }
@@ -234,10 +322,12 @@ export const updateTerm = async (event: APIGatewayProxyEventV2) => {
   if (body.language !== undefined) {
     const language = normalizeLanguage(body.language);
     if (!language) {
-      return json(422, {
-        error: "validation_error",
-        message: "language debe tener entre 1 y 8 caracteres"
-      });
+      return withLegacyHeader(
+        json(422, {
+          error: "validation_error",
+          message: "language debe tener entre 1 y 8 caracteres"
+        })
+      );
     }
     update.language = language;
   }
@@ -245,20 +335,24 @@ export const updateTerm = async (event: APIGatewayProxyEventV2) => {
   if (body.scope !== undefined) {
     const scope = normalizeScope(body.scope, "claro");
     if (!scope) {
-      return json(422, {
-        error: "validation_error",
-        message: "scope debe ser uno de: claro, competencia"
-      });
+      return withLegacyHeader(
+        json(422, {
+          error: "validation_error",
+          message: "scope debe ser uno de: claro, competencia"
+        })
+      );
     }
     update.scope = scope;
   }
 
   if (body.is_active !== undefined) {
     if (typeof body.is_active !== "boolean") {
-      return json(422, {
-        error: "validation_error",
-        message: "is_active debe ser boolean"
-      });
+      return withLegacyHeader(
+        json(422, {
+          error: "validation_error",
+          message: "is_active debe ser boolean"
+        })
+      );
     }
     update.isActive = body.is_active;
   }
@@ -266,31 +360,45 @@ export const updateTerm = async (event: APIGatewayProxyEventV2) => {
   if (body.max_articles_per_run !== undefined) {
     const maxArticlesPerRun = normalizeMaxArticles(body.max_articles_per_run);
     if (maxArticlesPerRun === null) {
-      return json(422, {
-        error: "validation_error",
-        message: "max_articles_per_run debe estar entre 1 y 500"
-      });
+      return withLegacyHeader(
+        json(422, {
+          error: "validation_error",
+          message: "max_articles_per_run debe estar entre 1 y 500"
+        })
+      );
     }
     update.maxArticlesPerRun = maxArticlesPerRun;
   }
 
   if (Object.keys(update).length === 0) {
-    return json(422, {
-      error: "validation_error",
-      message: "No fields to update"
-    });
+    return withLegacyHeader(
+      json(422, {
+        error: "validation_error",
+        message: "No fields to update"
+      })
+    );
   }
 
   try {
-    const term = await store.updateTerm(id, update);
-    if (!term) {
-      return json(404, {
-        error: "not_found",
-        message: "Termino no encontrado"
-      });
-    }
+    const principal = getAuthPrincipal(event);
+    const actorUserId = await stores.appStore.upsertUserFromPrincipal(principal);
+    const updated = await stores.queryStore.updateQuery(id, update, actorUserId, getRequestId(event));
 
-    return json(200, toApiTerm(term));
+    return withLegacyHeader(
+      json(
+        200,
+        toApiTerm({
+          id: updated.id,
+          name: updated.name,
+          language: updated.language,
+          scope: updated.scope,
+          isActive: updated.isActive,
+          maxArticlesPerRun: updated.maxArticlesPerRun,
+          createdAt: updated.createdAt,
+          updatedAt: updated.updatedAt
+        })
+      )
+    );
   } catch (error) {
     return mapStoreError(error);
   }

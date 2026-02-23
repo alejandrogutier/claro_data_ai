@@ -730,7 +730,7 @@ class AnalysisStore {
     ];
 
     if (scope === "competitors") {
-      conditions.push('t."scope" = CAST(\'competencia\' AS "public"."TermScope")');
+      conditions.push('COALESCE(ci."queryScopeSnapshot"::text, t."scope"::text, \'\') = \'competencia\'');
     }
 
     if (filters.termId) {
@@ -1088,8 +1088,8 @@ class AnalysisStore {
           ci."summary",
           ci."category",
           COALESCE(ci."publishedAt", ci."createdAt"),
-          COALESCE(t."scope"::text, ''),
-          t."name",
+          COALESCE(ci."queryScopeSnapshot"::text, t."scope"::text, ''),
+          COALESCE(ci."queryNameSnapshot", t."name"),
           cls."sentimiento",
           cls."categoria",
           COALESCE(
@@ -1231,9 +1231,9 @@ class AnalysisStore {
     const response = await this.rds.execute(
       `
         SELECT
-          COALESCE(t."scope"::text, '') AS scope,
-          ci."termId"::text,
-          t."name",
+          COALESCE(ci."queryScopeSnapshot"::text, t."scope"::text, '') AS scope,
+          COALESCE(ci."queryIdSnapshot"::text, ci."termId"::text),
+          COALESCE(ci."queryNameSnapshot", t."name"),
           ci."provider",
           cls."sentimiento",
           COALESCE(

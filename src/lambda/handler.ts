@@ -86,6 +86,17 @@ import {
   createSourceScoringWeight,
   triggerConnectorSync
 } from "../routes/v1/config";
+import {
+  createConfigQuery,
+  deleteConfigQuery,
+  dryRunConfigQuery,
+  getConfigQuery,
+  listConfigQueries,
+  listConfigQueryRevisions,
+  patchConfigQuery,
+  previewConfigQuery,
+  rollbackConfigQuery
+} from "../routes/v1/configQueries";
 
 type RoleRule = {
   pattern: RegExp;
@@ -153,6 +164,15 @@ const roleRules: RoleRule[] = [
   { pattern: /^GET \/v1\/config\/accounts$/, requiredRole: "Viewer" },
   { pattern: /^POST \/v1\/config\/accounts$/, requiredRole: "Admin" },
   { pattern: /^PATCH \/v1\/config\/accounts\/[^/]+$/, requiredRole: "Admin" },
+  { pattern: /^GET \/v1\/config\/queries$/, requiredRole: "Viewer" },
+  { pattern: /^POST \/v1\/config\/queries$/, requiredRole: "Admin" },
+  { pattern: /^POST \/v1\/config\/queries\/preview$/, requiredRole: "Viewer" },
+  { pattern: /^GET \/v1\/config\/queries\/[^/]+$/, requiredRole: "Viewer" },
+  { pattern: /^PATCH \/v1\/config\/queries\/[^/]+$/, requiredRole: "Admin" },
+  { pattern: /^DELETE \/v1\/config\/queries\/[^/]+$/, requiredRole: "Admin" },
+  { pattern: /^GET \/v1\/config\/queries\/[^/]+\/revisions$/, requiredRole: "Viewer" },
+  { pattern: /^POST \/v1\/config\/queries\/[^/]+\/rollback$/, requiredRole: "Admin" },
+  { pattern: /^POST \/v1\/config\/queries\/[^/]+\/dry-run$/, requiredRole: "Admin" },
   { pattern: /^GET \/v1\/config\/awario\/profiles$/, requiredRole: "Viewer" },
   { pattern: /^POST \/v1\/config\/awario\/profiles$/, requiredRole: "Admin" },
   { pattern: /^PATCH \/v1\/config\/awario\/profiles\/[^/]+$/, requiredRole: "Admin" },
@@ -284,6 +304,15 @@ export const main = async (event: APIGatewayProxyEventV2) => {
   if (key === "GET /v1/config/accounts") return listConfigAccounts(event);
   if (key === "POST /v1/config/accounts") return createConfigAccount(event);
   if (key.match(/^PATCH \/v1\/config\/accounts\/[^/]+$/)) return patchConfigAccount(event);
+  if (key === "GET /v1/config/queries") return listConfigQueries(event);
+  if (key === "POST /v1/config/queries") return createConfigQuery(event);
+  if (key === "POST /v1/config/queries/preview") return previewConfigQuery(event);
+  if (key.match(/^GET \/v1\/config\/queries\/[^/]+\/revisions$/)) return listConfigQueryRevisions(event);
+  if (key.match(/^POST \/v1\/config\/queries\/[^/]+\/rollback$/)) return rollbackConfigQuery(event);
+  if (key.match(/^POST \/v1\/config\/queries\/[^/]+\/dry-run$/)) return dryRunConfigQuery(event);
+  if (key.match(/^GET \/v1\/config\/queries\/[^/]+$/)) return getConfigQuery(event);
+  if (key.match(/^PATCH \/v1\/config\/queries\/[^/]+$/)) return patchConfigQuery(event);
+  if (key.match(/^DELETE \/v1\/config\/queries\/[^/]+$/)) return deleteConfigQuery(event);
   if (key === "GET /v1/config/awario/profiles") return listAwarioProfiles(event);
   if (key === "POST /v1/config/awario/profiles") return createAwarioProfile(event);
   if (key.match(/^PATCH \/v1\/config\/awario\/profiles\/[^/]+$/)) return patchAwarioProfile(event);

@@ -53,7 +53,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Listar terminos monitoreados */
+        /**
+         * Listar terminos monitoreados (legacy wrapper de queries)
+         * @deprecated
+         */
         get: {
             parameters: {
                 query?: {
@@ -72,6 +75,8 @@ export interface paths {
                 /** @description Lista de terminos */
                 200: {
                     headers: {
+                        /** @description Endpoint legacy temporal; migrar a `/v1/config/queries`. */
+                        "X-Legacy-Endpoint"?: "true";
                         [name: string]: unknown;
                     };
                     content: {
@@ -84,7 +89,10 @@ export interface paths {
             };
         };
         put?: never;
-        /** Crear termino monitoreado */
+        /**
+         * Crear termino monitoreado (legacy wrapper de queries)
+         * @deprecated
+         */
         post: {
             parameters: {
                 query?: never;
@@ -101,6 +109,8 @@ export interface paths {
                 /** @description Termino creado */
                 201: {
                     headers: {
+                        /** @description Endpoint legacy temporal; migrar a `/v1/config/queries`. */
+                        "X-Legacy-Endpoint"?: "true";
                         [name: string]: unknown;
                     };
                     content: {
@@ -132,7 +142,10 @@ export interface paths {
         delete?: never;
         options?: never;
         head?: never;
-        /** Editar termino monitoreado */
+        /**
+         * Editar termino monitoreado (legacy wrapper de queries)
+         * @deprecated
+         */
         patch: {
             parameters: {
                 query?: never;
@@ -151,6 +164,8 @@ export interface paths {
                 /** @description Termino actualizado */
                 200: {
                     headers: {
+                        /** @description Endpoint legacy temporal; migrar a `/v1/config/queries`. */
+                        "X-Legacy-Endpoint"?: "true";
                         [name: string]: unknown;
                     };
                     content: {
@@ -164,6 +179,358 @@ export interface paths {
                 422: components["responses"]["ValidationError"];
             };
         };
+        trace?: never;
+    };
+    "/v1/config/queries": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Listar queries configuradas de noticias */
+        get: {
+            parameters: {
+                query?: {
+                    /** @description Cursor opaco para paginacion */
+                    cursor?: components["parameters"]["Cursor"];
+                    limit?: number;
+                    scope?: components["schemas"]["TermScope"];
+                    is_active?: boolean;
+                    language?: string;
+                    q?: string;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Lista de queries configuradas */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ConfigQueryListResponse"];
+                    };
+                };
+                401: components["responses"]["Unauthorized"];
+                403: components["responses"]["Forbidden"];
+                422: components["responses"]["ValidationError"];
+            };
+        };
+        put?: never;
+        /** Crear query configurada de noticias */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["CreateConfigQueryRequest"];
+                };
+            };
+            responses: {
+                /** @description Query creada */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["NewsQuery"];
+                    };
+                };
+                401: components["responses"]["Unauthorized"];
+                403: components["responses"]["Forbidden"];
+                409: components["responses"]["Conflict"];
+                422: components["responses"]["ValidationError"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/config/queries/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Preview local de una definicion de query sin persistir */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["ConfigQueryPreviewRequest"];
+                };
+            };
+            responses: {
+                /** @description Resultado del preview local */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ConfigQueryPreviewResponse"];
+                    };
+                };
+                401: components["responses"]["Unauthorized"];
+                403: components["responses"]["Forbidden"];
+                422: components["responses"]["ValidationError"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/config/queries/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Obtener detalle de una query configurada */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: components["parameters"]["Id"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Query configurada */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["NewsQuery"];
+                    };
+                };
+                401: components["responses"]["Unauthorized"];
+                403: components["responses"]["Forbidden"];
+                404: components["responses"]["NotFound"];
+                422: components["responses"]["ValidationError"];
+            };
+        };
+        put?: never;
+        post?: never;
+        /** Hard delete de query configurada */
+        delete: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: components["parameters"]["Id"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Query eliminada */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ConfigQueryDeleteResponse"];
+                    };
+                };
+                401: components["responses"]["Unauthorized"];
+                403: components["responses"]["Forbidden"];
+                404: components["responses"]["NotFound"];
+                422: components["responses"]["ValidationError"];
+            };
+        };
+        options?: never;
+        head?: never;
+        /** Editar query configurada */
+        patch: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: components["parameters"]["Id"];
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["UpdateConfigQueryRequest"];
+                };
+            };
+            responses: {
+                /** @description Query actualizada */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["NewsQuery"];
+                    };
+                };
+                401: components["responses"]["Unauthorized"];
+                403: components["responses"]["Forbidden"];
+                404: components["responses"]["NotFound"];
+                409: components["responses"]["Conflict"];
+                422: components["responses"]["ValidationError"];
+            };
+        };
+        trace?: never;
+    };
+    "/v1/config/queries/{id}/revisions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Listar revisiones de una query configurada */
+        get: {
+            parameters: {
+                query?: {
+                    limit?: number;
+                };
+                header?: never;
+                path: {
+                    id: components["parameters"]["Id"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Lista de revisiones */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ConfigQueryRevisionListResponse"];
+                    };
+                };
+                401: components["responses"]["Unauthorized"];
+                403: components["responses"]["Forbidden"];
+                422: components["responses"]["ValidationError"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/config/queries/{id}/rollback": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Rollback de query a una revision previa */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: components["parameters"]["Id"];
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["ConfigQueryRollbackRequest"];
+                };
+            };
+            responses: {
+                /** @description Query restaurada desde revision previa */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["NewsQuery"];
+                    };
+                };
+                401: components["responses"]["Unauthorized"];
+                403: components["responses"]["Forbidden"];
+                404: components["responses"]["NotFound"];
+                422: components["responses"]["ValidationError"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/config/queries/{id}/dry-run": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Dry-run contra proveedores sin persistir contenido */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: components["parameters"]["Id"];
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["ConfigQueryDryRunRequest"];
+                };
+            };
+            responses: {
+                /** @description Resultado dry-run por proveedor */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ConfigQueryDryRunResponse"];
+                    };
+                };
+                401: components["responses"]["Unauthorized"];
+                403: components["responses"]["Forbidden"];
+                404: components["responses"]["NotFound"];
+                422: components["responses"]["ValidationError"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/v1/ingestion/runs": {
@@ -3610,6 +3977,195 @@ export interface components {
             scope?: components["schemas"]["TermScope"];
             is_active?: boolean;
             max_articles_per_run?: number;
+        };
+        QueryExecutionConfig: {
+            providers_allow: string[];
+            providers_deny: string[];
+            countries_allow: string[];
+            countries_deny: string[];
+            domains_allow: string[];
+            domains_deny: string[];
+        };
+        QueryRuleGroup: {
+            /** @constant */
+            kind: "group";
+            /** @enum {string} */
+            op: "AND" | "OR";
+            rules: components["schemas"]["QueryRule"][];
+        };
+        QueryKeywordRule: {
+            /** @constant */
+            kind: "keyword";
+            /** @enum {string} */
+            field: "any" | "title" | "summary" | "content";
+            /** @enum {string} */
+            match: "contains" | "phrase";
+            value: string;
+            not?: boolean;
+        };
+        QueryFacetRule: {
+            /** @enum {string} */
+            kind: "provider" | "language" | "country" | "domain";
+            /** @enum {string} */
+            op: "in" | "not_in";
+            values: string[];
+        };
+        QueryRule: components["schemas"]["QueryRuleGroup"] | components["schemas"]["QueryKeywordRule"] | components["schemas"]["QueryFacetRule"];
+        QueryDefinition: components["schemas"]["QueryRuleGroup"];
+        NewsQuery: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            description?: string | null;
+            language: string;
+            scope: components["schemas"]["TermScope"];
+            is_active: boolean;
+            priority: number;
+            max_articles_per_run: number;
+            definition: components["schemas"]["QueryDefinition"];
+            execution: components["schemas"]["QueryExecutionConfig"];
+            compiled_definition: {
+                [key: string]: unknown;
+            };
+            current_revision: number;
+            /** Format: uuid */
+            updated_by_user_id?: string | null;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+        };
+        ConfigQueryListResponse: {
+            items: components["schemas"]["NewsQuery"][];
+            page_info: components["schemas"]["PageInfo"];
+        };
+        CreateConfigQueryRequest: {
+            name: string;
+            description?: string | null;
+            /** @default es */
+            language: string;
+            /** @default claro */
+            scope: components["schemas"]["TermScope"];
+            /** @default true */
+            is_active: boolean;
+            /** @default 3 */
+            priority: number;
+            /** @default 100 */
+            max_articles_per_run: number;
+            definition?: components["schemas"]["QueryDefinition"];
+            execution?: components["schemas"]["QueryExecutionConfig"];
+            change_reason?: string | null;
+        };
+        UpdateConfigQueryRequest: {
+            name?: string;
+            description?: string | null;
+            language?: string;
+            scope?: components["schemas"]["TermScope"];
+            is_active?: boolean;
+            priority?: number;
+            max_articles_per_run?: number;
+            definition?: components["schemas"]["QueryDefinition"];
+            execution?: components["schemas"]["QueryExecutionConfig"];
+            change_reason?: string | null;
+        };
+        ConfigQueryDeleteResponse: {
+            /** @constant */
+            ok: true;
+            /** Format: uuid */
+            id: string;
+        };
+        ConfigQueryRevision: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            query_id: string;
+            revision: number;
+            definition: components["schemas"]["QueryDefinition"];
+            execution: components["schemas"]["QueryExecutionConfig"];
+            compiled_definition: {
+                [key: string]: unknown;
+            };
+            /** Format: uuid */
+            changed_by_user_id?: string | null;
+            change_reason?: string | null;
+            /** Format: date-time */
+            created_at: string;
+        };
+        ConfigQueryRevisionListResponse: {
+            /** Format: uuid */
+            query_id: string;
+            items: components["schemas"]["ConfigQueryRevision"][];
+        };
+        ConfigQueryRollbackRequest: {
+            revision: number;
+            change_reason?: string | null;
+        };
+        ConfigQueryPreviewRequest: {
+            definition: components["schemas"]["QueryDefinition"];
+            execution?: components["schemas"]["QueryExecutionConfig"];
+            /** @default 20 */
+            limit: number;
+            /** @default 500 */
+            candidate_limit: number;
+        };
+        ConfigQueryPreviewItem: {
+            /** Format: uuid */
+            content_item_id: string;
+            provider: string;
+            title: string;
+            /** Format: uri */
+            canonical_url: string;
+            /** Format: date-time */
+            published_at: string | null;
+        };
+        ConfigQueryProviderBreakdown: {
+            provider: string;
+            count: number;
+        };
+        ConfigQueryPreviewResponse: {
+            matched_count: number;
+            candidates_count: number;
+            sample: components["schemas"]["ConfigQueryPreviewItem"][];
+            provider_breakdown: components["schemas"]["ConfigQueryProviderBreakdown"][];
+        };
+        ConfigQueryDryRunRequest: {
+            max_articles_per_term?: number;
+        };
+        ConfigQueryDryRunProviderResult: {
+            provider: string;
+            request_url?: string | null;
+            raw_count: number;
+            fetched_count: number;
+            matched_count: number;
+            duration_ms: number;
+            error_type?: string | null;
+            error?: string | null;
+        };
+        ConfigQueryDryRunTotals: {
+            raw_count: number;
+            fetched_count: number;
+            matched_count: number;
+        };
+        ConfigQueryDryRunSampleItem: {
+            provider: string;
+            title: string;
+            /** Format: uri */
+            canonical_url: string;
+            /** Format: date-time */
+            published_at?: string | null;
+        };
+        ConfigQueryDryRunResponse: {
+            /** Format: uuid */
+            run_id: string;
+            /** Format: uuid */
+            query_id: string;
+            providers_used: string[];
+            query_text: string;
+            requested_max_articles_per_term: number;
+            effective_max_articles_per_term: number;
+            providers: components["schemas"]["ConfigQueryDryRunProviderResult"][];
+            totals: components["schemas"]["ConfigQueryDryRunTotals"];
+            sample: components["schemas"]["ConfigQueryDryRunSampleItem"][];
         };
         ContentItem: {
             /** Format: uuid */

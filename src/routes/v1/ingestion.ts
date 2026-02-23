@@ -113,9 +113,6 @@ export const createIngestionRun = async (event: APIGatewayProxyEventV2) => {
   const requestedMaxArticlesPerTerm = coerceLimit(body.max_articles_per_term);
   const effectiveMaxArticlesPerTerm = Math.min(NEWS_MAX_ARTICLES_PER_TERM, requestedMaxArticlesPerTerm);
 
-  let resolvedTermsFromIds: string[] = [];
-  let activeTerms: string[] = [];
-
   const store = createAppStore();
 
   if (runIdFromBody && store) {
@@ -187,25 +184,11 @@ export const createIngestionRun = async (event: APIGatewayProxyEventV2) => {
       });
     }
 
-    resolvedTermsFromIds = resolved.map((item) => item.name);
   }
 
-  let terms = mergeUnique([...manualTerms, ...resolvedTermsFromIds]);
-
-  if (terms.length === 0 && store) {
-    activeTerms = await store.listActiveTermNames(50);
-    terms = mergeUnique([...terms, ...activeTerms]);
-  }
-
-  if (terms.length === 0) {
+  let terms = mergeUnique([...manualTerms]);
+  if (terms.length === 0 && termIdsPayload.ids.length === 0) {
     terms = mergeUnique([...terms, ...parseDefaultTerms(env.ingestionDefaultTerms)]);
-  }
-
-  if (terms.length === 0) {
-    return json(422, {
-      error: "validation_error",
-      message: "No terms provided and no active/default terms available"
-    });
   }
 
   const requestId = event.requestContext.requestId;

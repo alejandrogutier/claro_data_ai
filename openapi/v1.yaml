@@ -47,7 +47,8 @@ paths:
   /v1/terms:
     get:
       tags: [Terms]
-      summary: Listar terminos monitoreados
+      summary: Listar terminos monitoreados (legacy wrapper de queries)
+      deprecated: true
       parameters:
         - $ref: '#/components/parameters/Cursor'
         - $ref: '#/components/parameters/Limit'
@@ -59,6 +60,12 @@ paths:
       responses:
         '200':
           description: Lista de terminos
+          headers:
+            X-Legacy-Endpoint:
+              description: Endpoint legacy temporal; migrar a `/v1/config/queries`.
+              schema:
+                type: string
+                const: "true"
           content:
             application/json:
               schema:
@@ -71,7 +78,8 @@ paths:
           $ref: '#/components/responses/ValidationError'
     post:
       tags: [Terms]
-      summary: Crear termino monitoreado
+      summary: Crear termino monitoreado (legacy wrapper de queries)
+      deprecated: true
       requestBody:
         required: true
         content:
@@ -81,6 +89,12 @@ paths:
       responses:
         '201':
           description: Termino creado
+          headers:
+            X-Legacy-Endpoint:
+              description: Endpoint legacy temporal; migrar a `/v1/config/queries`.
+              schema:
+                type: string
+                const: "true"
           content:
             application/json:
               schema:
@@ -96,7 +110,8 @@ paths:
   /v1/terms/{id}:
     patch:
       tags: [Terms]
-      summary: Editar termino monitoreado
+      summary: Editar termino monitoreado (legacy wrapper de queries)
+      deprecated: true
       parameters:
         - $ref: '#/components/parameters/Id'
       requestBody:
@@ -108,6 +123,12 @@ paths:
       responses:
         '200':
           description: Termino actualizado
+          headers:
+            X-Legacy-Endpoint:
+              description: Endpoint legacy temporal; migrar a `/v1/config/queries`.
+              schema:
+                type: string
+                const: "true"
           content:
             application/json:
               schema:
@@ -120,6 +141,244 @@ paths:
           $ref: '#/components/responses/NotFound'
         '409':
           $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+  /v1/config/queries:
+    get:
+      tags: [Config]
+      summary: Listar queries configuradas de noticias
+      parameters:
+        - $ref: '#/components/parameters/Cursor'
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 300
+            default: 100
+        - name: scope
+          in: query
+          schema:
+            $ref: '#/components/schemas/TermScope'
+        - name: is_active
+          in: query
+          schema:
+            type: boolean
+        - name: language
+          in: query
+          schema:
+            type: string
+        - name: q
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Lista de queries configuradas
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConfigQueryListResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+    post:
+      tags: [Config]
+      summary: Crear query configurada de noticias
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateConfigQueryRequest'
+      responses:
+        '201':
+          description: Query creada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NewsQuery'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+  /v1/config/queries/preview:
+    post:
+      tags: [Config]
+      summary: Preview local de una definicion de query sin persistir
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ConfigQueryPreviewRequest'
+      responses:
+        '200':
+          description: Resultado del preview local
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConfigQueryPreviewResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+  /v1/config/queries/{id}:
+    get:
+      tags: [Config]
+      summary: Obtener detalle de una query configurada
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      responses:
+        '200':
+          description: Query configurada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NewsQuery'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+    patch:
+      tags: [Config]
+      summary: Editar query configurada
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateConfigQueryRequest'
+      responses:
+        '200':
+          description: Query actualizada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NewsQuery'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+    delete:
+      tags: [Config]
+      summary: Hard delete de query configurada
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      responses:
+        '200':
+          description: Query eliminada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConfigQueryDeleteResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+  /v1/config/queries/{id}/revisions:
+    get:
+      tags: [Config]
+      summary: Listar revisiones de una query configurada
+      parameters:
+        - $ref: '#/components/parameters/Id'
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 300
+            default: 100
+      responses:
+        '200':
+          description: Lista de revisiones
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConfigQueryRevisionListResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+  /v1/config/queries/{id}/rollback:
+    post:
+      tags: [Config]
+      summary: Rollback de query a una revision previa
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ConfigQueryRollbackRequest'
+      responses:
+        '200':
+          description: Query restaurada desde revision previa
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NewsQuery'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+  /v1/config/queries/{id}/dry-run:
+    post:
+      tags: [Config]
+      summary: Dry-run contra proveedores sin persistir contenido
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ConfigQueryDryRunRequest'
+      responses:
+        '200':
+          description: Resultado dry-run por proveedor
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConfigQueryDryRunResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
         '422':
           $ref: '#/components/responses/ValidationError'
   /v1/ingestion/runs:
@@ -2866,6 +3125,483 @@ components:
           type: integer
           minimum: 1
           maximum: 500
+    QueryExecutionConfig:
+      type: object
+      required:
+        - providers_allow
+        - providers_deny
+        - countries_allow
+        - countries_deny
+        - domains_allow
+        - domains_deny
+      properties:
+        providers_allow:
+          type: array
+          items:
+            type: string
+        providers_deny:
+          type: array
+          items:
+            type: string
+        countries_allow:
+          type: array
+          items:
+            type: string
+        countries_deny:
+          type: array
+          items:
+            type: string
+        domains_allow:
+          type: array
+          items:
+            type: string
+        domains_deny:
+          type: array
+          items:
+            type: string
+      additionalProperties: false
+    QueryRuleGroup:
+      type: object
+      required: [kind, op, rules]
+      properties:
+        kind:
+          type: string
+          const: group
+        op:
+          type: string
+          enum: [AND, OR]
+        rules:
+          type: array
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/QueryRule'
+      additionalProperties: false
+    QueryKeywordRule:
+      type: object
+      required: [kind, field, match, value]
+      properties:
+        kind:
+          type: string
+          const: keyword
+        field:
+          type: string
+          enum: [any, title, summary, content]
+        match:
+          type: string
+          enum: [contains, phrase]
+        value:
+          type: string
+          minLength: 1
+          maxLength: 160
+        not:
+          type: boolean
+      additionalProperties: false
+    QueryFacetRule:
+      type: object
+      required: [kind, op, values]
+      properties:
+        kind:
+          type: string
+          enum: [provider, language, country, domain]
+        op:
+          type: string
+          enum: [in, not_in]
+        values:
+          type: array
+          minItems: 1
+          maxItems: 50
+          items:
+            type: string
+      additionalProperties: false
+    QueryRule:
+      oneOf:
+        - $ref: '#/components/schemas/QueryRuleGroup'
+        - $ref: '#/components/schemas/QueryKeywordRule'
+        - $ref: '#/components/schemas/QueryFacetRule'
+    QueryDefinition:
+      $ref: '#/components/schemas/QueryRuleGroup'
+    NewsQuery:
+      type: object
+      required:
+        - id
+        - name
+        - language
+        - scope
+        - is_active
+        - priority
+        - max_articles_per_run
+        - definition
+        - execution
+        - compiled_definition
+        - current_revision
+        - created_at
+        - updated_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        description:
+          type: string
+          nullable: true
+        language:
+          type: string
+        scope:
+          $ref: '#/components/schemas/TermScope'
+        is_active:
+          type: boolean
+        priority:
+          type: integer
+          minimum: 1
+          maximum: 5
+        max_articles_per_run:
+          type: integer
+          minimum: 1
+          maximum: 500
+        definition:
+          $ref: '#/components/schemas/QueryDefinition'
+        execution:
+          $ref: '#/components/schemas/QueryExecutionConfig'
+        compiled_definition:
+          type: object
+          additionalProperties: true
+        current_revision:
+          type: integer
+          minimum: 1
+        updated_by_user_id:
+          type: string
+          format: uuid
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    ConfigQueryListResponse:
+      type: object
+      required: [items, page_info]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/NewsQuery'
+        page_info:
+          $ref: '#/components/schemas/PageInfo'
+    CreateConfigQueryRequest:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+          minLength: 2
+          maxLength: 160
+        description:
+          type: string
+          nullable: true
+          maxLength: 600
+        language:
+          type: string
+          default: es
+        scope:
+          $ref: '#/components/schemas/TermScope'
+          default: claro
+        is_active:
+          type: boolean
+          default: true
+        priority:
+          type: integer
+          minimum: 1
+          maximum: 5
+          default: 3
+        max_articles_per_run:
+          type: integer
+          minimum: 1
+          maximum: 500
+          default: 100
+        definition:
+          $ref: '#/components/schemas/QueryDefinition'
+        execution:
+          $ref: '#/components/schemas/QueryExecutionConfig'
+        change_reason:
+          type: string
+          nullable: true
+          maxLength: 240
+      additionalProperties: false
+    UpdateConfigQueryRequest:
+      type: object
+      minProperties: 1
+      properties:
+        name:
+          type: string
+          minLength: 2
+          maxLength: 160
+        description:
+          type: string
+          nullable: true
+          maxLength: 600
+        language:
+          type: string
+        scope:
+          $ref: '#/components/schemas/TermScope'
+        is_active:
+          type: boolean
+        priority:
+          type: integer
+          minimum: 1
+          maximum: 5
+        max_articles_per_run:
+          type: integer
+          minimum: 1
+          maximum: 500
+        definition:
+          $ref: '#/components/schemas/QueryDefinition'
+        execution:
+          $ref: '#/components/schemas/QueryExecutionConfig'
+        change_reason:
+          type: string
+          nullable: true
+          maxLength: 240
+      additionalProperties: false
+    ConfigQueryDeleteResponse:
+      type: object
+      required: [ok, id]
+      properties:
+        ok:
+          type: boolean
+          const: true
+        id:
+          type: string
+          format: uuid
+    ConfigQueryRevision:
+      type: object
+      required:
+        - id
+        - query_id
+        - revision
+        - definition
+        - execution
+        - compiled_definition
+        - created_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        query_id:
+          type: string
+          format: uuid
+        revision:
+          type: integer
+          minimum: 1
+        definition:
+          $ref: '#/components/schemas/QueryDefinition'
+        execution:
+          $ref: '#/components/schemas/QueryExecutionConfig'
+        compiled_definition:
+          type: object
+          additionalProperties: true
+        changed_by_user_id:
+          type: string
+          format: uuid
+          nullable: true
+        change_reason:
+          type: string
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+    ConfigQueryRevisionListResponse:
+      type: object
+      required: [query_id, items]
+      properties:
+        query_id:
+          type: string
+          format: uuid
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ConfigQueryRevision'
+    ConfigQueryRollbackRequest:
+      type: object
+      required: [revision]
+      properties:
+        revision:
+          type: integer
+          minimum: 1
+        change_reason:
+          type: string
+          nullable: true
+          maxLength: 240
+      additionalProperties: false
+    ConfigQueryPreviewRequest:
+      type: object
+      required: [definition]
+      properties:
+        definition:
+          $ref: '#/components/schemas/QueryDefinition'
+        execution:
+          $ref: '#/components/schemas/QueryExecutionConfig'
+        limit:
+          type: integer
+          minimum: 1
+          maximum: 50
+          default: 20
+        candidate_limit:
+          type: integer
+          minimum: 1
+          maximum: 2000
+          default: 500
+      additionalProperties: false
+    ConfigQueryPreviewItem:
+      type: object
+      required: [content_item_id, provider, title, canonical_url, published_at]
+      properties:
+        content_item_id:
+          type: string
+          format: uuid
+        provider:
+          type: string
+        title:
+          type: string
+        canonical_url:
+          type: string
+          format: uri
+        published_at:
+          type: string
+          format: date-time
+          nullable: true
+    ConfigQueryProviderBreakdown:
+      type: object
+      required: [provider, count]
+      properties:
+        provider:
+          type: string
+        count:
+          type: integer
+          minimum: 0
+    ConfigQueryPreviewResponse:
+      type: object
+      required: [matched_count, candidates_count, sample, provider_breakdown]
+      properties:
+        matched_count:
+          type: integer
+          minimum: 0
+        candidates_count:
+          type: integer
+          minimum: 0
+        sample:
+          type: array
+          items:
+            $ref: '#/components/schemas/ConfigQueryPreviewItem'
+        provider_breakdown:
+          type: array
+          items:
+            $ref: '#/components/schemas/ConfigQueryProviderBreakdown'
+    ConfigQueryDryRunRequest:
+      type: object
+      properties:
+        max_articles_per_term:
+          type: integer
+          minimum: 1
+          maximum: 500
+      additionalProperties: false
+    ConfigQueryDryRunProviderResult:
+      type: object
+      required: [provider, raw_count, fetched_count, matched_count, duration_ms]
+      properties:
+        provider:
+          type: string
+        request_url:
+          type: string
+          nullable: true
+        raw_count:
+          type: integer
+          minimum: 0
+        fetched_count:
+          type: integer
+          minimum: 0
+        matched_count:
+          type: integer
+          minimum: 0
+        duration_ms:
+          type: integer
+          minimum: 0
+        error_type:
+          type: string
+          nullable: true
+        error:
+          type: string
+          nullable: true
+    ConfigQueryDryRunTotals:
+      type: object
+      required: [raw_count, fetched_count, matched_count]
+      properties:
+        raw_count:
+          type: integer
+          minimum: 0
+        fetched_count:
+          type: integer
+          minimum: 0
+        matched_count:
+          type: integer
+          minimum: 0
+    ConfigQueryDryRunSampleItem:
+      type: object
+      required: [provider, title, canonical_url]
+      properties:
+        provider:
+          type: string
+        title:
+          type: string
+        canonical_url:
+          type: string
+          format: uri
+        published_at:
+          type: string
+          format: date-time
+          nullable: true
+    ConfigQueryDryRunResponse:
+      type: object
+      required:
+        - run_id
+        - query_id
+        - providers_used
+        - query_text
+        - requested_max_articles_per_term
+        - effective_max_articles_per_term
+        - providers
+        - totals
+        - sample
+      properties:
+        run_id:
+          type: string
+          format: uuid
+        query_id:
+          type: string
+          format: uuid
+        providers_used:
+          type: array
+          items:
+            type: string
+        query_text:
+          type: string
+        requested_max_articles_per_term:
+          type: integer
+          minimum: 1
+        effective_max_articles_per_term:
+          type: integer
+          minimum: 1
+        providers:
+          type: array
+          items:
+            $ref: '#/components/schemas/ConfigQueryDryRunProviderResult'
+        totals:
+          $ref: '#/components/schemas/ConfigQueryDryRunTotals'
+        sample:
+          type: array
+          items:
+            $ref: '#/components/schemas/ConfigQueryDryRunSampleItem'
     ContentItem:
       type: object
       required: [id, source_type, state, title, canonical_url, created_at]

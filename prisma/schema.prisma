@@ -109,6 +109,8 @@ model User {
   awarioProfilesUpdated  AwarioQueryProfile[]        @relation("AwarioProfileUpdater")
   awarioBindingsCreated  AwarioAlertBinding[]        @relation("AwarioBindingCreator")
   awarioBindingsUpdated  AwarioAlertBinding[]        @relation("AwarioBindingUpdater")
+  trackedTermsUpdated    TrackedTerm[]               @relation("TrackedTermUpdater")
+  trackedTermRevisions   TrackedTermRevision[]       @relation("TrackedTermRevisionChanger")
 
   @@index([role])
 }
@@ -116,19 +118,47 @@ model User {
 model TrackedTerm {
   id               String         @id @default(uuid()) @db.Uuid
   name             String
+  description      String?
   language         String         @default("es")
   scope            TermScope      @default(claro)
   isActive         Boolean        @default(true)
+  priority         Int            @default(3)
   maxArticlesPerRun Int           @default(100)
+  definition       Json?
+  execution        Json?
+  compiledDefinition Json?
+  currentRevision  Int            @default(1)
+  updatedByUserId  String?        @db.Uuid
   createdAt        DateTime       @default(now())
   updatedAt        DateTime       @updatedAt
   ingestionRuns    IngestionRun[]
   contentItems     ContentItem[]
   analysisRuns     AnalysisRun[]
+  updatedByUser    User?          @relation("TrackedTermUpdater", fields: [updatedByUserId], references: [id], onDelete: SetNull)
+  revisions        TrackedTermRevision[]
 
   @@unique([name, language])
   @@index([isActive])
   @@index([scope])
+  @@index([priority, scope, isActive])
+}
+
+model TrackedTermRevision {
+  id               String      @id @default(uuid()) @db.Uuid
+  termId           String      @db.Uuid
+  revision         Int
+  definition       Json
+  execution        Json
+  compiledDefinition Json?
+  changedByUserId  String?     @db.Uuid
+  changeReason     String?
+  createdAt        DateTime    @default(now())
+  term             TrackedTerm @relation(fields: [termId], references: [id], onDelete: Cascade)
+  changedByUser    User?       @relation("TrackedTermRevisionChanger", fields: [changedByUserId], references: [id], onDelete: SetNull)
+
+  @@unique([termId, revision])
+  @@index([termId, createdAt])
+  @@index([changedByUserId, createdAt])
 }
 
 model IngestionRun {
@@ -172,6 +202,9 @@ model ContentItem {
   id               String              @id @default(uuid()) @db.Uuid
   sourceType       SourceType
   termId           String?             @db.Uuid
+  queryIdSnapshot  String?             @db.Uuid
+  queryNameSnapshot String?
+  queryScopeSnapshot TermScope?
   provider         String
   sourceName       String?
   sourceId         String?
@@ -201,6 +234,8 @@ model ContentItem {
   @@index([state, createdAt])
   @@index([sourceType, provider])
   @@index([category])
+  @@index([queryScopeSnapshot, publishedAt])
+  @@index([queryIdSnapshot])
 }
 
 model SocialSyncRun {

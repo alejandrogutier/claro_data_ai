@@ -9,6 +9,15 @@ export type ProviderName =
   | "guardian"
   | "nyt";
 
+export const NEWS_PROVIDER_NAMES: ProviderName[] = [
+  "newsapi",
+  "gnews",
+  "newsdata",
+  "worldnews",
+  "guardian",
+  "nyt"
+];
+
 export type ProviderErrorType = "rate_limit" | "auth" | "timeout" | "upstream_5xx" | "schema" | "unknown";
 
 export type NormalizedArticle = {
@@ -497,10 +506,39 @@ const runNyt: ProviderAdapter = async ({ term, maxArticlesPerTerm, providerKeys 
   }
 };
 
-const adapters: ProviderAdapter[] = [runNewsApi, runGNews, runNewsData, runWorldNews, runGuardian, runNyt];
+const adaptersByProvider: Record<ProviderName, ProviderAdapter> = {
+  newsapi: runNewsApi,
+  gnews: runGNews,
+  newsdata: runNewsData,
+  worldnews: runWorldNews,
+  guardian: runGuardian,
+  nyt: runNyt
+};
 
-export const fetchFromProviders = async (context: ProviderFetchContext): Promise<ProviderFetchResult[]> =>
-  Promise.all(adapters.map((adapter) => adapter(context)));
+const normalizeProviderName = (value: string): ProviderName | null => {
+  const normalized = value.trim().toLowerCase();
+  if (normalized === "newsapi" || normalized === "gnews" || normalized === "newsdata" || normalized === "worldnews" || normalized === "guardian" || normalized === "nyt") {
+    return normalized;
+  }
+  return null;
+};
+
+export const fetchFromProviders = async (
+  context: ProviderFetchContext & { providers?: string[] }
+): Promise<ProviderFetchResult[]> => {
+  const providers =
+    context.providers && context.providers.length > 0
+      ? Array.from(
+          new Set(
+            context.providers
+              .map((provider) => normalizeProviderName(provider))
+              .filter((provider): provider is ProviderName => provider !== null)
+          )
+        )
+      : NEWS_PROVIDER_NAMES;
+
+  return Promise.all(providers.map((provider) => adaptersByProvider[provider](context)));
+};
 
 export const dedupeByCanonicalUrl = (items: NormalizedArticle[]): NormalizedArticle[] => {
   const seen = new Set<string>();

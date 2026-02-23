@@ -169,7 +169,7 @@ type MonitorSocialQuery = {
   comparison_days?: number;
 };
 
-type HttpMethod = "GET" | "POST" | "PATCH";
+type HttpMethod = "GET" | "POST" | "PATCH" | "DELETE";
 
 type RequestOptions = {
   method?: HttpMethod;
@@ -181,6 +181,158 @@ type RequestOptions = {
 
 export type TermScope = "claro" | "competencia";
 export type TaxonomyKind = "categories" | "business_lines" | "macro_regions" | "campaigns" | "strategies";
+
+export type CreateIngestionRunRequest = {
+  run_id?: string;
+  term_ids?: string[];
+  terms?: string[];
+  language?: string;
+  max_articles_per_term?: number;
+};
+
+export type IngestionRunAccepted = {
+  run_id: string;
+  status: string;
+  execution_arn?: string | null;
+  start_date?: string | null;
+  skip_reason?: string | null;
+  input?: Record<string, unknown>;
+};
+
+export type QueryScope = "claro" | "competencia";
+
+export type QueryRuleGroup = {
+  kind: "group";
+  op: "AND" | "OR";
+  rules: QueryRule[];
+};
+
+export type QueryKeywordRule = {
+  kind: "keyword";
+  field: "any" | "title" | "summary" | "content";
+  match: "contains" | "phrase";
+  value: string;
+  not?: boolean;
+};
+
+export type QueryFacetRule = {
+  kind: "provider" | "language" | "country" | "domain";
+  op: "in" | "not_in";
+  values: string[];
+};
+
+export type QueryRule = QueryRuleGroup | QueryKeywordRule | QueryFacetRule;
+export type QueryDefinition = QueryRuleGroup;
+
+export type QueryExecutionConfig = {
+  providers_allow: string[];
+  providers_deny: string[];
+  countries_allow: string[];
+  countries_deny: string[];
+  domains_allow: string[];
+  domains_deny: string[];
+};
+
+export type ConfigQuery = {
+  id: string;
+  name: string;
+  description: string | null;
+  language: string;
+  scope: QueryScope;
+  is_active: boolean;
+  priority: number;
+  max_articles_per_run: number;
+  definition: QueryDefinition;
+  execution: QueryExecutionConfig;
+  compiled_definition: Record<string, unknown>;
+  current_revision: number;
+  updated_by_user_id: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type ConfigQueryListResponse = {
+  items: ConfigQuery[];
+  page_info: {
+    next_cursor: string | null;
+    has_next: boolean;
+  };
+};
+
+export type QueryRevision = {
+  id: string;
+  query_id: string;
+  revision: number;
+  definition: QueryDefinition;
+  execution: QueryExecutionConfig;
+  compiled_definition: Record<string, unknown>;
+  changed_by_user_id: string | null;
+  change_reason: string | null;
+  created_at: string;
+};
+
+export type QueryRevisionListResponse = {
+  query_id: string;
+  items: QueryRevision[];
+};
+
+export type CreateConfigQueryRequest = {
+  name: string;
+  description?: string | null;
+  language?: string;
+  scope?: QueryScope;
+  is_active?: boolean;
+  priority?: number;
+  max_articles_per_run?: number;
+  definition?: QueryDefinition;
+  execution?: QueryExecutionConfig;
+  change_reason?: string;
+};
+
+export type UpdateConfigQueryRequest = Partial<CreateConfigQueryRequest>;
+
+export type QueryPreviewResponse = {
+  matched_count: number;
+  candidates_count: number;
+  sample: Array<{
+    content_item_id: string;
+    provider: string;
+    title: string;
+    canonical_url: string;
+    published_at: string | null;
+  }>;
+  provider_breakdown: Array<{ provider: string; count: number }>;
+};
+
+export type QueryDryRunResponse = {
+  run_id: string;
+  query_id: string;
+  providers_used: string[];
+  query_text: string;
+  requested_max_articles_per_term: number;
+  effective_max_articles_per_term: number;
+  providers: Array<{
+    provider: string;
+    request_url?: string;
+    raw_count: number;
+    fetched_count: number;
+    matched_count: number;
+    duration_ms: number;
+    error_type?: string;
+    error?: string;
+  }>;
+  totals: {
+    raw_count: number;
+    fetched_count: number;
+    matched_count: number;
+  };
+  sample: Array<{
+    provider: string;
+    title: string;
+    canonical_url: string;
+    published_at?: string;
+  }>;
+};
 
 export class ApiError extends Error {
   constructor(
@@ -291,6 +443,83 @@ export class ApiClient {
   updateTerm(id: string, payload: UpdateTermRequest): Promise<Term> {
     return this.request<Term>(`/v1/terms/${id}`, {
       method: "PATCH",
+      body: payload
+    });
+  }
+
+  createIngestionRun(payload: CreateIngestionRunRequest): Promise<IngestionRunAccepted> {
+    return this.request<IngestionRunAccepted>("/v1/ingestion/runs", {
+      method: "POST",
+      body: payload
+    });
+  }
+
+  listConfigQueries(query: {
+    limit?: number;
+    cursor?: string;
+    scope?: QueryScope;
+    is_active?: boolean;
+    language?: string;
+    q?: string;
+  } = {}): Promise<ConfigQueryListResponse> {
+    return this.request<ConfigQueryListResponse>("/v1/config/queries", { query });
+  }
+
+  getConfigQuery(id: string): Promise<ConfigQuery> {
+    return this.request<ConfigQuery>(`/v1/config/queries/${id}`);
+  }
+
+  createConfigQuery(payload: CreateConfigQueryRequest): Promise<ConfigQuery> {
+    return this.request<ConfigQuery>("/v1/config/queries", {
+      method: "POST",
+      body: payload
+    });
+  }
+
+  patchConfigQuery(id: string, payload: UpdateConfigQueryRequest): Promise<ConfigQuery> {
+    return this.request<ConfigQuery>(`/v1/config/queries/${id}`, {
+      method: "PATCH",
+      body: payload
+    });
+  }
+
+  deleteConfigQuery(id: string): Promise<{ ok: boolean; id: string }> {
+    return this.request<{ ok: boolean; id: string }>(`/v1/config/queries/${id}`, {
+      method: "DELETE"
+    });
+  }
+
+  listConfigQueryRevisions(id: string, limit = 100): Promise<QueryRevisionListResponse> {
+    return this.request<QueryRevisionListResponse>(`/v1/config/queries/${id}/revisions`, {
+      query: { limit }
+    });
+  }
+
+  rollbackConfigQuery(id: string, revision: number, changeReason?: string): Promise<ConfigQuery> {
+    return this.request<ConfigQuery>(`/v1/config/queries/${id}/rollback`, {
+      method: "POST",
+      body: {
+        revision,
+        change_reason: changeReason
+      }
+    });
+  }
+
+  previewConfigQuery(payload: {
+    definition: QueryDefinition;
+    execution?: QueryExecutionConfig;
+    limit?: number;
+    candidate_limit?: number;
+  }): Promise<QueryPreviewResponse> {
+    return this.request<QueryPreviewResponse>("/v1/config/queries/preview", {
+      method: "POST",
+      body: payload
+    });
+  }
+
+  dryRunConfigQuery(id: string, payload: { max_articles_per_term?: number } = {}): Promise<QueryDryRunResponse> {
+    return this.request<QueryDryRunResponse>(`/v1/config/queries/${id}/dry-run`, {
+      method: "POST",
       body: payload
     });
   }

@@ -3,8 +3,22 @@ import type { SQSEvent } from "aws-lambda";
 import { randomUUID } from "crypto";
 import { env } from "../config/env";
 import { loadRuntimeSecrets } from "../config/secrets";
-import { dedupeByCanonicalUrl, fetchFromProviders } from "./providers";
-import { createIngestionSqlStore, type PersistableContentItem, type PersistableRunItem } from "./sqlStore";
+import {
+  buildSimpleQueryDefinition,
+  compileQueryDefinition,
+  evaluateQueryDefinition,
+  sanitizeExecutionConfig,
+  selectProvidersForExecution,
+  type QueryDefinition,
+  type QueryExecutionConfig
+} from "../queryBuilder";
+import { NEWS_PROVIDER_NAMES, dedupeByCanonicalUrl, fetchFromProviders } from "./providers";
+import {
+  createIngestionSqlStore,
+  type IngestionQueryTarget,
+  type PersistableContentItem,
+  type PersistableRunItem
+} from "./sqlStore";
 import { toSlug } from "./url";
 
 type IngestionDispatchMessage = {
@@ -24,6 +38,17 @@ const NEWS_MAX_ARTICLES_PER_TERM = 2;
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 const isUuid = (value: string): boolean => UUID_REGEX.test(value);
+
+type RuntimeQueryTarget = {
+  id: string | null;
+  name: string;
+  language: string;
+  scope: "claro" | "competencia";
+  maxArticlesPerRun: number;
+  definition: QueryDefinition;
+  execution: QueryExecutionConfig;
+  compiledDefinition: Record<string, unknown>;
+};
 
 const mergeUnique = (items: string[]): string[] => {
   const seen = new Set<string>();
@@ -65,6 +90,91 @@ const parseTermIds = (termIds: unknown): string[] => {
 const parseDefaultTerms = (raw?: string): string[] => {
   if (!raw) return [];
   return mergeUnique(raw.split(",").map((item) => item.trim()));
+};
+
+const hostFromUrl = (rawUrl: string | undefined): string | null => {
+  if (!rawUrl) return null;
+  try {
+    const parsed = new URL(rawUrl);
+    return parsed.hostname.replace(/^www\./i, "").toLowerCase();
+  } catch {
+    return null;
+  }
+};
+
+const normalizeStringList = (values: string[]): string[] =>
+  Array.from(new Set(values.map((value) => value.trim().toLowerCase()).filter(Boolean)));
+
+const extractCountryCandidates = (metadata: Record<string, unknown>): string[] => {
+  const candidates: string[] = [];
+  const rawValues: unknown[] = [
+    metadata.country,
+    metadata.countries,
+    metadata.source_country,
+    metadata.sourceCountry,
+    metadata.locale
+  ];
+
+  for (const raw of rawValues) {
+    if (typeof raw === "string") {
+      candidates.push(raw);
+      continue;
+    }
+
+    if (Array.isArray(raw)) {
+      for (const item of raw) {
+        if (typeof item === "string") {
+          candidates.push(item);
+        }
+      }
+    }
+  }
+
+  return normalizeStringList(candidates);
+};
+
+const applyExecutionFilters = (
+  article: { provider?: string; canonicalUrl?: string; metadata?: Record<string, unknown> },
+  execution: QueryExecutionConfig
+): boolean => {
+  const provider = article.provider?.trim().toLowerCase() ?? "";
+  const providerAllow = new Set(execution.providers_allow.map((item) => item.trim().toLowerCase()).filter(Boolean));
+  const providerDeny = new Set(execution.providers_deny.map((item) => item.trim().toLowerCase()).filter(Boolean));
+
+  if (providerAllow.size > 0 && (!provider || !providerAllow.has(provider))) {
+    return false;
+  }
+
+  if (provider && providerDeny.has(provider)) {
+    return false;
+  }
+
+  const domain = hostFromUrl(article.canonicalUrl);
+  const domainAllow = new Set(execution.domains_allow.map((item) => item.trim().toLowerCase()).filter(Boolean));
+  const domainDeny = new Set(execution.domains_deny.map((item) => item.trim().toLowerCase()).filter(Boolean));
+
+  if (domainAllow.size > 0 && (!domain || !domainAllow.has(domain))) {
+    return false;
+  }
+
+  if (domain && domainDeny.has(domain)) {
+    return false;
+  }
+
+  const countries = extractCountryCandidates(article.metadata ?? {});
+  const countryAllow = new Set(execution.countries_allow.map((item) => item.trim().toLowerCase()).filter(Boolean));
+  const countryDeny = new Set(execution.countries_deny.map((item) => item.trim().toLowerCase()).filter(Boolean));
+
+  if (countryAllow.size > 0) {
+    const hasAllowed = countries.some((country) => countryAllow.has(country));
+    if (!hasAllowed) return false;
+  }
+
+  if (countries.some((country) => countryDeny.has(country))) {
+    return false;
+  }
+
+  return true;
 };
 
 const parseLanguage = (value: unknown): string => {
@@ -141,27 +251,65 @@ const processRecord = async (
   const triggerType = message.triggerType ?? "scheduled";
   const language = parseLanguage(message.language);
   const requestedMaxArticlesPerTerm = parseLimit(message.maxArticlesPerTerm);
-  const effectiveMaxArticlesPerTerm = Math.min(NEWS_MAX_ARTICLES_PER_TERM, requestedMaxArticlesPerTerm);
+  const effectiveRunMaxArticlesPerTerm = Math.min(NEWS_MAX_ARTICLES_PER_TERM, requestedMaxArticlesPerTerm);
   const requestedTermIds = parseTermIds(message.termIds);
 
-  let terms = parseTerms(message.terms);
+  const manualTerms = parseTerms(message.terms);
+  const toManualTarget = (term: string): RuntimeQueryTarget => {
+    const definition = buildSimpleQueryDefinition(term);
+    return {
+      id: null,
+      name: term,
+      language,
+      scope: "claro",
+      maxArticlesPerRun: requestedMaxArticlesPerTerm,
+      definition,
+      execution: sanitizeExecutionConfig({}),
+      compiledDefinition: compileQueryDefinition(definition) as unknown as Record<string, unknown>
+    };
+  };
+
+  const toRuntimeQueryTarget = (query: IngestionQueryTarget): RuntimeQueryTarget => ({
+    id: query.id,
+    name: query.name,
+    language: query.language || language,
+    scope: query.scope,
+    maxArticlesPerRun: Math.max(1, query.maxArticlesPerRun),
+    definition: query.definition,
+    execution: sanitizeExecutionConfig(query.execution),
+    compiledDefinition:
+      query.compiledDefinition && Object.keys(query.compiledDefinition).length > 0
+        ? query.compiledDefinition
+        : (compileQueryDefinition(query.definition) as unknown as Record<string, unknown>)
+  });
+
+  let queryTargets: RuntimeQueryTarget[] = manualTerms.map(toManualTarget);
 
   if (sqlStore && requestedTermIds.length > 0) {
-    const resolvedFromIds = await sqlStore.resolveTermIdsToNames(requestedTermIds);
-    terms = mergeUnique([...terms, ...resolvedFromIds]);
+    const resolvedFromIds = await sqlStore.resolveTermIdsToQueries(requestedTermIds);
+    queryTargets = [...queryTargets, ...resolvedFromIds.map(toRuntimeQueryTarget)];
   }
 
-  if (terms.length === 0 && sqlStore) {
-    const activeTerms = await sqlStore.listActiveTermNames(50);
-    terms = mergeUnique([...terms, ...activeTerms]);
+  if (queryTargets.length === 0 && sqlStore) {
+    const activeQueries = await sqlStore.listActiveQueries(50);
+    queryTargets = activeQueries.map(toRuntimeQueryTarget);
   }
 
-  if (terms.length === 0) {
+  if (queryTargets.length === 0) {
     const defaultTermsFromConfig = parseDefaultTerms(appConfig.INGESTION_DEFAULT_TERMS ?? env.ingestionDefaultTerms);
-    terms = mergeUnique([...terms, ...defaultTermsFromConfig]);
+    queryTargets = defaultTermsFromConfig.map(toManualTarget);
   }
 
-  if (terms.length === 0) {
+  const dedupedTargets = new Map<string, RuntimeQueryTarget>();
+  for (const target of queryTargets) {
+    const key = target.id ?? `${target.name.toLowerCase()}::${target.language.toLowerCase()}`;
+    if (!dedupedTargets.has(key)) {
+      dedupedTargets.set(key, target);
+    }
+  }
+  queryTargets = Array.from(dedupedTargets.values());
+
+  if (queryTargets.length === 0) {
     throw new Error("No terms provided in message and no active/default terms configured");
   }
 
@@ -206,7 +354,7 @@ const processRecord = async (
       runId,
       triggerType,
       language,
-      maxArticlesPerTerm: effectiveMaxArticlesPerTerm,
+      maxArticlesPerTerm: effectiveRunMaxArticlesPerTerm,
       requestId: message.requestId,
       startedAt
     });
@@ -215,35 +363,87 @@ const processRecord = async (
   }
 
   try {
-    for (const term of terms) {
-      const termId = sqlStore ? await sqlStore.ensureTrackedTerm(term, language, effectiveMaxArticlesPerTerm) : null;
+    for (const target of queryTargets) {
+      const targetRequestedMaxArticlesPerTerm = Math.min(requestedMaxArticlesPerTerm, Math.max(1, target.maxArticlesPerRun));
+      const targetEffectiveMaxArticlesPerTerm = Math.min(NEWS_MAX_ARTICLES_PER_TERM, targetRequestedMaxArticlesPerTerm);
+
+      const compiledQueryText =
+        typeof target.compiledDefinition.query === "string" && target.compiledDefinition.query.trim()
+          ? target.compiledDefinition.query.trim()
+          : target.name;
+
+      const selectedProviders = selectProvidersForExecution([...NEWS_PROVIDER_NAMES], target.execution);
+      if (selectedProviders.length === 0) {
+        termSummaries.push({
+          term: target.name,
+          term_id: target.id,
+          scope: target.scope,
+          skip_reason: "no_providers_selected"
+        });
+        continue;
+      }
 
       const providerResults = await fetchFromProviders({
-        term,
-        language,
-        maxArticlesPerTerm: effectiveMaxArticlesPerTerm,
-        providerKeys
+        term: compiledQueryText,
+        language: target.language || language,
+        maxArticlesPerTerm: targetEffectiveMaxArticlesPerTerm,
+        providerKeys,
+        providers: selectedProviders
       });
 
       const merged = providerResults.flatMap((result) => result.items);
-      const deduped = dedupeByCanonicalUrl(merged);
-      const limited = limitNewsItems(deduped, effectiveMaxArticlesPerTerm);
+      const matchedByRule = merged.filter((article) =>
+        evaluateQueryDefinition(target.definition, {
+          provider: article.provider,
+          title: article.title,
+          summary: article.summary,
+          content: article.content,
+          canonicalUrl: article.canonicalUrl,
+          language: article.language,
+          metadata: article.metadata
+        })
+      );
+
+      const matchedByExecution = matchedByRule.filter((article) =>
+        applyExecutionFilters(
+          {
+            provider: article.provider,
+            canonicalUrl: article.canonicalUrl,
+            metadata: article.metadata
+          },
+          target.execution
+        )
+      );
+
+      const deduped = dedupeByCanonicalUrl(matchedByExecution);
+      const limited = limitNewsItems(deduped, targetEffectiveMaxArticlesPerTerm);
       const trimmedByLimit = Math.max(0, deduped.length - limited.length);
       const failedProviders = providerResults.filter((result) => Boolean(result.error)).length;
       const successfulProviders = providerResults.length - failedProviders;
 
-      const rawS3Key = await persistRawSnapshot(runId, triggerType, term, {
+      let termId = target.id;
+      if (!termId && sqlStore) {
+        termId = await sqlStore.ensureTrackedTerm(target.name, target.language || language, targetRequestedMaxArticlesPerTerm);
+      }
+
+      const rawS3Key = await persistRawSnapshot(runId, triggerType, target.name, {
         runId,
         triggerType,
         requestId: message.requestId ?? null,
         requestedAt: message.requestedAt ?? null,
-        term,
+        term: target.name,
+        termId,
+        termScope: target.scope,
         termIds: requestedTermIds,
-        language,
+        language: target.language || language,
         requestedMaxArticlesPerTerm,
-        effectiveMaxArticlesPerTerm,
+        targetRequestedMaxArticlesPerTerm,
+        targetEffectiveMaxArticlesPerTerm,
+        selectedProviders,
         providerResults,
         mergedCount: merged.length,
+        matchedByRuleCount: matchedByRule.length,
+        matchedByExecutionCount: matchedByExecution.length,
         dedupedCount: deduped.length,
         trimmedByLimit,
         limitedCount: limited.length,
@@ -255,7 +455,8 @@ const processRecord = async (
         article,
         termId,
         runId,
-        term,
+        term: target.name,
+        termScope: target.scope,
         triggerType,
         rawPayloadS3Key: rawS3Key
       }));
@@ -263,7 +464,7 @@ const processRecord = async (
       let insertedCanonicalUrls = new Set<string>(limited.map((item) => item.canonicalUrl));
       if (sqlStore) {
         const refs = await sqlStore.upsertContentItems(persistableItems);
-        insertedCanonicalUrls = await sqlStore.upsertRunContentLinks(runId, term, refs);
+        insertedCanonicalUrls = await sqlStore.upsertRunContentLinks(runId, target.name, refs);
       }
 
       const persistedByProvider = new Map<string, number>();
@@ -283,7 +484,7 @@ const processRecord = async (
           persistedCount: persistedByProvider.get(result.provider) ?? 0,
           latencyMs: result.durationMs,
           errorMessage: result.error
-            ? `[${result.errorType ?? "unknown"}][term:${term}] ${result.error}`
+            ? `[${result.errorType ?? "unknown"}][term:${target.name}] ${result.error}`
             : undefined
         });
       }
@@ -296,12 +497,17 @@ const processRecord = async (
       itemsPersisted += persistedCount;
 
       termSummaries.push({
-        term,
+        term: target.name,
+        term_id: termId,
+        scope: target.scope,
         raw_s3_key: rawS3Key,
         providers_total: providerResults.length,
+        providers_selected: selectedProviders,
         providers_successful: successfulProviders,
         providers_failed: failedProviders,
         items_raw: merged.length,
+        items_matched_by_rule: matchedByRule.length,
+        items_matched_by_execution: matchedByExecution.length,
         items_deduped: deduped.length,
         items_trimmed_by_limit: trimmedByLimit,
         items_after_limit: limited.length,
@@ -322,9 +528,9 @@ const processRecord = async (
           items_deduped: itemsDeduped,
           items_trimmed_by_limit: itemsTrimmedByLimit,
           items_persisted: itemsPersisted,
-          terms_count: terms.length,
+          terms_count: queryTargets.length,
           requested_max_articles_per_term: requestedMaxArticlesPerTerm,
-          effective_max_articles_per_term: effectiveMaxArticlesPerTerm,
+          effective_max_articles_per_term: effectiveRunMaxArticlesPerTerm,
           term_summaries: termSummaries
         }
       });
@@ -334,7 +540,7 @@ const processRecord = async (
       run_id: runId,
       trigger_type: triggerType,
       status: "processed",
-      terms_count: terms.length,
+      terms_count: queryTargets.length,
       providers_total: providersTotal,
       providers_failed: providersFailed,
       items_raw: itemsRaw,
@@ -342,7 +548,7 @@ const processRecord = async (
       items_trimmed_by_limit: itemsTrimmedByLimit,
       items_persisted: itemsPersisted,
       requested_max_articles_per_term: requestedMaxArticlesPerTerm,
-      effective_max_articles_per_term: effectiveMaxArticlesPerTerm,
+      effective_max_articles_per_term: effectiveRunMaxArticlesPerTerm,
       term_summaries: termSummaries
     };
   } catch (error) {
@@ -363,10 +569,10 @@ const processRecord = async (
             items_deduped: itemsDeduped,
             items_trimmed_by_limit: itemsTrimmedByLimit,
             items_persisted: itemsPersisted,
-            terms_count: terms.length,
+            terms_count: queryTargets.length,
             terms_completed: termSummaries.length,
             requested_max_articles_per_term: requestedMaxArticlesPerTerm,
-            effective_max_articles_per_term: effectiveMaxArticlesPerTerm,
+            effective_max_articles_per_term: effectiveRunMaxArticlesPerTerm,
             term_summaries: termSummaries
           }
         });

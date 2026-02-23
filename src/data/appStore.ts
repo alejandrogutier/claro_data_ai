@@ -1404,7 +1404,7 @@ class AppStore {
     const response = await this.rds.execute(
       `
         SELECT
-          COALESCE(t."scope"::text, '') AS scope,
+          COALESCE(ci."queryScopeSnapshot"::text, t."scope"::text, '') AS scope,
           cls."sentimiento",
           COALESCE(
             sw_source."weight",
