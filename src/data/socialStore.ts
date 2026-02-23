@@ -25,6 +25,14 @@ type SocialChannel = "facebook" | "instagram" | "linkedin" | "tiktok";
 type SocialDatePreset = "all" | "y2024" | "y2025" | "ytd" | "90d" | "30d" | "7d" | "last_quarter" | "custom";
 type SocialTrendGranularity = "auto" | "day" | "week" | "month";
 type SortMode = "published_at_desc" | "exposure_desc" | "engagement_desc";
+type SocialAccountsSortMode =
+  | "er_desc"
+  | "exposure_desc"
+  | "engagement_desc"
+  | "posts_desc"
+  | "riesgo_desc"
+  | "sov_desc"
+  | "account_asc";
 type SentimentBucket = "positive" | "negative" | "neutral" | "unknown";
 type SocialComparisonMode = "weekday_aligned_week" | "exact_days" | "same_period_last_year";
 type SocialScatterDimension = "post_type" | "channel" | "account" | "campaign" | "strategy" | "hashtag";
@@ -234,6 +242,30 @@ type SocialPostsPage = {
   items: SocialPostRecord[];
   nextCursor: string | null;
   hasNext: boolean;
+};
+
+type SocialFacetItem = {
+  value: string;
+  count: number;
+};
+
+type SocialFacetsRecord = {
+  generatedAt: Date;
+  preset: SocialDatePreset;
+  windowStart: string;
+  windowEnd: string;
+  totals: {
+    posts: number;
+    accounts: number;
+  };
+  facets: {
+    account: SocialFacetItem[];
+    postType: SocialFacetItem[];
+    campaign: SocialFacetItem[];
+    strategy: SocialFacetItem[];
+    hashtag: SocialFacetItem[];
+    sentiment: Array<{ value: SentimentBucket; count: number }>;
+  };
 };
 
 type SocialRunsPage = {
@@ -507,6 +539,9 @@ type SocialCoverageRecord = {
 type SocialAccountsFilters = SocialOverviewFilters & {
   minPosts?: number;
   minExposure?: number;
+  sort?: SocialAccountsSortMode;
+  limit?: number;
+  cursor?: string;
 };
 
 type SocialAccountsRecord = {
@@ -517,6 +552,7 @@ type SocialAccountsRecord = {
   windowEnd: string;
   minPosts: number;
   minExposure: number;
+  sortApplied: SocialAccountsSortMode;
   items: Array<{
     accountName: string;
     channelMix: SocialChannel[];
@@ -532,6 +568,8 @@ type SocialAccountsRecord = {
     deltaEr: number;
     meetsThreshold: boolean;
   }>;
+  hasNext: boolean;
+  nextCursor: string | null;
 };
 
 type SocialRiskRecord = {
@@ -540,6 +578,13 @@ type SocialRiskRecord = {
   preset: SocialDatePreset;
   windowStart: string;
   windowEnd: string;
+  staleData: boolean;
+  staleAfterMinutes: number;
+  thresholds: {
+    riskThreshold: number;
+    sentimentDropThreshold: number;
+    erDropThreshold: number;
+  };
   sentimentTrend: Array<{
     date: string;
     clasificados: number;
@@ -637,15 +682,84 @@ type SocialIncidentResult = {
   severity: IncidentSeverity;
 };
 
-type PostsCursorPayload = {
+type LegacyOffsetCursorPayload = {
   offset: number;
 };
 
-type PostCommentsCursorPayload = {
-  offset: number;
+type PostsCursorPayload = LegacyOffsetCursorPayload | {
+  version: 2;
+  sort: SortMode;
+  primary: string;
+  secondary: string;
+  id: string;
 };
 
-type RunsCursorPayload = {
+type PostCommentsCursorPayload = LegacyOffsetCursorPayload | {
+  version: 2;
+  publishedAt: string;
+  id: string;
+};
+
+type RunsCursorPayload = LegacyOffsetCursorPayload;
+
+type AccountsCursorPayload = LegacyOffsetCursorPayload;
+
+type AccountsSortSpec = {
+  sortApplied: SocialAccountsSortMode;
+  compare: (a: SocialAccountsRecord["items"][number], b: SocialAccountsRecord["items"][number]) => number;
+};
+
+type PostsCursorV2 = {
+  version: 2;
+  sort: SortMode;
+  primary: string;
+  secondary: string;
+  id: string;
+};
+
+type PostCommentsCursorV2 = {
+  version: 2;
+  publishedAt: string;
+  id: string;
+};
+
+type PostSortExpressions = {
+  orderBy: string;
+  primaryExpr: string;
+  primaryParamType: "number" | "timestamp";
+};
+
+type PostCommentSortExpressions = {
+  orderBy: string;
+  primaryExpr: string;
+};
+
+type ListPostsRawOptions = {
+  offset?: number;
+  keysetCursor?: PostsCursorV2 | null;
+};
+
+type ListPostCommentsRawOptions = {
+  offset?: number;
+  keysetCursor?: PostCommentsCursorV2 | null;
+};
+
+type FacetCountMap = Map<string, number>;
+
+type FacetBuilderResult = {
+  account: FacetCountMap;
+  postType: FacetCountMap;
+  campaign: FacetCountMap;
+  strategy: FacetCountMap;
+  hashtag: FacetCountMap;
+  sentiment: Map<SentimentBucket, number>;
+};
+
+type RiskFreshnessConfig = {
+  staleAfterMinutes: number;
+};
+
+type AccountsPagination = {
   offset: number;
 };
 
@@ -878,9 +992,30 @@ const encodePostsCursor = (value: PostsCursorPayload): string => Buffer.from(JSO
 const decodePostsCursor = (value?: string): PostsCursorPayload | null => {
   if (!value) return { offset: 0 };
   try {
-    const parsed = JSON.parse(Buffer.from(value, "base64url").toString("utf8")) as PostsCursorPayload;
-    if (!parsed || typeof parsed.offset !== "number" || parsed.offset < 0) return null;
-    return { offset: Math.floor(parsed.offset) };
+    const parsedUnknown = JSON.parse(Buffer.from(value, "base64url").toString("utf8")) as unknown;
+    if (parsedUnknown && typeof parsedUnknown === "object") {
+      const parsed = parsedUnknown as Record<string, unknown>;
+      if (typeof parsed.offset === "number" && parsed.offset >= 0) {
+        return { offset: Math.floor(parsed.offset) };
+      }
+      if (
+        parsed.version === 2 &&
+        (parsed.sort === "published_at_desc" || parsed.sort === "exposure_desc" || parsed.sort === "engagement_desc") &&
+        typeof parsed.primary === "string" &&
+        typeof parsed.secondary === "string" &&
+        typeof parsed.id === "string" &&
+        isUuid(parsed.id)
+      ) {
+        return {
+          version: 2,
+          sort: parsed.sort,
+          primary: parsed.primary,
+          secondary: parsed.secondary,
+          id: parsed.id
+        };
+      }
+    }
+    return null;
   } catch {
     return null;
   }
@@ -891,9 +1026,26 @@ const encodePostCommentsCursor = (value: PostCommentsCursorPayload): string => B
 const decodePostCommentsCursor = (value?: string): PostCommentsCursorPayload | null => {
   if (!value) return { offset: 0 };
   try {
-    const parsed = JSON.parse(Buffer.from(value, "base64url").toString("utf8")) as PostCommentsCursorPayload;
-    if (!parsed || typeof parsed.offset !== "number" || parsed.offset < 0) return null;
-    return { offset: Math.floor(parsed.offset) };
+    const parsedUnknown = JSON.parse(Buffer.from(value, "base64url").toString("utf8")) as unknown;
+    if (parsedUnknown && typeof parsedUnknown === "object") {
+      const parsed = parsedUnknown as Record<string, unknown>;
+      if (typeof parsed.offset === "number" && parsed.offset >= 0) {
+        return { offset: Math.floor(parsed.offset) };
+      }
+      if (
+        parsed.version === 2 &&
+        typeof parsed.publishedAt === "string" &&
+        typeof parsed.id === "string" &&
+        isUuid(parsed.id)
+      ) {
+        return {
+          version: 2,
+          publishedAt: parsed.publishedAt,
+          id: parsed.id
+        };
+      }
+    }
+    return null;
   } catch {
     return null;
   }
@@ -911,6 +1063,41 @@ const decodeRunsCursor = (value?: string): RunsCursorPayload | null => {
     return null;
   }
 };
+
+const encodeAccountsCursor = (value: AccountsCursorPayload): string => Buffer.from(JSON.stringify(value), "utf8").toString("base64url");
+
+const decodeAccountsCursor = (value?: string): AccountsCursorPayload | null => {
+  if (!value) return { offset: 0 };
+  try {
+    const parsed = JSON.parse(Buffer.from(value, "base64url").toString("utf8")) as Partial<AccountsCursorPayload>;
+    if (!parsed || typeof parsed.offset !== "number" || parsed.offset < 0) return null;
+    return { offset: Math.floor(parsed.offset) };
+  } catch {
+    return null;
+  }
+};
+
+const toCursorDateIso = (value: Date | null | undefined): string => (value ?? new Date(0)).toISOString();
+
+const getPostsCursorPrimary = (sort: SortMode, row: SocialPostRecord): string => {
+  if (sort === "exposure_desc") return String(roundMetric(row.exposure));
+  if (sort === "engagement_desc") return String(roundMetric(row.engagementTotal));
+  return toCursorDateIso(row.publishedAt ?? row.createdAt);
+};
+
+const buildPostsCursorV2 = (sort: SortMode, row: SocialPostRecord): PostsCursorV2 => ({
+  version: 2,
+  sort,
+  primary: getPostsCursorPrimary(sort, row),
+  secondary: toCursorDateIso(row.publishedAt ?? row.createdAt),
+  id: row.id
+});
+
+const buildPostCommentsCursorV2 = (row: SocialPostCommentRecord): PostCommentsCursorV2 => ({
+  version: 2,
+  publishedAt: toCursorDateIso(row.publishedAt ?? row.createdAt),
+  id: row.id
+});
 
 const parseRunRow = (row: SqlRow | undefined): SocialSyncRunRecord | null => {
   const id = fieldString(row, 0);
@@ -1491,6 +1678,103 @@ const resolveComparisonWindow = (
   };
 };
 
+const DEFAULT_RISK_FRESHNESS_CONFIG: RiskFreshnessConfig = {
+  staleAfterMinutes: 30
+};
+
+const resolveAccountsSortSpec = (sort: SocialAccountsSortMode | undefined): AccountsSortSpec => {
+  const sortApplied = sort ?? "er_desc";
+
+  if (sortApplied === "account_asc") {
+    return {
+      sortApplied,
+      compare: (a, b) => a.accountName.localeCompare(b.accountName) || b.erPonderado - a.erPonderado
+    };
+  }
+
+  if (sortApplied === "exposure_desc") {
+    return {
+      sortApplied,
+      compare: (a, b) => b.exposureTotal - a.exposureTotal || b.erPonderado - a.erPonderado || a.accountName.localeCompare(b.accountName)
+    };
+  }
+
+  if (sortApplied === "engagement_desc") {
+    return {
+      sortApplied,
+      compare: (a, b) => b.engagementTotal - a.engagementTotal || b.erPonderado - a.erPonderado || a.accountName.localeCompare(b.accountName)
+    };
+  }
+
+  if (sortApplied === "posts_desc") {
+    return {
+      sortApplied,
+      compare: (a, b) => b.posts - a.posts || b.erPonderado - a.erPonderado || a.accountName.localeCompare(b.accountName)
+    };
+  }
+
+  if (sortApplied === "riesgo_desc") {
+    return {
+      sortApplied,
+      compare: (a, b) => b.riesgoActivo - a.riesgoActivo || b.exposureTotal - a.exposureTotal || a.accountName.localeCompare(b.accountName)
+    };
+  }
+
+  if (sortApplied === "sov_desc") {
+    return {
+      sortApplied,
+      compare: (a, b) => b.sovInterno - a.sovInterno || b.exposureTotal - a.exposureTotal || a.accountName.localeCompare(b.accountName)
+    };
+  }
+
+  return {
+    sortApplied: "er_desc",
+    compare: (a, b) => b.erPonderado - a.erPonderado || b.exposureTotal - a.exposureTotal || a.accountName.localeCompare(b.accountName)
+  };
+};
+
+const buildPostSortExpressions = (sort: SortMode): PostSortExpressions => {
+  const publishedExpr = `COALESCE(spm."publishedAt", ci."publishedAt", ci."createdAt")`;
+  if (sort === "exposure_desc") {
+    return {
+      orderBy: `spm."exposure" DESC, ${publishedExpr} DESC, spm."id" DESC`,
+      primaryExpr: `spm."exposure"`,
+      primaryParamType: "number"
+    };
+  }
+  if (sort === "engagement_desc") {
+    return {
+      orderBy: `spm."engagementTotal" DESC, ${publishedExpr} DESC, spm."id" DESC`,
+      primaryExpr: `spm."engagementTotal"`,
+      primaryParamType: "number"
+    };
+  }
+  return {
+    orderBy: `${publishedExpr} DESC, spm."id" DESC`,
+    primaryExpr: publishedExpr,
+    primaryParamType: "timestamp"
+  };
+};
+
+const buildPostCommentSortExpressions = (): PostCommentSortExpressions => ({
+  orderBy: `COALESCE(spc."publishedAt", spc."createdAt") DESC, spc."id" DESC`,
+  primaryExpr: `COALESCE(spc."publishedAt", spc."createdAt")`
+});
+
+const incrementFacetCount = (map: Map<string, number>, value: string): void => {
+  map.set(value, (map.get(value) ?? 0) + 1);
+};
+
+const sortFacetMap = (map: Map<string, number>): SocialFacetItem[] =>
+  Array.from(map.entries())
+    .map(([value, count]) => ({ value, count }))
+    .sort((a, b) => b.count - a.count || a.value.localeCompare(b.value));
+
+const sortSentimentFacetMap = (map: Map<SentimentBucket, number>): Array<{ value: SentimentBucket; count: number }> =>
+  Array.from(map.entries())
+    .map(([value, count]) => ({ value, count }))
+    .sort((a, b) => b.count - a.count || a.value.localeCompare(b.value));
+
 class SocialStore {
   constructor(private readonly rds: RdsDataClient) {}
 
@@ -1882,15 +2166,48 @@ class SocialStore {
     };
   }
 
-  private async listPostsRaw(filters: SocialOverviewFilters, windowStart: Date, windowEnd: Date, sort: SortMode, limit: number, offset: number): Promise<SocialPostRecord[]> {
+  private async listPostsRaw(
+    filters: SocialOverviewFilters,
+    windowStart: Date,
+    windowEnd: Date,
+    sort: SortMode,
+    limit: number,
+    options: ListPostsRawOptions = {}
+  ): Promise<SocialPostRecord[]> {
     const { clause, params } = this.buildPostsWhere(filters, windowStart, windowEnd);
-    const orderBy =
-      sort === "exposure_desc"
-        ? `spm."exposure" DESC, COALESCE(spm."publishedAt", ci."publishedAt", ci."createdAt") DESC, spm."id" DESC`
-        : sort === "engagement_desc"
-          ? `spm."engagementTotal" DESC, COALESCE(spm."publishedAt", ci."publishedAt", ci."createdAt") DESC, spm."id" DESC`
-          : `COALESCE(spm."publishedAt", ci."publishedAt", ci."createdAt") DESC, spm."id" DESC`;
-    const statementParams = [...params, sqlLong("limit", limit), sqlLong("offset", offset)];
+    const sortExpressions = buildPostSortExpressions(sort);
+    const statementParams = [...params, sqlLong("limit", limit)];
+    const keysetCursor = options.keysetCursor ?? null;
+
+    let whereClause = clause;
+    if (keysetCursor && keysetCursor.version === 2 && keysetCursor.sort === sort) {
+      const publishedExpr = `COALESCE(spm."publishedAt", ci."publishedAt", ci."createdAt")`;
+      const cursorSecondaryDate = new Date(keysetCursor.secondary);
+      if (Number.isNaN(cursorSecondaryDate.getTime())) {
+        throw new AppStoreError("validation", "Invalid cursor");
+      }
+      if (sortExpressions.primaryParamType === "timestamp") {
+        const keysetClause = `(
+          ${publishedExpr} < :cursor_secondary
+          OR (${publishedExpr} = :cursor_secondary AND spm."id" < CAST(:cursor_id AS UUID))
+        )`;
+        whereClause = whereClause ? `${whereClause} AND ${keysetClause}` : `WHERE ${keysetClause}`;
+      } else {
+        const keysetClause = `(
+          ${sortExpressions.primaryExpr} < CAST(:cursor_primary AS DECIMAL(18,2))
+          OR (${sortExpressions.primaryExpr} = CAST(:cursor_primary AS DECIMAL(18,2)) AND ${publishedExpr} < :cursor_secondary)
+          OR (${sortExpressions.primaryExpr} = CAST(:cursor_primary AS DECIMAL(18,2)) AND ${publishedExpr} = :cursor_secondary AND spm."id" < CAST(:cursor_id AS UUID))
+        )`;
+        whereClause = whereClause ? `${whereClause} AND ${keysetClause}` : `WHERE ${keysetClause}`;
+        statementParams.push(sqlString("cursor_primary", keysetCursor.primary));
+      }
+      statementParams.push(sqlTimestamp("cursor_secondary", cursorSecondaryDate));
+      statementParams.push(sqlUuid("cursor_id", keysetCursor.id));
+    } else {
+      statementParams.push(sqlLong("offset", Math.max(0, Math.floor(options.offset ?? 0))));
+    }
+
+    const paginationClause = keysetCursor ? `LIMIT :limit` : `LIMIT :limit OFFSET :offset`;
     const fullSql = `
       SELECT
         spm."id"::text,
@@ -1950,9 +2267,9 @@ class SocialStore {
         JOIN "public"."Hashtag" h ON h."id" = sph."hashtagId"
         WHERE sph."socialPostMetricId" = spm."id"
       ) hashtags ON TRUE
-      ${clause}
-      ORDER BY ${orderBy}
-      LIMIT :limit OFFSET :offset
+      ${whereClause}
+      ORDER BY ${sortExpressions.orderBy}
+      ${paginationClause}
     `;
 
     try {
@@ -1963,6 +2280,8 @@ class SocialStore {
         throw error;
       }
 
+      const legacyWhereClause = whereClause;
+      const legacyPaginationClause = keysetCursor ? `LIMIT :limit` : `LIMIT :limit OFFSET :offset`;
       const legacySql = `
         SELECT
           spm."id"::text,
@@ -2004,9 +2323,9 @@ class SocialStore {
           ORDER BY c."isOverride" DESC, c."updatedAt" DESC, c."createdAt" DESC
           LIMIT 1
         ) cls ON TRUE
-        ${clause}
-        ORDER BY ${orderBy}
-        LIMIT :limit OFFSET :offset
+        ${legacyWhereClause}
+        ORDER BY ${sortExpressions.orderBy}
+        ${legacyPaginationClause}
       `;
 
       const response = await this.rds.execute(legacySql, statementParams);
@@ -2720,14 +3039,20 @@ class SocialStore {
     }
 
     const { windowStart, windowEnd } = this.normalizeOverviewWindow(filters);
-    const rows = await this.listPostsRaw(filters, windowStart, windowEnd, filters.sort, safeLimit + 1, payload.offset);
+    const rows = await this.listPostsRaw(filters, windowStart, windowEnd, filters.sort, safeLimit + 1, {
+      offset: "offset" in payload ? payload.offset : undefined,
+      keysetCursor: "version" in payload && payload.version === 2 ? payload : null
+    });
     const hasNext = rows.length > safeLimit;
     const items = rows.slice(0, safeLimit);
+
+    const last = items[items.length - 1];
+    const nextCursor = hasNext && last ? encodePostsCursor(buildPostsCursorV2(filters.sort, last)) : null;
 
     return {
       items,
       hasNext,
-      nextCursor: hasNext ? encodePostsCursor({ offset: payload.offset + safeLimit }) : null
+      nextCursor
     };
   }
 
@@ -2741,7 +3066,7 @@ class SocialStore {
     while (items.length < safeLimit) {
       const remaining = safeLimit - items.length;
       const batchSize = Math.min(pageSize, remaining);
-      const page = await this.listPostsRaw(filters, windowStart, windowEnd, sort, batchSize, offset);
+      const page = await this.listPostsRaw(filters, windowStart, windowEnd, sort, batchSize, { offset });
       if (page.length === 0) break;
       items.push(...page);
       if (page.length < batchSize) break;
@@ -2778,22 +3103,44 @@ class SocialStore {
       params.push(sqlBoolean("related_to_post_text", filters.relatedToPostText));
     }
 
+    const sortExpressions = buildPostCommentSortExpressions();
+    let whereClause = `WHERE ${conditions.join(" AND ")}`;
+    const statementParams: SqlParameter[] = [...params, sqlLong("limit", safeLimit + 1)];
+
+    if ("version" in payload && payload.version === 2) {
+      const cursorPublishedAt = new Date(payload.publishedAt);
+      if (Number.isNaN(cursorPublishedAt.getTime())) {
+        throw new AppStoreError("validation", "Invalid cursor");
+      }
+      whereClause = `${whereClause} AND (
+        ${sortExpressions.primaryExpr} < :cursor_published_at
+        OR (${sortExpressions.primaryExpr} = :cursor_published_at AND spc."id" < CAST(:cursor_id AS UUID))
+      )`;
+      statementParams.push(sqlTimestamp("cursor_published_at", cursorPublishedAt));
+      statementParams.push(sqlUuid("cursor_id", payload.id));
+    } else {
+      const offset = "offset" in payload && typeof payload.offset === "number" ? payload.offset : 0;
+      statementParams.push(sqlLong("offset", offset));
+    }
+
+    const paginationClause = "version" in payload && payload.version === 2 ? `LIMIT :limit` : `LIMIT :limit OFFSET :offset`;
     const response = await this.rds.execute(
       `
         SELECT
           ${this.postCommentSelectClause}
         FROM "public"."SocialPostComment" spc
-        WHERE ${conditions.join(" AND ")}
-        ORDER BY COALESCE(spc."publishedAt", spc."createdAt") DESC, spc."id" DESC
-        LIMIT :limit OFFSET :offset
+        ${whereClause}
+        ORDER BY ${sortExpressions.orderBy}
+        ${paginationClause}
       `,
-      [...params, sqlLong("limit", safeLimit + 1), sqlLong("offset", payload.offset)]
+      statementParams
     );
 
     const rows = (response.records ?? []).map(parsePostCommentRow).filter((item): item is SocialPostCommentRecord => item !== null);
     const hasNext = rows.length > safeLimit;
     const items = rows.slice(0, safeLimit);
-    const nextCursor = hasNext ? encodePostCommentsCursor({ offset: payload.offset + safeLimit }) : null;
+    const last = items[items.length - 1];
+    const nextCursor = hasNext && last ? encodePostCommentsCursor(buildPostCommentsCursorV2(last)) : null;
 
     return {
       items,
@@ -3706,6 +4053,49 @@ class SocialStore {
     }
   }
 
+  async getFacets(filters: SocialOverviewFilters): Promise<SocialFacetsRecord> {
+    const { preset, windowStart, windowEnd } = this.normalizeOverviewWindow(filters);
+    const posts = await this.listAllPosts(filters, "published_at_desc", 100000);
+    const counters: FacetBuilderResult = {
+      account: new Map<string, number>(),
+      postType: new Map<string, number>(),
+      campaign: new Map<string, number>(),
+      strategy: new Map<string, number>(),
+      hashtag: new Map<string, number>(),
+      sentiment: new Map<SentimentBucket, number>()
+    };
+
+    for (const post of posts) {
+      incrementFacetCount(counters.account, post.accountName);
+      incrementFacetCount(counters.postType, post.postType ? post.postType : "unknown");
+      incrementFacetCount(counters.campaign, post.campaignKey ?? "sin_campana");
+      if (post.strategyKeys.length === 0) incrementFacetCount(counters.strategy, "sin_estrategia");
+      for (const strategy of post.strategyKeys) incrementFacetCount(counters.strategy, strategy);
+      if (post.hashtags.length === 0) incrementFacetCount(counters.hashtag, "sin_hashtag");
+      for (const hashtag of post.hashtags) incrementFacetCount(counters.hashtag, hashtag);
+      counters.sentiment.set(post.sentiment, (counters.sentiment.get(post.sentiment) ?? 0) + 1);
+    }
+
+    return {
+      generatedAt: new Date(),
+      preset,
+      windowStart: windowStart.toISOString(),
+      windowEnd: windowEnd.toISOString(),
+      totals: {
+        posts: posts.length,
+        accounts: counters.account.size
+      },
+      facets: {
+        account: sortFacetMap(counters.account).slice(0, 500),
+        postType: sortFacetMap(counters.postType).slice(0, 120),
+        campaign: sortFacetMap(counters.campaign).slice(0, 300),
+        strategy: sortFacetMap(counters.strategy).slice(0, 300),
+        hashtag: sortFacetMap(counters.hashtag).slice(0, 500),
+        sentiment: sortSentimentFacetMap(counters.sentiment)
+      }
+    };
+  }
+
   async getHeatmap(filters: SocialOverviewFilters, metric: SocialHeatmapMetric): Promise<SocialHeatmapRecord> {
     const posts = await this.listAllPosts(filters, "published_at_desc", 100000);
     const cell = new Map<string, { posts: number; exposure: number; engagement: number; likes: number; comments: number; shares: number; views: number }>();
@@ -3907,6 +4297,12 @@ class SocialStore {
   async getAccounts(filters: SocialAccountsFilters): Promise<SocialAccountsRecord> {
     const minPosts = Math.max(1, Math.floor(filters.minPosts ?? 5));
     const minExposure = Math.max(0, Math.floor(filters.minExposure ?? 5000));
+    const safeLimit = Math.min(500, Math.max(1, Math.floor(filters.limit ?? 100)));
+    const cursor = decodeAccountsCursor(filters.cursor);
+    if (!cursor) {
+      throw new AppStoreError("validation", "Invalid cursor");
+    }
+    const sortSpec = resolveAccountsSortSpec(filters.sort);
     const { preset, windowStart, windowEnd } = this.normalizeOverviewWindow(filters);
     const comparison = resolveComparisonWindow(filters.comparisonMode, windowStart, windowEnd, filters.comparisonDays);
     const previousWindowStart = comparison.previousWindowStart;
@@ -3962,7 +4358,12 @@ class SocialStore {
           meetsThreshold: stats.posts >= minPosts && stats.exposureTotal >= minExposure
         };
       })
-      .sort((a, b) => b.erPonderado - a.erPonderado || b.exposureTotal - a.exposureTotal);
+      .sort(sortSpec.compare);
+
+    const page = items.slice(cursor.offset, cursor.offset + safeLimit + 1);
+    const hasNext = page.length > safeLimit;
+    const pagedItems = page.slice(0, safeLimit);
+    const nextCursor = hasNext ? encodeAccountsCursor({ offset: cursor.offset + safeLimit }) : null;
 
     return {
       generatedAt: new Date(),
@@ -3972,14 +4373,17 @@ class SocialStore {
       windowEnd: windowEnd.toISOString(),
       minPosts,
       minExposure,
-      items
+      sortApplied: sortSpec.sortApplied,
+      items: pagedItems,
+      hasNext,
+      nextCursor
     };
   }
 
   async getRisk(filters: SocialOverviewFilters): Promise<SocialRiskRecord> {
     const { preset, windowStart, windowEnd } = this.normalizeOverviewWindow(filters);
 
-    const [rows, latestRun, alertsRes] = await Promise.all([
+    const [rows, latestRun, alertsRes, settings] = await Promise.all([
       this.listMetricRowsRaw(filters, windowStart, windowEnd, 50000, 0),
       this.getLatestRun(),
       this.rds.execute(
@@ -4000,7 +4404,8 @@ class SocialStore {
           ORDER BY "updatedAt" DESC, "id" DESC
           LIMIT 30
         `
-      )
+      ),
+      this.ensureDefaultSettings()
     ]);
     const dayMap = new Map<string, { positivos: number; negativos: number; neutrales: number; clasificados: number }>();
     const byChannelMap = new Map<SocialChannel, { clasificados: number; negativos: number }>();
@@ -4079,12 +4484,24 @@ class SocialStore {
       };
     }).filter((item): item is NonNullable<typeof item> => item !== null && Boolean(item.id));
 
+    const lastEtlAt = latestRun?.finishedAt ?? latestRun?.createdAt ?? null;
+    const staleAfterMinutes = DEFAULT_RISK_FRESHNESS_CONFIG.staleAfterMinutes;
+    const staleData =
+      !lastEtlAt || Date.now() - lastEtlAt.getTime() > staleAfterMinutes * 60_000;
+
     return {
       generatedAt: new Date(),
-      lastEtlAt: latestRun?.finishedAt ?? latestRun?.createdAt ?? null,
+      lastEtlAt,
       preset,
       windowStart: windowStart.toISOString(),
       windowEnd: windowEnd.toISOString(),
+      staleData,
+      staleAfterMinutes,
+      thresholds: {
+        riskThreshold: roundMetric(settings.riskThreshold),
+        sentimentDropThreshold: roundMetric(settings.sentimentDropThreshold),
+        erDropThreshold: roundMetric(settings.erDropThreshold)
+      },
       sentimentTrend,
       byChannel,
       byAccount,
@@ -4435,10 +4852,12 @@ export type {
   SocialScatterDimension,
   SocialErBreakdownDimension,
   SocialHeatmapMetric,
+  SocialAccountsSortMode,
   SocialTrendGranularity,
   SocialDashboardSettingRecord,
   SocialEtlQualityRecord,
   SocialErTargetsRecord,
+  SocialFacetsRecord,
   SocialHeatmapRecord,
   SocialScatterRecord,
   SocialErBreakdownRecord,

@@ -324,6 +324,80 @@ const ensureConfigSurface = async (apiBase, viewerToken, analystToken, adminToke
   assertStatus(accounts.status, 200, "GET /v1/config/accounts");
   assertCondition(Array.isArray(accounts.json?.items), "accounts.items must be array");
 
+  const awarioProfilesList = await request({
+    method: "GET",
+    url: `${apiBase}/v1/config/awario/profiles?limit=20`,
+    token: viewerToken
+  });
+  assertStatus(awarioProfilesList.status, 200, "GET /v1/config/awario/profiles");
+  assertCondition(Array.isArray(awarioProfilesList.json?.items), "awario profiles must return items[]");
+
+  const createdProfileResponse = await request({
+    method: "POST",
+    url: `${apiBase}/v1/config/awario/profiles`,
+    token: adminToken,
+    body: {
+      name: `contract-awario-profile-${Date.now()}`,
+      query_text: '("claro" OR "claro colombia")',
+      status: "active"
+    }
+  });
+  assertStatus(createdProfileResponse.status, 201, "POST /v1/config/awario/profiles");
+  const awarioProfileId = createdProfileResponse.json?.id;
+  assertCondition(typeof awarioProfileId === "string" && UUID_REGEX.test(awarioProfileId), "awario profile id invalid");
+
+  const patchedProfileResponse = await request({
+    method: "PATCH",
+    url: `${apiBase}/v1/config/awario/profiles/${awarioProfileId}`,
+    token: adminToken,
+    body: {
+      status: "paused"
+    }
+  });
+  assertStatus(patchedProfileResponse.status, 200, "PATCH /v1/config/awario/profiles/{id}");
+  assertCondition(patchedProfileResponse.json?.status === "paused", "awario profile status patch mismatch");
+
+  const awarioBindingsList = await request({
+    method: "GET",
+    url: `${apiBase}/v1/config/awario/bindings?limit=20`,
+    token: viewerToken
+  });
+  assertStatus(awarioBindingsList.status, 200, "GET /v1/config/awario/bindings");
+  assertCondition(Array.isArray(awarioBindingsList.json?.items), "awario bindings must return items[]");
+
+  const createdBindingResponse = await request({
+    method: "POST",
+    url: `${apiBase}/v1/config/awario/bindings`,
+    token: adminToken,
+    body: {
+      profile_id: awarioProfileId,
+      awario_alert_id: `contract-alert-${Date.now()}`,
+      status: "active"
+    }
+  });
+  assertCondition(
+    createdBindingResponse.status === 201 || createdBindingResponse.status === 409,
+    `POST /v1/config/awario/bindings expected 201/409, got ${createdBindingResponse.status}`
+  );
+
+  const awarioBindingId =
+    createdBindingResponse.status === 201
+      ? createdBindingResponse.json?.id
+      : awarioBindingsList.json?.items?.[0]?.id;
+
+  if (typeof awarioBindingId === "string" && UUID_REGEX.test(awarioBindingId)) {
+    const patchedBindingResponse = await request({
+      method: "PATCH",
+      url: `${apiBase}/v1/config/awario/bindings/${awarioBindingId}`,
+      token: adminToken,
+      body: {
+        status: "paused"
+      }
+    });
+    assertStatus(patchedBindingResponse.status, 200, "PATCH /v1/config/awario/bindings/{id}");
+    assertCondition(patchedBindingResponse.json?.status === "paused", "awario binding status patch mismatch");
+  }
+
   const competitorName = `competitor-contract-${Date.now()}`;
   const competitorCreate = await request({
     method: "POST",
@@ -1017,6 +1091,123 @@ const ensureIncidentFlow = async (apiBase, viewerToken, analystToken) => {
   assertCondition(Array.isArray(listNotesResponse.json?.items), "incident notes must return items[]");
 };
 
+const ensureMonitorSocialSurface = async (apiBase, viewerToken, analystToken) => {
+  const accountsResponse = await request({
+    method: "GET",
+    url: `${apiBase}/v1/monitor/social/accounts?limit=20&sort=riesgo_desc&min_posts=1&min_exposure=0`,
+    token: viewerToken
+  });
+  if (accountsResponse.status === 404) {
+    console.log("[WARN] social analytics endpoints disabled, skipping monitor social contract checks");
+    return;
+  }
+  assertStatus(accountsResponse.status, 200, "GET /v1/monitor/social/accounts");
+  assertCondition(Array.isArray(accountsResponse.json?.items), "monitor social accounts must return items[]");
+  assertCondition(typeof accountsResponse.json?.sort_applied === "string", "monitor social accounts.sort_applied must be string");
+  assertCondition(accountsResponse.json?.page_info && typeof accountsResponse.json.page_info === "object", "monitor social accounts.page_info must exist");
+  assertCondition(typeof accountsResponse.json?.page_info?.has_next === "boolean", "monitor social accounts.page_info.has_next must be boolean");
+
+  const riskResponse = await request({
+    method: "GET",
+    url: `${apiBase}/v1/monitor/social/risk`,
+    token: viewerToken
+  });
+  assertStatus(riskResponse.status, 200, "GET /v1/monitor/social/risk");
+  assertCondition(typeof riskResponse.json?.stale_data === "boolean", "monitor social risk.stale_data must be boolean");
+  assertCondition(typeof riskResponse.json?.stale_after_minutes === "number", "monitor social risk.stale_after_minutes must be number");
+  assertCondition(riskResponse.json?.thresholds && typeof riskResponse.json.thresholds === "object", "monitor social risk.thresholds must be object");
+  assertCondition(typeof riskResponse.json?.thresholds?.risk_threshold === "number", "monitor social risk.thresholds.risk_threshold must be number");
+  assertCondition(Array.isArray(riskResponse.json?.by_channel), "monitor social risk.by_channel must be array");
+  assertCondition(Array.isArray(riskResponse.json?.by_account), "monitor social risk.by_account must be array");
+
+  const facetsResponse = await request({
+    method: "GET",
+    url: `${apiBase}/v1/monitor/social/facets`,
+    token: viewerToken
+  });
+  assertStatus(facetsResponse.status, 200, "GET /v1/monitor/social/facets");
+  assertCondition(facetsResponse.json?.totals && typeof facetsResponse.json.totals === "object", "monitor social facets.totals must be object");
+  assertCondition(typeof facetsResponse.json?.totals?.posts === "number", "monitor social facets.totals.posts must be number");
+  assertCondition(Array.isArray(facetsResponse.json?.facets?.account), "monitor social facets.account must be array");
+  assertCondition(Array.isArray(facetsResponse.json?.facets?.sentiment), "monitor social facets.sentiment must be array");
+
+  const postsResponse = await request({
+    method: "GET",
+    url: `${apiBase}/v1/monitor/social/posts?limit=10`,
+    token: viewerToken
+  });
+
+  assertStatus(postsResponse.status, 200, "GET /v1/monitor/social/posts");
+  assertCondition(Array.isArray(postsResponse.json?.items), "monitor social posts must return items[]");
+  assertCondition(postsResponse.json?.page_info && typeof postsResponse.json.page_info === "object", "monitor social posts.page_info must exist");
+  assertCondition(typeof postsResponse.json?.page_info?.has_next === "boolean", "monitor social posts.page_info.has_next must be boolean");
+
+  if (postsResponse.json?.page_info?.next_cursor) {
+    const postsNext = await request({
+      method: "GET",
+      url: `${apiBase}/v1/monitor/social/posts?limit=10&cursor=${encodeURIComponent(postsResponse.json.page_info.next_cursor)}`,
+      token: viewerToken
+    });
+    assertStatus(postsNext.status, 200, "GET /v1/monitor/social/posts cursor");
+  }
+
+  for (const item of postsResponse.json.items) {
+    assertCondition(typeof item.awario_comments_count === "number", "monitor social post missing awario_comments_count");
+  }
+
+  const firstPost = postsResponse.json.items[0];
+  if (!firstPost || typeof firstPost.id !== "string") {
+    console.log("[WARN] monitor social comments checks skipped: no posts available");
+    return;
+  }
+
+  const commentsResponse = await request({
+    method: "GET",
+    url: `${apiBase}/v1/monitor/social/posts/${firstPost.id}/comments?limit=20`,
+    token: viewerToken
+  });
+  assertStatus(commentsResponse.status, 200, "GET /v1/monitor/social/posts/{post_id}/comments");
+  assertCondition(Array.isArray(commentsResponse.json?.items), "monitor social comments must return items[]");
+  assertCondition(commentsResponse.json?.page_info && typeof commentsResponse.json.page_info === "object", "monitor social comments.page_info must exist");
+  assertCondition(typeof commentsResponse.json?.page_info?.has_next === "boolean", "monitor social comments.page_info.has_next must be boolean");
+
+  if (commentsResponse.json?.page_info?.next_cursor) {
+    const commentsNext = await request({
+      method: "GET",
+      url: `${apiBase}/v1/monitor/social/posts/${firstPost.id}/comments?limit=20&cursor=${encodeURIComponent(commentsResponse.json.page_info.next_cursor)}`,
+      token: viewerToken
+    });
+    assertStatus(commentsNext.status, 200, "GET /v1/monitor/social/posts/{post_id}/comments cursor");
+  }
+
+  const firstComment = commentsResponse.json.items[0];
+  if (!firstComment || typeof firstComment.id !== "string") {
+    console.log("[WARN] monitor social comment patch skipped: no comments available");
+    return;
+  }
+
+  const viewerDenied = await request({
+    method: "PATCH",
+    url: `${apiBase}/v1/monitor/social/comments/${firstComment.id}`,
+    token: viewerToken,
+    body: {
+      is_spam: Boolean(firstComment.is_spam)
+    }
+  });
+  assertStatus(viewerDenied.status, 403, "PATCH /v1/monitor/social/comments/{comment_id} viewer denied");
+
+  const patchResponse = await request({
+    method: "PATCH",
+    url: `${apiBase}/v1/monitor/social/comments/${firstComment.id}`,
+    token: analystToken,
+    body: {
+      is_spam: Boolean(firstComment.is_spam)
+    }
+  });
+  assertStatus(patchResponse.status, 200, "PATCH /v1/monitor/social/comments/{comment_id} analyst");
+  assertCondition(patchResponse.json?.id === firstComment.id, "monitor social comment patch returned unexpected id");
+};
+
 const main = async () => {
   loadEnv();
 
@@ -1040,6 +1231,7 @@ const main = async () => {
   assertStatus(metaViewer.status, 200, "GET /v1/meta viewer");
   assertCondition(Array.isArray(metaViewer.json?.providers), "meta.providers must be array");
   await ensureMonitorOverview(apiBase, viewerToken);
+  await ensureMonitorSocialSurface(apiBase, viewerToken, analystToken);
   await ensureAnalyzeSurface(apiBase, viewerToken);
   await ensureIncidentFlow(apiBase, viewerToken, analystToken);
   await ensureReportsSurface(apiBase, viewerToken, analystToken, adminToken);

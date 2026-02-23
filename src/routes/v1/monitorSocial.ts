@@ -8,6 +8,7 @@ import { AppStoreError, createAppStore } from "../../data/appStore";
 import {
   createSocialStore,
   type SocialAccountsFilters,
+  type SocialAccountsSortMode,
   type SocialChannel,
   type SocialComparisonMode,
   type SocialDatePreset,
@@ -52,6 +53,7 @@ const lambda = new AWS.Lambda({ region: env.awsRegion });
 
 const CHANNELS: SocialChannel[] = ["facebook", "instagram", "linkedin", "tiktok"];
 const SORTS: SortMode[] = ["published_at_desc", "exposure_desc", "engagement_desc"];
+const ACCOUNT_SORTS: SocialAccountsSortMode[] = ["er_desc", "exposure_desc", "engagement_desc", "posts_desc", "riesgo_desc", "sov_desc", "account_asc"];
 const PRESETS: SocialDatePreset[] = ["all", "y2024", "y2025", "ytd", "90d", "30d", "7d", "last_quarter", "custom"];
 const TREND_GRANULARITIES: SocialTrendGranularity[] = ["auto", "day", "week", "month"];
 const COMPARISON_MODES: SocialComparisonMode[] = ["weekday_aligned_week", "exact_days", "same_period_last_year"];
@@ -106,6 +108,12 @@ const parseSort = (value: string | undefined): SortMode | null => {
   if (!value) return "published_at_desc";
   if (SORTS.includes(value as SortMode)) return value as SortMode;
   return null;
+};
+
+const parseAccountsSort = (value: string | undefined): SocialAccountsSortMode | null => {
+  if (!value) return "er_desc";
+  const normalized = value.trim().toLowerCase() as SocialAccountsSortMode;
+  return ACCOUNT_SORTS.includes(normalized) ? normalized : null;
 };
 
 const parseSentiment = (value: string | undefined): "positive" | "negative" | "neutral" | "unknown" | null | undefined => {
@@ -537,10 +545,23 @@ export const getMonitorSocialAccounts = async (event: APIGatewayProxyEventV2) =>
     return json(422, { error: "validation_error", message: "min_exposure must be a positive integer" });
   }
 
+  const sort = parseAccountsSort(parsed.query.sort);
+  if (!sort) {
+    return json(422, { error: "validation_error", message: "sort must be one of er_desc|exposure_desc|engagement_desc|posts_desc|riesgo_desc|sov_desc|account_asc" });
+  }
+
+  const limit = parseLimit(parsed.query.limit, 100, 500);
+  if (limit === null) {
+    return json(422, { error: "validation_error", message: "limit must be an integer between 1 and 500" });
+  }
+
   const filters: SocialAccountsFilters = {
     ...parsed.filters,
     minPosts,
-    minExposure
+    minExposure,
+    sort,
+    limit,
+    cursor: parsed.query.cursor ?? undefined
   };
 
   try {
@@ -553,6 +574,7 @@ export const getMonitorSocialAccounts = async (event: APIGatewayProxyEventV2) =>
       window_end: response.windowEnd,
       min_posts: response.minPosts,
       min_exposure: response.minExposure,
+      sort_applied: response.sortApplied,
       items: response.items.map((item) => ({
         account_name: item.accountName,
         channel_mix: item.channelMix,
@@ -567,7 +589,45 @@ export const getMonitorSocialAccounts = async (event: APIGatewayProxyEventV2) =>
         delta_engagement: item.deltaEngagement,
         delta_er: item.deltaEr,
         meets_threshold: item.meetsThreshold
-      }))
+      })),
+      page_info: {
+        next_cursor: response.nextCursor,
+        has_next: response.hasNext
+      }
+    });
+  } catch (error) {
+    return mapStoreError(error);
+  }
+};
+
+export const getMonitorSocialFacets = async (event: APIGatewayProxyEventV2) => {
+  const featureError = ensureFeatureEnabled();
+  if (featureError) return featureError;
+
+  const store = createSocialStore();
+  if (!store) {
+    return json(500, { error: "misconfigured", message: "Database runtime is not configured" });
+  }
+
+  const parsed = parseCommonFilters(event);
+  if ("error" in parsed) return parsed.error;
+
+  try {
+    const response = await store.getFacets(parsed.filters);
+    return json(200, {
+      generated_at: response.generatedAt.toISOString(),
+      preset: response.preset,
+      window_start: response.windowStart,
+      window_end: response.windowEnd,
+      totals: response.totals,
+      facets: {
+        account: response.facets.account.map((item) => ({ value: item.value, count: item.count })),
+        post_type: response.facets.postType.map((item) => ({ value: item.value, count: item.count })),
+        campaign: response.facets.campaign.map((item) => ({ value: item.value, count: item.count })),
+        strategy: response.facets.strategy.map((item) => ({ value: item.value, count: item.count })),
+        hashtag: response.facets.hashtag.map((item) => ({ value: item.value, count: item.count })),
+        sentiment: response.facets.sentiment.map((item) => ({ value: item.value, count: item.count }))
+      }
     });
   } catch (error) {
     return mapStoreError(error);
@@ -594,6 +654,13 @@ export const getMonitorSocialRisk = async (event: APIGatewayProxyEventV2) => {
       preset: response.preset,
       window_start: response.windowStart,
       window_end: response.windowEnd,
+      stale_data: response.staleData,
+      stale_after_minutes: response.staleAfterMinutes,
+      thresholds: {
+        risk_threshold: response.thresholds.riskThreshold,
+        sentiment_drop_threshold: response.thresholds.sentimentDropThreshold,
+        er_drop_threshold: response.thresholds.erDropThreshold
+      },
       sentiment_trend: response.sentimentTrend.map((item) => ({
         date: item.date,
         clasificados: item.clasificados,
@@ -955,7 +1022,7 @@ export const getMonitorSocialExportXlsx = async (event: APIGatewayProxyEventV2) 
   try {
     const [overview, accounts, risk, etl, posts] = await Promise.all([
       store.getOverview(parsed.filters),
-      store.getAccounts({ ...parsed.filters, minPosts, minExposure }),
+      store.getAccounts({ ...parsed.filters, minPosts, minExposure, sort: "er_desc", limit: 500 }),
       store.getRisk(parsed.filters),
       store.getEtlQuality(50),
       store.listAllPosts(parsed.filters, sort, 100000)

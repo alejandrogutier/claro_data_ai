@@ -343,6 +343,11 @@ paths:
       tags: [Monitor]
       summary: Ranking de cuentas social analytics V2
       parameters:
+        - name: cursor
+          in: query
+          schema:
+            type: string
+          description: Cursor opaco para paginacion de cuentas
         - name: preset
           in: query
           schema:
@@ -416,6 +421,17 @@ paths:
           schema:
             type: integer
             default: 5000
+        - name: sort
+          in: query
+          schema:
+            $ref: '#/components/schemas/SocialAccountsSort'
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 500
+            default: 100
       responses:
         '200':
           description: Ranking de cuentas
@@ -423,6 +439,87 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/MonitorSocialAccountsResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+  /v1/monitor/social/facets:
+    get:
+      tags: [Monitor]
+      summary: Facetas agregadas por filtro para triage social analytics V2
+      parameters:
+        - name: preset
+          in: query
+          schema:
+            $ref: '#/components/schemas/SocialDatePreset'
+        - name: window_days
+          in: query
+          schema:
+            type: integer
+            enum: [7, 30, 90]
+        - name: from
+          in: query
+          schema:
+            type: string
+            format: date-time
+        - name: to
+          in: query
+          schema:
+            type: string
+            format: date-time
+        - name: channel
+          in: query
+          schema:
+            type: string
+          description: Canal o lista CSV de canales (`facebook,instagram,...`)
+        - name: account
+          in: query
+          schema:
+            type: string
+          description: Cuenta o lista CSV de cuentas
+        - name: post_type
+          in: query
+          schema:
+            type: string
+          description: Tipo de post o lista CSV de tipos (`unknown` para vacios)
+        - name: sentiment
+          in: query
+          schema:
+            $ref: '#/components/schemas/SocialSentiment'
+        - name: campaign
+          in: query
+          schema:
+            type: string
+          description: Campaña o lista CSV de campañas
+        - name: strategy
+          in: query
+          schema:
+            type: string
+          description: Estrategia o lista CSV de estrategias
+        - name: hashtag
+          in: query
+          schema:
+            type: string
+          description: Hashtag o lista CSV de hashtags (con o sin #)
+        - name: comparison_mode
+          in: query
+          schema:
+            $ref: '#/components/schemas/SocialComparisonMode'
+        - name: comparison_days
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 366
+      responses:
+        '200':
+          description: Facetas de filtros
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MonitorSocialFacetsResponse'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
@@ -625,6 +722,10 @@ paths:
           schema:
             type: string
           description: Tipo de post o lista CSV de tipos (`unknown` para vacios)
+        - name: sentiment
+          in: query
+          schema:
+            $ref: '#/components/schemas/SocialSentiment'
         - name: campaign
           in: query
           schema:
@@ -3729,6 +3830,9 @@ components:
     SocialPostSort:
       type: string
       enum: [published_at_desc, exposure_desc, engagement_desc]
+    SocialAccountsSort:
+      type: string
+      enum: [er_desc, exposure_desc, engagement_desc, posts_desc, riesgo_desc, sov_desc, account_asc]
     SocialReconciliationStatus:
       type: string
       enum: [ok, warning, error, unknown]
@@ -4201,6 +4305,69 @@ components:
           $ref: '#/components/schemas/SocialReconciliationStatus'
         settings:
           $ref: '#/components/schemas/MonitorSocialSettings'
+    MonitorSocialFacetItem:
+      type: object
+      required: [value, count]
+      properties:
+        value:
+          type: string
+        count:
+          type: integer
+    MonitorSocialFacets:
+      type: object
+      required: [account, post_type, campaign, strategy, hashtag, sentiment]
+      properties:
+        account:
+          type: array
+          items:
+            $ref: '#/components/schemas/MonitorSocialFacetItem'
+        post_type:
+          type: array
+          items:
+            $ref: '#/components/schemas/MonitorSocialFacetItem'
+        campaign:
+          type: array
+          items:
+            $ref: '#/components/schemas/MonitorSocialFacetItem'
+        strategy:
+          type: array
+          items:
+            $ref: '#/components/schemas/MonitorSocialFacetItem'
+        hashtag:
+          type: array
+          items:
+            $ref: '#/components/schemas/MonitorSocialFacetItem'
+        sentiment:
+          type: array
+          items:
+            $ref: '#/components/schemas/MonitorSocialFacetItem'
+    MonitorSocialFacetsTotals:
+      type: object
+      required: [posts, accounts]
+      properties:
+        posts:
+          type: integer
+        accounts:
+          type: integer
+    MonitorSocialFacetsResponse:
+      type: object
+      required: [generated_at, preset, window_start, window_end, totals, facets]
+      properties:
+        generated_at:
+          type: string
+          format: date-time
+        preset:
+          $ref: '#/components/schemas/SocialDatePreset'
+        window_start:
+          type: string
+          format: date-time
+        window_end:
+          type: string
+          format: date-time
+        totals:
+          $ref: '#/components/schemas/MonitorSocialFacetsTotals'
+        facets:
+          $ref: '#/components/schemas/MonitorSocialFacets'
     MonitorSocialAccountItem:
       type: object
       required:
@@ -4250,7 +4417,7 @@ components:
           type: boolean
     MonitorSocialAccountsResponse:
       type: object
-      required: [generated_at, last_etl_at, preset, window_start, window_end, min_posts, min_exposure, items]
+      required: [generated_at, last_etl_at, preset, window_start, window_end, min_posts, min_exposure, sort_applied, items, page_info]
       properties:
         generated_at:
           type: string
@@ -4271,10 +4438,14 @@ components:
           type: integer
         min_exposure:
           type: integer
+        sort_applied:
+          $ref: '#/components/schemas/SocialAccountsSort'
         items:
           type: array
           items:
             $ref: '#/components/schemas/MonitorSocialAccountItem'
+        page_info:
+          $ref: '#/components/schemas/PageInfo'
     MonitorSocialRiskTrendItem:
       type: object
       required: [date, clasificados, positivos, negativos, neutrales, sentimiento_neto, riesgo_activo]
@@ -4339,9 +4510,20 @@ components:
           type: string
           format: date-time
           nullable: true
+    MonitorSocialRiskThresholds:
+      type: object
+      required: [risk_threshold, sentiment_drop_threshold, er_drop_threshold]
+      properties:
+        risk_threshold:
+          type: number
+        sentiment_drop_threshold:
+          type: number
+        er_drop_threshold:
+          type: number
     MonitorSocialRiskResponse:
       type: object
-      required: [generated_at, last_etl_at, preset, window_start, window_end, sentiment_trend, by_channel, by_account, alerts]
+      required:
+        [generated_at, last_etl_at, preset, window_start, window_end, stale_data, stale_after_minutes, thresholds, sentiment_trend, by_channel, by_account, alerts]
       properties:
         generated_at:
           type: string
@@ -4358,6 +4540,12 @@ components:
         window_end:
           type: string
           format: date-time
+        stale_data:
+          type: boolean
+        stale_after_minutes:
+          type: integer
+        thresholds:
+          $ref: '#/components/schemas/MonitorSocialRiskThresholds'
         sentiment_trend:
           type: array
           items:

@@ -57,6 +57,7 @@ Este contrato se usa junto a `UX_PLANNING.md` secciones `2.3`, `7.4`, `21`, `26`
 | CLARO-042 | checklist transversal | CLARO-037, CLARO-038, CLARO-035 | gate go-live completo y aprobado |
 
 ## Now
+- CLARO-045 | doing | P1 | Rediseño operativo `/app/monitor/social-overview` (riesgo/cuentas/posts) | Fase 0-1 implementada: fetch desacoplado, facetas server-driven, umbrales en cuentas, triage posts con señales completas, riesgo con threshold+hotspots+CTA incidentes; pendiente hardening de chunk/tab split adicional
 - CLARO-014 | doing | P2 | Digest diario SES 08:00 | recipients por UI (DB) + estado SES; pendiente verificacion SES sender y (si sandbox) recipients verificados / production access
 
 ## Next

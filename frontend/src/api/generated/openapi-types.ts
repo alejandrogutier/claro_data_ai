@@ -422,6 +422,8 @@ export interface paths {
         get: {
             parameters: {
                 query?: {
+                    /** @description Cursor opaco para paginacion de cuentas */
+                    cursor?: string;
                     preset?: components["schemas"]["SocialDatePreset"];
                     window_days?: 7 | 30 | 90;
                     from?: string;
@@ -443,6 +445,8 @@ export interface paths {
                     comparison_days?: number;
                     min_posts?: number;
                     min_exposure?: number;
+                    sort?: components["schemas"]["SocialAccountsSort"];
+                    limit?: number;
                 };
                 header?: never;
                 path?: never;
@@ -457,6 +461,65 @@ export interface paths {
                     };
                     content: {
                         "application/json": components["schemas"]["MonitorSocialAccountsResponse"];
+                    };
+                };
+                401: components["responses"]["Unauthorized"];
+                403: components["responses"]["Forbidden"];
+                422: components["responses"]["ValidationError"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/monitor/social/facets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Facetas agregadas por filtro para triage social analytics V2 */
+        get: {
+            parameters: {
+                query?: {
+                    preset?: components["schemas"]["SocialDatePreset"];
+                    window_days?: 7 | 30 | 90;
+                    from?: string;
+                    to?: string;
+                    /** @description Canal o lista CSV de canales (`facebook,instagram,...`) */
+                    channel?: string;
+                    /** @description Cuenta o lista CSV de cuentas */
+                    account?: string;
+                    /** @description Tipo de post o lista CSV de tipos (`unknown` para vacios) */
+                    post_type?: string;
+                    sentiment?: components["schemas"]["SocialSentiment"];
+                    /** @description Campaña o lista CSV de campañas */
+                    campaign?: string;
+                    /** @description Estrategia o lista CSV de estrategias */
+                    strategy?: string;
+                    /** @description Hashtag o lista CSV de hashtags (con o sin */
+                    hashtag?: string;
+                    comparison_mode?: components["schemas"]["SocialComparisonMode"];
+                    comparison_days?: number;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Facetas de filtros */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["MonitorSocialFacetsResponse"];
                     };
                 };
                 401: components["responses"]["Unauthorized"];
@@ -650,6 +713,7 @@ export interface paths {
                     account?: string;
                     /** @description Tipo de post o lista CSV de tipos (`unknown` para vacios) */
                     post_type?: string;
+                    sentiment?: components["schemas"]["SocialSentiment"];
                     /** @description Campaña o lista CSV de campañas */
                     campaign?: string;
                     /** @description Estrategia o lista CSV de estrategias */
@@ -4038,6 +4102,8 @@ export interface components {
         /** @enum {string} */
         SocialPostSort: "published_at_desc" | "exposure_desc" | "engagement_desc";
         /** @enum {string} */
+        SocialAccountsSort: "er_desc" | "exposure_desc" | "engagement_desc" | "posts_desc" | "riesgo_desc" | "sov_desc" | "account_asc";
+        /** @enum {string} */
         SocialReconciliationStatus: "ok" | "warning" | "error" | "unknown";
         /** @enum {string} */
         SocialSyncPhase: "ingest" | "classify" | "aggregate" | "reconcile" | "alerts";
@@ -4237,6 +4303,33 @@ export interface components {
             reconciliation_status: components["schemas"]["SocialReconciliationStatus"];
             settings: components["schemas"]["MonitorSocialSettings"];
         };
+        MonitorSocialFacetItem: {
+            value: string;
+            count: number;
+        };
+        MonitorSocialFacets: {
+            account: components["schemas"]["MonitorSocialFacetItem"][];
+            post_type: components["schemas"]["MonitorSocialFacetItem"][];
+            campaign: components["schemas"]["MonitorSocialFacetItem"][];
+            strategy: components["schemas"]["MonitorSocialFacetItem"][];
+            hashtag: components["schemas"]["MonitorSocialFacetItem"][];
+            sentiment: components["schemas"]["MonitorSocialFacetItem"][];
+        };
+        MonitorSocialFacetsTotals: {
+            posts: number;
+            accounts: number;
+        };
+        MonitorSocialFacetsResponse: {
+            /** Format: date-time */
+            generated_at: string;
+            preset: components["schemas"]["SocialDatePreset"];
+            /** Format: date-time */
+            window_start: string;
+            /** Format: date-time */
+            window_end: string;
+            totals: components["schemas"]["MonitorSocialFacetsTotals"];
+            facets: components["schemas"]["MonitorSocialFacets"];
+        };
         MonitorSocialAccountItem: {
             account_name: string;
             channel_mix: components["schemas"]["SocialChannel"][];
@@ -4264,7 +4357,9 @@ export interface components {
             window_end: string;
             min_posts: number;
             min_exposure: number;
+            sort_applied: components["schemas"]["SocialAccountsSort"];
             items: components["schemas"]["MonitorSocialAccountItem"][];
+            page_info: components["schemas"]["PageInfo"];
         };
         MonitorSocialRiskTrendItem: {
             date: string;
@@ -4299,6 +4394,11 @@ export interface components {
             /** Format: date-time */
             cooldown_until: string | null;
         };
+        MonitorSocialRiskThresholds: {
+            risk_threshold: number;
+            sentiment_drop_threshold: number;
+            er_drop_threshold: number;
+        };
         MonitorSocialRiskResponse: {
             /** Format: date-time */
             generated_at: string;
@@ -4309,6 +4409,9 @@ export interface components {
             window_start: string;
             /** Format: date-time */
             window_end: string;
+            stale_data: boolean;
+            stale_after_minutes: number;
+            thresholds: components["schemas"]["MonitorSocialRiskThresholds"];
             sentiment_trend: components["schemas"]["MonitorSocialRiskTrendItem"][];
             by_channel: components["schemas"]["MonitorSocialRiskChannelItem"][];
             by_account: components["schemas"]["MonitorSocialRiskAccountItem"][];

@@ -40,6 +40,7 @@ import {
   getMonitorSocialErBreakdown,
   getMonitorSocialErTargets,
   getMonitorSocialAccounts,
+  getMonitorSocialFacets,
   getMonitorSocialEtlQuality,
   getMonitorSocialExportXlsx,
   getMonitorSocialHeatmap,
@@ -121,6 +122,7 @@ const roleRules: RoleRule[] = [
   { pattern: /^GET \/v1\/feed\/news$/, requiredRole: "Viewer" },
   { pattern: /^GET \/v1\/monitor\/overview$/, requiredRole: "Viewer" },
   { pattern: /^GET \/v1\/monitor\/social\/overview$/, requiredRole: "Viewer" },
+  { pattern: /^GET \/v1\/monitor\/social\/facets$/, requiredRole: "Viewer" },
   { pattern: /^GET \/v1\/monitor\/social\/accounts$/, requiredRole: "Viewer" },
   { pattern: /^GET \/v1\/monitor\/social\/posts$/, requiredRole: "Viewer" },
   { pattern: /^GET \/v1\/monitor\/social\/posts\/[^/]+\/comments$/, requiredRole: "Viewer" },
@@ -251,6 +253,7 @@ export const main = async (event: APIGatewayProxyEventV2) => {
   if (key === "GET /v1/feed/news") return getNewsFeed(event);
   if (key === "GET /v1/monitor/overview") return getMonitorOverview();
   if (key === "GET /v1/monitor/social/overview") return getMonitorSocialOverview(event);
+  if (key === "GET /v1/monitor/social/facets") return getMonitorSocialFacets(event);
   if (key === "GET /v1/monitor/social/accounts") return getMonitorSocialAccounts(event);
   if (key === "GET /v1/monitor/social/posts") return listMonitorSocialPosts(event);
   if (key.match(/^GET \/v1\/monitor\/social\/posts\/[^/]+\/comments$/)) return listMonitorSocialPostComments(event);
