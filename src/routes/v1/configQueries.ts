@@ -265,8 +265,16 @@ export const createConfigQuery = async (event: APIGatewayProxyEventV2) => {
     return json(422, { error: "validation_error", message: "name, language y scope son requeridos" });
   }
 
-  if (isActive === null || priority === null || maxArticlesPerRun === null || description === undefined || changeReason === undefined) {
+  if (isActive === null || priority === null || maxArticlesPerRun === null) {
     return json(422, { error: "validation_error", message: "Campos opcionales invalidos" });
+  }
+
+  if (body.description !== undefined && description === undefined) {
+    return json(422, { error: "validation_error", message: "description invalida" });
+  }
+
+  if (body.change_reason !== undefined && changeReason === undefined) {
+    return json(422, { error: "validation_error", message: "change_reason invalido" });
   }
 
   let definition: QueryDefinition | undefined;
