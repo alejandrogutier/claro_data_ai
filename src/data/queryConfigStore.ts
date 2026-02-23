@@ -956,19 +956,27 @@ class QueryConfigStore {
 
     const execution = sanitizeExecutionConfig(input.execution ?? DEFAULT_QUERY_EXECUTION_CONFIG);
     const safeLimit = Math.min(50, Math.max(1, Math.floor(input.limit ?? 20)));
-    const candidateLimit = Math.min(2000, Math.max(safeLimit, Math.floor(input.candidateLimit ?? 500)));
+    const candidateLimit = Math.min(500, Math.max(safeLimit, Math.floor(input.candidateLimit ?? 200)));
 
     const response = await this.rds.execute(
       `
         SELECT
           ci."id"::text,
           ci."provider",
-          ci."title",
-          ci."summary",
-          ci."content",
+          LEFT(COALESCE(ci."title", ''), 512),
+          LEFT(COALESCE(ci."summary", ''), 1000),
+          LEFT(COALESCE(ci."content", ''), 4000),
           ci."canonicalUrl",
           ci."language",
-          ci."metadata"::text,
+          (
+            jsonb_build_object(
+              'country', ci."metadata"->>'country',
+              'countries', ci."metadata"->'countries',
+              'source_country', ci."metadata"->>'source_country',
+              'sourceCountry', ci."metadata"->>'sourceCountry',
+              'locale', ci."metadata"->>'locale'
+            )
+          )::text,
           ci."publishedAt",
           ci."createdAt"
         FROM "public"."ContentItem" ci
