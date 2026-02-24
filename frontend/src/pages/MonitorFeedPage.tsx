@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { type NewsFeedResponse, type OriginType, type Term, type TermScope } from "../api/client";
+import { ApiError, type ConfigQuery, type NewsFeedResponse, type OriginType, type TermScope } from "../api/client";
 import { useApiClient } from "../api/useApiClient";
 
 type MonitorFeedPageProps = {
@@ -8,66 +8,107 @@ type MonitorFeedPageProps = {
   subtitle: string;
 };
 
+const PAGE_LIMIT = 20;
+
 export const MonitorFeedPage = ({ scope, title, subtitle }: MonitorFeedPageProps) => {
   const client = useApiClient();
 
-  const [terms, setTerms] = useState<Term[]>([]);
-  const [selectedTermId, setSelectedTermId] = useState<string>("");
-  const [feed, setFeed] = useState<NewsFeedResponse | null>(null);
-  const [loadingTerms, setLoadingTerms] = useState(true);
+  const [queries, setQueries] = useState<ConfigQuery[]>([]);
+  const [selectedQueryId, setSelectedQueryId] = useState<string>("");
+  const [items, setItems] = useState<NewsFeedResponse["items"]>([]);
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
+  const [hasNext, setHasNext] = useState(false);
+  const [loadingQueries, setLoadingQueries] = useState(true);
   const [loadingFeed, setLoadingFeed] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [originFilter, setOriginFilter] = useState<OriginType | "all">("all");
   const [tagFilter, setTagFilter] = useState("");
 
-  const selectedTerm = useMemo(() => terms.find((term) => term.id === selectedTermId) ?? null, [terms, selectedTermId]);
+  const selectedQuery = useMemo(
+    () => queries.find((query) => query.id === selectedQueryId) ?? null,
+    [queries, selectedQueryId]
+  );
+
+  const loadFeed = async (options: { append: boolean }) => {
+    if (!selectedQueryId) {
+      setItems([]);
+      setNextCursor(null);
+      setHasNext(false);
+      return;
+    }
+
+    const cursor = options.append ? nextCursor ?? undefined : undefined;
+    if (options.append && !cursor) return;
+
+    if (options.append) {
+      setLoadingMore(true);
+    } else {
+      setLoadingFeed(true);
+    }
+    setError(null);
+
+    try {
+      const response = await client.listNewsFeed(selectedQueryId, {
+        limit: PAGE_LIMIT,
+        cursor,
+        origin: originFilter === "all" ? undefined : originFilter,
+        tag: tagFilter.trim() || undefined
+      });
+
+      setItems((current) => (options.append ? [...current, ...(response.items ?? [])] : response.items ?? []));
+      setNextCursor(response.page_info?.next_cursor ?? null);
+      setHasNext(Boolean(response.page_info?.has_next));
+    } catch (feedError) {
+      if (feedError instanceof ApiError && feedError.status === 409) {
+        setError("La query seleccionada no tiene vínculo Awario activo.");
+      } else {
+        setError((feedError as Error).message);
+      }
+      if (!options.append) {
+        setItems([]);
+        setNextCursor(null);
+        setHasNext(false);
+      }
+    } finally {
+      if (options.append) {
+        setLoadingMore(false);
+      } else {
+        setLoadingFeed(false);
+      }
+    }
+  };
 
   useEffect(() => {
-    const loadTerms = async () => {
-      setLoadingTerms(true);
+    const loadQueries = async () => {
+      setLoadingQueries(true);
       setError(null);
       try {
-        const response = await client.listTerms(100, undefined, scope);
-        const activeTerms = (response.items ?? []).filter((term) => term.is_active);
-        setTerms(activeTerms);
-        setSelectedTermId((current) => {
-          if (current && activeTerms.some((term) => term.id === current)) return current;
-          return activeTerms[0]?.id ?? "";
+        const response = await client.listConfigQueries({
+          limit: 200,
+          scope,
+          is_active: true
+        });
+        const activeQueries = (response.items ?? []).filter((query) => query.is_active && query.scope === scope);
+        setQueries(activeQueries);
+        setSelectedQueryId((current) => {
+          if (current && activeQueries.some((query) => query.id === current)) return current;
+          const linked = activeQueries.find((query) => query.awario_link_status === "linked");
+          return linked?.id ?? activeQueries[0]?.id ?? "";
         });
       } catch (loadError) {
         setError((loadError as Error).message);
       } finally {
-        setLoadingTerms(false);
+        setLoadingQueries(false);
       }
     };
 
-    void loadTerms();
+    void loadQueries();
   }, [scope]);
 
   useEffect(() => {
-    const loadFeed = async () => {
-      if (!selectedTermId) {
-        setFeed(null);
-        return;
-      }
-
-      setLoadingFeed(true);
-      setError(null);
-      try {
-        const response = await client.listNewsFeed(selectedTermId, {
-          origin: originFilter === "all" ? undefined : originFilter,
-          tag: tagFilter.trim() || undefined
-        });
-        setFeed(response);
-      } catch (feedError) {
-        setError((feedError as Error).message);
-      } finally {
-        setLoadingFeed(false);
-      }
-    };
-
-    void loadFeed();
-  }, [selectedTermId, originFilter, tagFilter]);
+    void loadFeed({ append: false });
+  }, [selectedQueryId, originFilter, tagFilter]);
 
   return (
     <section>
@@ -82,43 +123,24 @@ export const MonitorFeedPage = ({ scope, title, subtitle }: MonitorFeedPageProps
         <label>
           Query activa ({scope})
           <select
-            value={selectedTermId}
-            onChange={(event) => setSelectedTermId(event.target.value)}
-            disabled={loadingTerms || terms.length === 0}
+            value={selectedQueryId}
+            onChange={(event) => setSelectedQueryId(event.target.value)}
+            disabled={loadingQueries || queries.length === 0}
           >
-            {terms.length === 0 ? <option value="">No hay queries activas para este scope</option> : null}
-            {terms.map((term) => (
-              <option key={term.id} value={term.id}>
-                {term.name}
+            {queries.length === 0 ? <option value="">No hay queries activas para este scope</option> : null}
+            {queries.map((query) => (
+              <option key={query.id} value={query.id}>
+                {query.name} {query.awario_link_status === "linked" ? "" : "(bloqueada: falta Awario)"}
               </option>
             ))}
           </select>
         </label>
 
-        <button
-          className="btn btn-outline"
-          type="button"
-          onClick={async () => {
-            if (!selectedTermId) return;
-            setLoadingFeed(true);
-            try {
-              const response = await client.listNewsFeed(selectedTermId, {
-                origin: originFilter === "all" ? undefined : originFilter,
-                tag: tagFilter.trim() || undefined
-              });
-              setFeed(response);
-              setError(null);
-            } catch (refreshError) {
-              setError((refreshError as Error).message);
-            } finally {
-              setLoadingFeed(false);
-            }
-          }}
-          disabled={!selectedTermId || loadingFeed}
-        >
+        <button className="btn btn-outline" type="button" onClick={() => void loadFeed({ append: false })} disabled={!selectedQueryId || loadingFeed}>
           Refrescar
         </button>
       </section>
+
       <section className="panel feed-controls">
         <label>
           Origen
@@ -138,16 +160,20 @@ export const MonitorFeedPage = ({ scope, title, subtitle }: MonitorFeedPageProps
         </label>
       </section>
 
+      {selectedQuery && selectedQuery.awario_link_status !== "linked" ? (
+        <div className="alert warning">La query seleccionada está bloqueada hasta vincular una alerta Awario.</div>
+      ) : null}
+
       {loadingFeed ? <p>Cargando feed...</p> : null}
 
-      {!loadingFeed && selectedTerm && feed && feed.items.length === 0 ? (
+      {!loadingFeed && selectedQuery && items.length === 0 ? (
         <div className="panel">
-          <p>No hay noticias recientes para la query seleccionada.</p>
+          <p>No hay resultados para la query seleccionada.</p>
         </div>
       ) : null}
 
       <div className="feed-grid">
-        {(feed?.items ?? []).map((item) => (
+        {items.map((item) => (
           <article className="feed-card" key={item.id}>
             <p className="feed-provider">{item.provider}</p>
             <div className="origin-chip-row">
@@ -163,6 +189,14 @@ export const MonitorFeedPage = ({ scope, title, subtitle }: MonitorFeedPageProps
           </article>
         ))}
       </div>
+
+      {hasNext ? (
+        <div className="button-row" style={{ marginTop: 16 }}>
+          <button className="btn btn-outline" type="button" onClick={() => void loadFeed({ append: true })} disabled={loadingMore}>
+            {loadingMore ? "Cargando..." : "Cargar más"}
+          </button>
+        </div>
+      ) : null}
     </section>
   );
 };

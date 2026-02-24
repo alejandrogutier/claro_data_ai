@@ -1,5 +1,7 @@
 import { createHash, randomUUID } from "crypto";
 import type { AuthPrincipal, UserRole } from "../core/auth";
+import { env } from "../config/env";
+import { canonicalizeUrl } from "../ingestion/url";
 import {
   RdsDataClient,
   fieldBoolean,
@@ -16,7 +18,6 @@ import {
 } from "./rdsData";
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-const NEWS_FEED_LIMIT = 2;
 const TERM_SCOPES = ["claro", "competencia"] as const;
 
 type TermScope = (typeof TERM_SCOPES)[number];
@@ -24,6 +25,10 @@ type TermScope = (typeof TERM_SCOPES)[number];
 type CursorPayload = {
   created_at: string;
   id: string;
+};
+
+type FeedCursorPayload = {
+  offset: number;
 };
 
 type TermRecord = {
@@ -92,6 +97,38 @@ type ContentRecord = {
   sentimiento: string | null;
   createdAt: Date;
   updatedAt: Date;
+};
+
+type FeedRecord = {
+  id: string;
+  sourceType: "news" | "social";
+  termId: string | null;
+  provider: string;
+  sourceName: string | null;
+  sourceId: string | null;
+  state: "active" | "archived" | "hidden";
+  title: string;
+  summary: string | null;
+  content: string | null;
+  canonicalUrl: string;
+  imageUrl: string | null;
+  language: string | null;
+  category: string | null;
+  publishedAt: Date | null;
+  sourceScore: number;
+  rawPayloadS3Key: string | null;
+  categoria: string | null;
+  sentimiento: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+  awarioAlertId: string | null;
+  firstSeenAt: Date;
+};
+
+type FeedPage = {
+  items: FeedRecord[];
+  nextCursor: string | null;
+  hasNext: boolean;
 };
 
 type ContentPage = {
@@ -238,6 +275,8 @@ const isUniqueViolation = (error: unknown): boolean => {
 
 const encodeCursor = (value: CursorPayload): string => Buffer.from(JSON.stringify(value), "utf8").toString("base64url");
 
+const encodeFeedCursor = (value: FeedCursorPayload): string => Buffer.from(JSON.stringify(value), "utf8").toString("base64url");
+
 const decodeCursor = (value?: string): CursorPayload | null => {
   if (!value) return null;
   try {
@@ -245,6 +284,18 @@ const decodeCursor = (value?: string): CursorPayload | null => {
     if (!parsed || typeof parsed !== "object") return null;
     if (typeof parsed.created_at !== "string" || typeof parsed.id !== "string") return null;
     if (!UUID_REGEX.test(parsed.id)) return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+};
+
+const decodeFeedCursor = (value?: string): FeedCursorPayload | null => {
+  if (!value) return null;
+  try {
+    const parsed = JSON.parse(Buffer.from(value, "base64url").toString("utf8")) as FeedCursorPayload;
+    if (!parsed || typeof parsed !== "object") return null;
+    if (typeof parsed.offset !== "number" || !Number.isInteger(parsed.offset) || parsed.offset < 0) return null;
     return parsed;
   } catch {
     return null;
@@ -370,6 +421,65 @@ const parseContentRow = (row: SqlRow): ContentRecord | null => {
     sentimiento,
     createdAt,
     updatedAt
+  };
+};
+
+const parseFeedRow = (row: SqlRow): FeedRecord | null => {
+  const id = fieldString(row, 0);
+  const sourceType = fieldString(row, 1) as "news" | "social" | null;
+  const termId = fieldString(row, 2);
+  const provider = fieldString(row, 3);
+  const sourceName = fieldString(row, 4);
+  const sourceId = fieldString(row, 5);
+  const state = fieldString(row, 6) as "active" | "archived" | "hidden" | null;
+  const title = fieldString(row, 7);
+  const summary = fieldString(row, 8);
+  const content = fieldString(row, 9);
+  const canonicalUrl = fieldString(row, 10);
+  const imageUrl = fieldString(row, 11);
+  const language = fieldString(row, 12);
+  const category = fieldString(row, 13);
+  const publishedAt = fieldDate(row, 14);
+  const sourceScoreRaw = fieldString(row, 15) ?? "0.5";
+  const rawPayloadS3Key = fieldString(row, 16);
+  const createdAt = fieldDate(row, 17);
+  const updatedAt = fieldDate(row, 18);
+  const categoria = fieldString(row, 19);
+  const sentimiento = fieldString(row, 20);
+  const awarioAlertId = fieldString(row, 21);
+  const firstSeenAt = fieldDate(row, 22) ?? createdAt;
+
+  if (!id || !sourceType || !provider || !state || !title || !canonicalUrl || !createdAt || !updatedAt || !firstSeenAt) {
+    return null;
+  }
+
+  const normalizedCanonicalUrl = canonicalizeUrl(canonicalUrl) ?? canonicalUrl;
+  const sourceScore = Number.parseFloat(sourceScoreRaw);
+
+  return {
+    id,
+    sourceType,
+    termId,
+    provider,
+    sourceName,
+    sourceId,
+    state,
+    title,
+    summary,
+    content,
+    canonicalUrl: normalizedCanonicalUrl,
+    imageUrl,
+    language,
+    category,
+    publishedAt,
+    sourceScore: Number.isFinite(sourceScore) ? sourceScore : 0.5,
+    rawPayloadS3Key,
+    categoria,
+    sentimiento,
+    createdAt,
+    updatedAt,
+    awarioAlertId,
+    firstSeenAt
   };
 };
 
@@ -857,15 +967,23 @@ class AppStore {
     };
   }
 
-  async listNewsFeed(termId: string, limit = NEWS_FEED_LIMIT): Promise<ContentRecord[]> {
+  async listNewsFeed(termId: string, limit = 20, cursor?: string): Promise<FeedPage> {
     if (!isUuid(termId)) {
       throw new AppStoreError("validation", "term_id must be a valid UUID");
     }
+
     const safeLimit = Math.min(200, Math.max(1, Math.floor(limit)));
+    const cursorPayload = decodeFeedCursor(cursor);
+    if (cursor && !cursorPayload) {
+      throw new AppStoreError("validation", "cursor must be valid");
+    }
+    const offset = cursorPayload?.offset ?? 0;
 
     const termResponse = await this.rds.execute(
       `
-        SELECT "id"::text
+        SELECT
+          "id"::text,
+          "awarioBindingId"::text
         FROM "public"."TrackedTerm"
         WHERE "id" = CAST(:term_id AS UUID)
         LIMIT 1
@@ -873,82 +991,207 @@ class AppStore {
       [sqlUuid("term_id", termId)]
     );
 
-    if (!fieldString(termResponse.records?.[0], 0)) {
+    const foundTermId = fieldString(termResponse.records?.[0], 0);
+    const awarioBindingId = fieldString(termResponse.records?.[0], 1);
+
+    if (!foundTermId) {
       throw new AppStoreError("not_found", "Tracked term not found");
     }
 
-    const response = await this.rds.execute(
-      `
-        SELECT
-          ci."id"::text,
-          ci."sourceType"::text,
-          ci."termId"::text,
-          ci."provider",
-          ci."sourceName",
-          ci."sourceId",
-          ci."state"::text,
-          ci."title",
-          ci."summary",
-          ci."content",
-          ci."canonicalUrl",
-          ci."imageUrl",
-          ci."language",
-          ci."category",
-          ci."publishedAt",
-          COALESCE(
-            sw_source."weight",
-            sw_provider."weight",
-            ci."sourceScore",
-            CAST(0.50 AS DECIMAL(3,2))
-          )::text,
-          ci."rawPayloadS3Key",
-          ci."createdAt",
-          ci."updatedAt",
-          cls."categoria",
-          cls."sentimiento"
-        FROM "public"."ContentItem" ci
-        LEFT JOIN LATERAL (
-          SELECT c."categoria", c."sentimiento"
-          FROM "public"."Classification" c
-          WHERE c."contentItemId" = ci."id"
-          ORDER BY c."isOverride" DESC, c."createdAt" DESC
-          LIMIT 1
-        ) cls ON TRUE
-        LEFT JOIN LATERAL (
-          SELECT sw."weight"
-          FROM "public"."SourceWeight" sw
-          WHERE
-            sw."isActive" = TRUE
-            AND sw."sourceName" IS NOT NULL
-            AND LOWER(sw."provider") = LOWER(ci."provider")
-            AND LOWER(sw."sourceName") = LOWER(COALESCE(ci."sourceName", ''))
-          ORDER BY sw."updatedAt" DESC, sw."id" DESC
-          LIMIT 1
-        ) sw_source ON TRUE
-        LEFT JOIN LATERAL (
-          SELECT sw."weight"
-          FROM "public"."SourceWeight" sw
-          WHERE
-            sw."isActive" = TRUE
-            AND sw."sourceName" IS NULL
-            AND LOWER(sw."provider") = LOWER(ci."provider")
-          ORDER BY sw."updatedAt" DESC, sw."id" DESC
-          LIMIT 1
-        ) sw_provider ON TRUE
-        WHERE
-          ci."sourceType" = CAST('news' AS "public"."SourceType")
-          AND ci."termId" = CAST(:term_id AS UUID)
-          AND ci."state" = CAST('active' AS "public"."ContentState")
-        ORDER BY
-          COALESCE(ci."publishedAt", ci."createdAt") DESC,
-          ci."createdAt" DESC,
-          ci."id" DESC
-        LIMIT :limit
-      `,
-      [sqlUuid("term_id", termId), sqlLong("limit", safeLimit)]
-    );
+    if (env.unifiedQueryAwarioFeedV1Enabled && !awarioBindingId) {
+      throw new AppStoreError("conflict", "query_not_linked");
+    }
 
-    return (response.records ?? []).map(parseContentRow).filter((item): item is ContentRecord => item !== null);
+    const includeAwario = env.unifiedQueryAwarioFeedV1Enabled && Boolean(awarioBindingId);
+
+    let scanLimit = Math.min(2000, Math.max(200, (offset + safeLimit) * 3));
+    let dedupedSorted: FeedRecord[] = [];
+    let reachedEnd = false;
+    let guard = 0;
+
+    while (guard < 6) {
+      guard += 1;
+
+      const newsResponse = await this.rds.execute(
+        `
+          SELECT
+            ci."id"::text,
+            ci."sourceType"::text,
+            ci."termId"::text,
+            ci."provider",
+            ci."sourceName",
+            ci."sourceId",
+            ci."state"::text,
+            ci."title",
+            ci."summary",
+            ci."content",
+            ci."canonicalUrl",
+            ci."imageUrl",
+            ci."language",
+            ci."category",
+            ci."publishedAt",
+            COALESCE(
+              sw_source."weight",
+              sw_provider."weight",
+              ci."sourceScore",
+              CAST(0.50 AS DECIMAL(3,2))
+            )::text,
+            ci."rawPayloadS3Key",
+            ci."createdAt",
+            ci."updatedAt",
+            cls."categoria",
+            cls."sentimiento",
+            NULL::text,
+            COALESCE(ci."createdAt", NOW())
+          FROM "public"."ContentItem" ci
+          LEFT JOIN LATERAL (
+            SELECT c."categoria", c."sentimiento"
+            FROM "public"."Classification" c
+            WHERE c."contentItemId" = ci."id"
+            ORDER BY c."isOverride" DESC, c."createdAt" DESC
+            LIMIT 1
+          ) cls ON TRUE
+          LEFT JOIN LATERAL (
+            SELECT sw."weight"
+            FROM "public"."SourceWeight" sw
+            WHERE
+              sw."isActive" = TRUE
+              AND sw."sourceName" IS NOT NULL
+              AND LOWER(sw."provider") = LOWER(ci."provider")
+              AND LOWER(sw."sourceName") = LOWER(COALESCE(ci."sourceName", ''))
+            ORDER BY sw."updatedAt" DESC, sw."id" DESC
+            LIMIT 1
+          ) sw_source ON TRUE
+          LEFT JOIN LATERAL (
+            SELECT sw."weight"
+            FROM "public"."SourceWeight" sw
+            WHERE
+              sw."isActive" = TRUE
+              AND sw."sourceName" IS NULL
+              AND LOWER(sw."provider") = LOWER(ci."provider")
+            ORDER BY sw."updatedAt" DESC, sw."id" DESC
+            LIMIT 1
+          ) sw_provider ON TRUE
+          WHERE
+            ci."sourceType" = CAST('news' AS "public"."SourceType")
+            AND ci."termId" = CAST(:term_id AS UUID)
+            AND ci."state" = CAST('active' AS "public"."ContentState")
+          ORDER BY
+            COALESCE(ci."publishedAt", ci."createdAt") DESC,
+            ci."createdAt" DESC,
+            ci."id" DESC
+          LIMIT :scan_limit
+        `,
+        [sqlUuid("term_id", termId), sqlLong("scan_limit", scanLimit)]
+      );
+
+      const awarioResponse =
+        includeAwario && awarioBindingId
+          ? await this.rds.execute(
+              `
+                SELECT
+                  afi."id"::text,
+                  CAST('social' AS text),
+                  afi."termId"::text,
+                  CAST('awario' AS text),
+                  afi."medium",
+                  afi."awarioMentionId",
+                  CAST('active' AS text),
+                  afi."title",
+                  afi."summary",
+                  afi."content",
+                  afi."canonicalUrl",
+                  NULL::text,
+                  NULL::text,
+                  NULL::text,
+                  afi."publishedAt",
+                  CAST(0.50 AS DECIMAL(3,2))::text,
+                  NULL::text,
+                  afi."createdAt",
+                  afi."updatedAt",
+                  NULL::text,
+                  NULL::text,
+                  afi."awarioAlertId",
+                  afi."firstSeenAt"
+                FROM "public"."AwarioMentionFeedItem" afi
+                WHERE
+                  afi."termId" = CAST(:term_id AS UUID)
+                  AND afi."bindingId" = CAST(:binding_id AS UUID)
+                ORDER BY
+                  COALESCE(afi."publishedAt", afi."createdAt") DESC,
+                  afi."createdAt" DESC,
+                  afi."id" DESC
+                LIMIT :scan_limit
+              `,
+              [sqlUuid("term_id", termId), sqlUuid("binding_id", awarioBindingId), sqlLong("scan_limit", scanLimit)]
+            )
+          : { records: [] as SqlRow[] };
+
+      const newsItems = (newsResponse.records ?? []).map(parseFeedRow).filter((item): item is FeedRecord => item !== null);
+      const awarioItems = (awarioResponse.records ?? []).map(parseFeedRow).filter((item): item is FeedRecord => item !== null);
+      const merged = [...newsItems, ...awarioItems];
+
+      const dedupedByUrl = new Map<string, FeedRecord>();
+      for (const item of merged) {
+        const key = item.canonicalUrl;
+        const current = dedupedByUrl.get(key);
+        if (!current) {
+          dedupedByUrl.set(key, item);
+          continue;
+        }
+
+        const itemFirstSeen = item.firstSeenAt.getTime();
+        const currentFirstSeen = current.firstSeenAt.getTime();
+        if (itemFirstSeen < currentFirstSeen) {
+          dedupedByUrl.set(key, item);
+          continue;
+        }
+        if (itemFirstSeen > currentFirstSeen) {
+          continue;
+        }
+
+        const itemCreated = item.createdAt.getTime();
+        const currentCreated = current.createdAt.getTime();
+        if (itemCreated < currentCreated) {
+          dedupedByUrl.set(key, item);
+          continue;
+        }
+        if (itemCreated > currentCreated) {
+          continue;
+        }
+
+        if (item.id < current.id) {
+          dedupedByUrl.set(key, item);
+        }
+      }
+
+      dedupedSorted = Array.from(dedupedByUrl.values()).sort((a, b) => {
+        const aRank = (a.publishedAt ?? a.createdAt).getTime();
+        const bRank = (b.publishedAt ?? b.createdAt).getTime();
+        if (bRank !== aRank) return bRank - aRank;
+        const bCreated = b.createdAt.getTime();
+        const aCreated = a.createdAt.getTime();
+        if (bCreated !== aCreated) return bCreated - aCreated;
+        return b.id.localeCompare(a.id);
+      });
+
+      reachedEnd = newsItems.length < scanLimit && awarioItems.length < scanLimit;
+      if (dedupedSorted.length >= offset + safeLimit || reachedEnd || scanLimit >= 20000) {
+        break;
+      }
+
+      scanLimit = Math.min(20000, scanLimit * 2);
+    }
+
+    const items = dedupedSorted.slice(offset, offset + safeLimit);
+    const hasNext = offset + safeLimit < dedupedSorted.length;
+    const nextCursor = hasNext ? encodeFeedCursor({ offset: offset + safeLimit }) : null;
+
+    return {
+      items,
+      nextCursor,
+      hasNext
+    };
   }
 
   async upsertUserFromPrincipal(principal: AuthPrincipal): Promise<string> {
@@ -1688,6 +1931,8 @@ export type {
   ContentStateEventRecord,
   CreateExportJobInput,
   ExportJobRecord,
+  FeedPage,
+  FeedRecord,
   ManualClassificationInput,
   MetaCountItem,
   MetaResponse,

@@ -256,6 +256,10 @@ export type ConfigQuery = {
   execution: QueryExecutionConfig;
   compiled_definition: Record<string, unknown>;
   current_revision: number;
+  awario_binding_id: string | null;
+  awario_alert_id: string | null;
+  awario_link_status: "linked" | "missing_awario";
+  awario_sync_state: "pending_backfill" | "backfilling" | "active" | "error" | "paused" | "archived" | null;
   updated_by_user_id: string | null;
   created_at: string;
   updated_at: string;
@@ -288,6 +292,7 @@ export type QueryRevisionListResponse = {
 
 export type CreateConfigQueryRequest = {
   name: string;
+  awario_alert_id: string;
   description?: string | null;
   language?: string;
   scope?: QueryScope;
@@ -299,7 +304,9 @@ export type CreateConfigQueryRequest = {
   change_reason?: string;
 };
 
-export type UpdateConfigQueryRequest = Partial<CreateConfigQueryRequest>;
+export type UpdateConfigQueryRequest = Partial<Omit<CreateConfigQueryRequest, "awario_alert_id">> & {
+  awario_alert_id?: string;
+};
 
 export type QueryPreviewResponse = {
   matched_count: number;
@@ -544,6 +551,8 @@ export class ApiClient {
   listNewsFeed(
     termId: string,
     query: {
+      limit?: number;
+      cursor?: string;
       origin?: OriginType;
       medium?: string;
       tag?: string;

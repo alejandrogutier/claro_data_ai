@@ -128,13 +128,16 @@ model TrackedTerm {
   execution        Json?
   compiledDefinition Json?
   currentRevision  Int            @default(1)
+  awarioBindingId  String?        @unique @db.Uuid
   updatedByUserId  String?        @db.Uuid
   createdAt        DateTime       @default(now())
   updatedAt        DateTime       @updatedAt
   ingestionRuns    IngestionRun[]
   contentItems     ContentItem[]
   analysisRuns     AnalysisRun[]
+  awarioFeedItems  AwarioMentionFeedItem[]
   updatedByUser    User?          @relation("TrackedTermUpdater", fields: [updatedByUserId], references: [id], onDelete: SetNull)
+  awarioBinding    AwarioAlertBinding? @relation(fields: [awarioBindingId], references: [id], onDelete: SetNull)
   revisions        TrackedTermRevision[]
 
   @@unique([name, language])
@@ -743,6 +746,8 @@ model AwarioAlertBinding {
   connector           ConnectorConfig?   @relation(fields: [connectorId], references: [id], onDelete: SetNull)
   createdByUser       User?              @relation("AwarioBindingCreator", fields: [createdByUserId], references: [id], onDelete: SetNull)
   updatedByUser       User?              @relation("AwarioBindingUpdater", fields: [updatedByUserId], references: [id], onDelete: SetNull)
+  trackedTerm         TrackedTerm?
+  awarioFeedItems     AwarioMentionFeedItem[]
 
   @@unique([profileId, awarioAlertId])
   @@index([connectorId, status])
@@ -750,6 +755,32 @@ model AwarioAlertBinding {
   @@index([status, syncState])
   @@index([backfillCompletedAt])
   @@index([lastSyncAt])
+}
+
+model AwarioMentionFeedItem {
+  id              String             @id @default(uuid()) @db.Uuid
+  bindingId       String             @db.Uuid
+  termId          String             @db.Uuid
+  awarioAlertId   String
+  awarioMentionId String
+  canonicalUrl    String
+  medium          String?
+  title           String
+  summary         String?
+  content         String?
+  publishedAt     DateTime?
+  firstSeenAt     DateTime           @default(now())
+  metadata        Json?
+  rawPayload      Json?
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+  binding         AwarioAlertBinding @relation(fields: [bindingId], references: [id], onDelete: Cascade)
+  term            TrackedTerm        @relation(fields: [termId], references: [id], onDelete: Cascade)
+
+  @@unique([bindingId, awarioMentionId])
+  @@index([termId, publishedAt])
+  @@index([canonicalUrl])
+  @@index([firstSeenAt])
 }
 
 model OwnedAccount {

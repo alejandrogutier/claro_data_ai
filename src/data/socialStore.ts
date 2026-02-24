@@ -238,6 +238,21 @@ type SocialPostCommentUpsertInput = {
   rawPayload?: Record<string, unknown>;
 };
 
+type AwarioMentionFeedItemUpsertInput = {
+  bindingId: string;
+  termId: string;
+  awarioAlertId: string;
+  awarioMentionId: string;
+  canonicalUrl: string;
+  medium?: string | null;
+  title: string;
+  summary?: string | null;
+  content?: string | null;
+  publishedAt?: Date | null;
+  metadata?: Record<string, unknown>;
+  rawPayload?: Record<string, unknown>;
+};
+
 type SocialPostsPage = {
   items: SocialPostRecord[];
   nextCursor: string | null;
@@ -3429,6 +3444,106 @@ class SocialStore {
     return { status: "persisted", id };
   }
 
+  async upsertAwarioMentionFeedItem(
+    input: AwarioMentionFeedItemUpsertInput
+  ): Promise<{ status: "persisted" | "deduped"; id: string }> {
+    if (!isUuid(input.bindingId)) {
+      throw new AppStoreError("validation", "Invalid binding id");
+    }
+    if (!isUuid(input.termId)) {
+      throw new AppStoreError("validation", "Invalid term id");
+    }
+    if (!input.awarioMentionId?.trim()) {
+      throw new AppStoreError("validation", "awarioMentionId is required");
+    }
+    if (!input.awarioAlertId?.trim()) {
+      throw new AppStoreError("validation", "awarioAlertId is required");
+    }
+    if (!input.canonicalUrl?.trim()) {
+      throw new AppStoreError("validation", "canonicalUrl is required");
+    }
+    if (!input.title?.trim()) {
+      throw new AppStoreError("validation", "title is required");
+    }
+
+    const existingRes = await this.rds.execute(
+      `
+        SELECT "id"::text
+        FROM "public"."AwarioMentionFeedItem"
+        WHERE
+          "bindingId" = CAST(:binding_id AS UUID)
+          AND "awarioMentionId" = :awario_mention_id
+        LIMIT 1
+      `,
+      [sqlUuid("binding_id", input.bindingId), sqlString("awario_mention_id", input.awarioMentionId.trim())]
+    );
+    const existingId = fieldString(existingRes.records?.[0], 0);
+    if (existingId) {
+      return { status: "deduped", id: existingId };
+    }
+
+    const id = randomUUID();
+    await this.rds.execute(
+      `
+        INSERT INTO "public"."AwarioMentionFeedItem"
+          (
+            "id",
+            "bindingId",
+            "termId",
+            "awarioAlertId",
+            "awarioMentionId",
+            "canonicalUrl",
+            "medium",
+            "title",
+            "summary",
+            "content",
+            "publishedAt",
+            "firstSeenAt",
+            "metadata",
+            "rawPayload",
+            "createdAt",
+            "updatedAt"
+          )
+        VALUES
+          (
+            CAST(:id AS UUID),
+            CAST(:binding_id AS UUID),
+            CAST(:term_id AS UUID),
+            :awario_alert_id,
+            :awario_mention_id,
+            :canonical_url,
+            :medium,
+            :title,
+            :summary,
+            :content,
+            :published_at,
+            NOW(),
+            CAST(:metadata AS JSONB),
+            CAST(:raw_payload AS JSONB),
+            NOW(),
+            NOW()
+          )
+      `,
+      [
+        sqlUuid("id", id),
+        sqlUuid("binding_id", input.bindingId),
+        sqlUuid("term_id", input.termId),
+        sqlString("awario_alert_id", input.awarioAlertId.trim()),
+        sqlString("awario_mention_id", input.awarioMentionId.trim()),
+        sqlString("canonical_url", input.canonicalUrl.trim()),
+        sqlString("medium", input.medium ?? null),
+        sqlString("title", input.title.trim().slice(0, 500)),
+        sqlString("summary", input.summary ?? null),
+        sqlString("content", input.content ?? null),
+        sqlTimestamp("published_at", input.publishedAt ?? null),
+        sqlJson("metadata", input.metadata ?? {}),
+        sqlJson("raw_payload", input.rawPayload ?? {})
+      ]
+    );
+
+    return { status: "persisted", id };
+  }
+
   async backfillHashtags(limit = 5000): Promise<number> {
     const safeLimit = Math.min(50000, Math.max(1, Math.floor(limit)));
     const rows = await this.rds.execute(
@@ -4877,6 +4992,7 @@ export type {
   SocialPostRecord,
   SocialPostsFilters,
   SocialPostsPage,
+  AwarioMentionFeedItemUpsertInput,
   SocialPostCommentUpsertInput,
   SocialPostUpsertInput,
   SocialRiskRecord,

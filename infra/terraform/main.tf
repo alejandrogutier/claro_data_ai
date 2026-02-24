@@ -629,6 +629,7 @@ resource "aws_lambda_function" "api" {
       AWARIO_SYNC_QUEUE_URL                   = aws_sqs_queue.awario_sync.url
       AWARIO_API_BASE_URL                     = "https://api.awario.com/v1.0"
       AWARIO_LINKING_V2                       = "true"
+      UNIFIED_QUERY_AWARIO_FEED_V1            = tostring(var.unified_query_awario_feed_v1_enabled)
       AWARIO_BACKFILL_PAGES_PER_INVOCATION    = "20"
       AWARIO_BACKFILL_MAX_PAGES_TOTAL         = "5000"
       AWARIO_INCREMENTAL_PAGES_PER_INVOCATION = "10"
@@ -906,6 +907,7 @@ resource "aws_lambda_function" "awario_sync_worker" {
       DB_NAME                                 = var.db_name
       AWARIO_API_BASE_URL                     = "https://api.awario.com/v1.0"
       AWARIO_SYNC_QUEUE_URL                   = aws_sqs_queue.awario_sync.url
+      UNIFIED_QUERY_AWARIO_FEED_V1            = tostring(var.unified_query_awario_feed_v1_enabled)
       AWARIO_BACKFILL_PAGES_PER_INVOCATION    = "20"
       AWARIO_BACKFILL_MAX_PAGES_TOTAL         = "5000"
       AWARIO_INCREMENTAL_PAGES_PER_INVOCATION = "10"

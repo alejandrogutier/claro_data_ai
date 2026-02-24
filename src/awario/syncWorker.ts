@@ -157,6 +157,10 @@ const processSyncMessage = async (
     return;
   }
 
+  const linkedQuery = env.unifiedQueryAwarioFeedV1Enabled
+    ? await store.getAwarioBindingLinkedQuery(bindingId)
+    : null;
+
   if (binding.status !== "active" || binding.syncState === "paused" || binding.syncState === "archived") {
     console.info("awario_sync_binding_skipped", {
       request_id: requestId,
@@ -192,6 +196,7 @@ const processSyncMessage = async (
         client,
         socialStore,
         binding: syncBinding,
+        feedTarget: linkedQuery?.isActive ? { termId: linkedQuery.termId } : undefined,
         startCursor: cursor,
         maxPages: env.awarioBackfillPagesPerInvocation,
         pageLimit: env.awarioSyncPageLimit,
@@ -244,6 +249,7 @@ const processSyncMessage = async (
       client,
       socialStore,
       binding: syncBinding,
+      feedTarget: linkedQuery?.isActive ? { termId: linkedQuery.termId } : undefined,
       windowStart,
       windowEnd,
       startCursor: raw.cursor ?? null,

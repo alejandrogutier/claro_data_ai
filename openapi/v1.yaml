@@ -481,7 +481,7 @@ paths:
   /v1/feed/news:
     get:
       tags: [Feed]
-      summary: Feed de noticias por query (maximo 2 items mas recientes)
+      summary: Feed unificado por query (news + awario) deduplicado y paginado
       parameters:
         - name: term_id
           in: query
@@ -489,6 +489,14 @@ paths:
           schema:
             type: string
             format: uuid
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+            default: 20
+        - $ref: '#/components/parameters/Cursor'
         - name: origin
           in: query
           schema:
@@ -504,7 +512,7 @@ paths:
           description: Tag individual o lista CSV (`origin:news,provider:newsapi`)
       responses:
         '200':
-          description: Feed de noticias mas recientes para la query
+          description: Feed unificado paginado para la query
           content:
             application/json:
               schema:
@@ -513,6 +521,8 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '403':
           $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
         '404':
           $ref: '#/components/responses/NotFound'
         '422':
@@ -3400,6 +3410,10 @@ components:
         - execution
         - compiled_definition
         - current_revision
+        - awario_binding_id
+        - awario_alert_id
+        - awario_link_status
+        - awario_sync_state
         - created_at
         - updated_at
       properties:
@@ -3435,6 +3449,20 @@ components:
         current_revision:
           type: integer
           minimum: 1
+        awario_binding_id:
+          type: string
+          format: uuid
+          nullable: true
+        awario_alert_id:
+          type: string
+          nullable: true
+        awario_link_status:
+          type: string
+          enum: [linked, missing_awario]
+        awario_sync_state:
+          type: string
+          nullable: true
+          enum: [pending_backfill, backfilling, active, error, paused, archived]
         updated_by_user_id:
           type: string
           format: uuid
@@ -3457,12 +3485,16 @@ components:
           $ref: '#/components/schemas/PageInfo'
     CreateConfigQueryRequest:
       type: object
-      required: [name]
+      required: [name, awario_alert_id]
       properties:
         name:
           type: string
           minLength: 2
           maxLength: 160
+        awario_alert_id:
+          type: string
+          minLength: 1
+          maxLength: 180
         description:
           type: string
           nullable: true
@@ -3499,6 +3531,10 @@ components:
       type: object
       minProperties: 1
       properties:
+        awario_alert_id:
+          type: string
+          minLength: 1
+          maxLength: 180
         name:
           type: string
           minLength: 2
@@ -7392,19 +7428,21 @@ components:
           $ref: '#/components/schemas/PageInfo'
     NewsFeedResponse:
       type: object
-      required: [term_id, limit, items]
+      required: [term_id, limit, items, page_info]
       properties:
         term_id:
           type: string
           format: uuid
         limit:
           type: integer
-          const: 2
+          minimum: 1
+          maximum: 200
         items:
           type: array
-          maxItems: 2
           items:
             $ref: '#/components/schemas/ContentItem'
+        page_info:
+          $ref: '#/components/schemas/PageInfo'
     PageInfo:
       type: object
       required: [has_next]

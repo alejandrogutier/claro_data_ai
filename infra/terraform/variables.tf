@@ -173,3 +173,9 @@ variable "api_additional_allowed_origins" {
   description = "Origens adicionales permitidos por CORS en API Gateway."
   default     = ["http://localhost:5173"]
 }
+
+variable "unified_query_awario_feed_v1_enabled" {
+  type        = bool
+  description = "Feature flag para feed unificado query+awario."
+  default     = true
+}

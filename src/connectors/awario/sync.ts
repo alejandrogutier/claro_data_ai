@@ -1,6 +1,7 @@
 import type { SocialChannel, SocialPostCommentUpsertInput } from "../../data/socialStore";
 import { AwarioClient, type AwarioMentionRecord } from "./client";
 import { extractAwarioCommentIdsFromUrl, mapAwarioSourceToChannel, normalizeAwarioUrl } from "./parser";
+import { canonicalizeUrl } from "../../ingestion/url";
 
 type SocialStoreLike = {
   resolvePostMatchForAwario(input: {
@@ -9,6 +10,20 @@ type SocialStoreLike = {
     normalizedParentUrl?: string | null;
   }): Promise<{ socialPostMetricId: string; postText: string | null } | null>;
   upsertAwarioComment(input: SocialPostCommentUpsertInput): Promise<{ status: "persisted" | "deduped"; id: string }>;
+  upsertAwarioMentionFeedItem?(input: {
+    bindingId: string;
+    termId: string;
+    awarioAlertId: string;
+    awarioMentionId: string;
+    canonicalUrl: string;
+    medium?: string | null;
+    title: string;
+    summary?: string | null;
+    content?: string | null;
+    publishedAt?: Date | null;
+    metadata?: Record<string, unknown>;
+    rawPayload?: Record<string, unknown>;
+  }): Promise<{ status: "persisted" | "deduped"; id: string }>;
 };
 
 type SentimentBucket = "positive" | "negative" | "neutral" | "unknown";
@@ -25,6 +40,9 @@ export type AwarioSyncMetrics = {
   linked: number;
   persisted: number;
   deduped: number;
+  feed_persisted: number;
+  feed_deduped: number;
+  skipped_no_url: number;
   skipped_unlinked: number;
   flagged_spam: number;
   flagged_related: number;
@@ -50,6 +68,9 @@ export type SyncSingleAwarioBindingInput = {
   client: AwarioClient;
   socialStore: SocialStoreLike;
   binding: AwarioBindingSyncRecord;
+  feedTarget?: {
+    termId: string;
+  };
   windowStart?: Date;
   windowEnd?: Date;
   maxPages?: number;
@@ -250,6 +271,9 @@ const createEmptyMetrics = (): AwarioSyncMetrics => ({
   linked: 0,
   persisted: 0,
   deduped: 0,
+  feed_persisted: 0,
+  feed_deduped: 0,
+  skipped_no_url: 0,
   skipped_unlinked: 0,
   flagged_spam: 0,
   flagged_related: 0,
@@ -261,6 +285,9 @@ const mergeMetrics = (target: AwarioSyncMetrics, source: AwarioSyncMetrics): voi
   target.linked += source.linked;
   target.persisted += source.persisted;
   target.deduped += source.deduped;
+  target.feed_persisted += source.feed_persisted;
+  target.feed_deduped += source.feed_deduped;
+  target.skipped_no_url += source.skipped_no_url;
   target.skipped_unlinked += source.skipped_unlinked;
   target.flagged_spam += source.flagged_spam;
   target.flagged_related += source.flagged_related;
@@ -308,12 +335,51 @@ export const syncAwarioBindingComments = async (input: SyncSingleAwarioBindingIn
         try {
           const source = asString(mention.source) ?? asString(mention.network) ?? asString(mention.platform);
           const channel = mapAwarioSourceToChannel(source) as SocialChannel | "unknown";
+          const mentionUrl = getMentionUrl(mention);
+          const canonicalUrl = canonicalizeUrl(mentionUrl ?? "");
+          const mentionIdFallback = `${binding.awarioAlertId}:mention:${metrics.fetched}`;
+          const awarioMentionId = getMentionId(mention, mentionIdFallback);
+          const text = getMentionText(mention);
+          const publishedAt = asDate(mention.published_at) ?? asDate(mention.date) ?? asDate(mention.created_at);
+          const normalizedMedium = channel !== "unknown"
+            ? channel
+            : source
+              ? source.trim().toLowerCase().slice(0, 64)
+              : null;
+
+          if (input.feedTarget?.termId && input.socialStore.upsertAwarioMentionFeedItem) {
+            if (!canonicalUrl) {
+              metrics.skipped_no_url += 1;
+            } else {
+              const title = asString(mention.title) ?? asString(mention.snippet) ?? text ?? `Awario mention ${awarioMentionId}`;
+              const summary = asString(mention.snippet) ?? null;
+              const feedPersisted = await input.socialStore.upsertAwarioMentionFeedItem({
+                bindingId: binding.id,
+                termId: input.feedTarget.termId,
+                awarioAlertId: binding.awarioAlertId,
+                awarioMentionId,
+                canonicalUrl,
+                medium: normalizedMedium,
+                title: title.slice(0, 500),
+                summary,
+                content: text,
+                publishedAt,
+                metadata: {
+                  channel,
+                  source: source ?? null
+                },
+                rawPayload: mention
+              });
+              if (feedPersisted.status === "persisted") metrics.feed_persisted += 1;
+              else metrics.feed_deduped += 1;
+            }
+          }
+
           if (channel === "unknown") {
             metrics.skipped_unlinked += 1;
             continue;
           }
 
-          const mentionUrl = getMentionUrl(mention);
           const idsFromUrl = extractAwarioCommentIdsFromUrl(mentionUrl);
           const parentExternalPostId =
             idsFromUrl.parentExternalPostId ??
@@ -341,7 +407,6 @@ export const syncAwarioBindingComments = async (input: SyncSingleAwarioBindingIn
 
           metrics.linked += 1;
 
-          const text = getMentionText(mention);
           const awarioSentiment = normalizeSentiment(asString(mention.sentiment));
           const fallbackSentiment = classifySentimentFallback(text);
           const sentiment = awarioSentiment !== "unknown" ? awarioSentiment : fallbackSentiment.sentiment;
@@ -358,12 +423,11 @@ export const syncAwarioBindingComments = async (input: SyncSingleAwarioBindingIn
           if (spamClassification.isSpam) metrics.flagged_spam += 1;
           if (relatedClassification.related) metrics.flagged_related += 1;
 
-          const mentionIdFallback = `${binding.awarioAlertId}:${parentExternalPostId}:${idsFromUrl.externalCommentId ?? mentionUrl ?? metrics.fetched}`;
-          const awarioMentionId = getMentionId(mention, mentionIdFallback);
+          const scopedMentionId = awarioMentionId || `${binding.awarioAlertId}:${parentExternalPostId}:${idsFromUrl.externalCommentId ?? mentionUrl ?? metrics.fetched}`;
 
           const persisted = await input.socialStore.upsertAwarioComment({
             socialPostMetricId: postMatch.socialPostMetricId,
-            awarioMentionId,
+            awarioMentionId: scopedMentionId,
             awarioAlertId: binding.awarioAlertId,
             channel,
             parentExternalPostId,
@@ -372,7 +436,7 @@ export const syncAwarioBindingComments = async (input: SyncSingleAwarioBindingIn
             commentUrl: mentionUrl,
             authorName: getAuthorName(mention),
             authorProfileUrl: getAuthorProfileUrl(mention),
-            publishedAt: asDate(mention.published_at) ?? asDate(mention.date) ?? asDate(mention.created_at),
+            publishedAt,
             text,
             sentiment,
             sentimentSource,

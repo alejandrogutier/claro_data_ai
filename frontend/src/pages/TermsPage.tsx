@@ -25,6 +25,7 @@ type QueryEditorState = {
   description: string;
   language: string;
   scope: QueryScope;
+  awarioAlertId: string;
   isActive: boolean;
   priority: number;
   maxArticlesPerRun: number;
@@ -67,6 +68,7 @@ const createDefaultForm = (): QueryEditorState => ({
   description: "",
   language: "es",
   scope: "claro",
+  awarioAlertId: "",
   isActive: true,
   priority: 3,
   maxArticlesPerRun: 100,
@@ -98,6 +100,7 @@ const toForm = (item: ConfigQuery): QueryEditorState => ({
   description: item.description ?? "",
   language: item.language,
   scope: item.scope,
+  awarioAlertId: item.awario_alert_id ?? "",
   isActive: item.is_active,
   priority: item.priority,
   maxArticlesPerRun: item.max_articles_per_run,
@@ -370,6 +373,11 @@ export const TermsPage = () => {
   const [awarioBindingActionId, setAwarioBindingActionId] = useState<string | null>(null);
 
   const selectedQuery = useMemo(() => queries.find((item) => item.id === selectedId) ?? null, [queries, selectedId]);
+  const isSelectedQueryBlocked = Boolean(selectedQuery && selectedQuery.awario_link_status === "missing_awario");
+  const selectedAwarioAlert = useMemo(
+    () => awarioAlerts.find((alert) => alert.alert_id === form.awarioAlertId) ?? null,
+    [awarioAlerts, form.awarioAlertId]
+  );
   const linkedAwarioAlertIds = useMemo(
     () => new Set(awarioBindings.filter((item) => item.status !== "archived").map((item) => item.awario_alert_id)),
     [awarioBindings]
@@ -623,12 +631,28 @@ export const TermsPage = () => {
 
     const definition = resolveDefinitionFromEditor();
     if (!definition) return;
+    const awarioAlertId = form.awarioAlertId.trim();
+    if (!awarioAlertId) {
+      setError("Debes seleccionar una alerta Awario para guardar la query.");
+      return;
+    }
 
     setIsSaving(true);
     setError(null);
 
     try {
-      const payload = {
+      const payload: {
+        name: string;
+        awario_alert_id?: string;
+        description: string | null;
+        language: string;
+        scope: QueryScope;
+        is_active: boolean;
+        priority: number;
+        max_articles_per_run: number;
+        definition: QueryDefinition;
+        execution: QueryExecutionConfig;
+      } = {
         name: form.name.trim(),
         description: form.description.trim() || null,
         language: form.language.trim() || "es",
@@ -641,10 +665,18 @@ export const TermsPage = () => {
       };
 
       if (isCreating || !selectedId) {
-        const created = await client.createConfigQuery(payload);
+        const created = await client.createConfigQuery({
+          ...payload,
+          awario_alert_id: awarioAlertId
+        });
         setQueries((current) => [created, ...current.filter((item) => item.id !== created.id)]);
         selectQuery(created);
       } else {
+        const shouldRelink =
+          selectedQuery?.awario_link_status === "missing_awario" || selectedQuery?.awario_alert_id !== awarioAlertId;
+        if (shouldRelink) {
+          payload.awario_alert_id = awarioAlertId;
+        }
         const updated = await client.patchConfigQuery(selectedId, payload);
         setQueries((current) => current.map((item) => (item.id === updated.id ? updated : item)));
         selectQuery(updated);
@@ -704,7 +736,7 @@ export const TermsPage = () => {
   };
 
   const onDryRun = async () => {
-    if (!selectedId || !canMutate) return;
+    if (!selectedId || !canMutate || isSelectedQueryBlocked) return;
 
     setIsDryRunning(true);
     setError(null);
@@ -723,7 +755,7 @@ export const TermsPage = () => {
   };
 
   const onManualSync = async () => {
-    if (!canMutate || !selectedId) return;
+    if (!canMutate || !selectedId || isSelectedQueryBlocked) return;
 
     setIsManualSyncing(true);
     setError(null);
@@ -767,6 +799,10 @@ export const TermsPage = () => {
         status: "active"
       });
       setAwarioInfo(`Alerta vinculada. Backfill encolado: ${response.backfill.run_id}`);
+      setForm((current) => ({
+        ...current,
+        awarioAlertId: alertId
+      }));
       await loadAwarioConfig();
     } catch (linkError) {
       setError((linkError as Error).message);
@@ -911,7 +947,9 @@ export const TermsPage = () => {
               <div>
                 <p className="term-name">{item.name}</p>
                 <p className="term-meta">
-                  {item.language} | scope: {item.scope} | estado: {item.is_active ? "active" : "inactive"} | rev: {item.current_revision}
+                  {item.language} | scope: {item.scope} | estado: {item.is_active ? "active" : "inactive"} | rev:{" "}
+                  {item.current_revision} | awario:{" "}
+                  {item.awario_link_status === "linked" ? `linked (${item.awario_sync_state ?? "-"})` : "missing_awario"}
                 </p>
               </div>
             </li>
@@ -927,12 +965,12 @@ export const TermsPage = () => {
               {isPreviewing ? "Preview..." : "Preview local"}
             </button>
             {canMutate && selectedId ? (
-              <button className="btn btn-outline" type="button" onClick={onDryRun} disabled={isDryRunning}>
+              <button className="btn btn-outline" type="button" onClick={onDryRun} disabled={isDryRunning || isSelectedQueryBlocked}>
                 {isDryRunning ? "Dry-run..." : "Dry-run proveedores"}
               </button>
             ) : null}
             {canMutate && selectedId ? (
-              <button className="btn btn-outline" type="button" onClick={onManualSync} disabled={isManualSyncing}>
+              <button className="btn btn-outline" type="button" onClick={onManualSync} disabled={isManualSyncing || isSelectedQueryBlocked}>
                 {isManualSyncing ? "Sync..." : "Sync manual ahora"}
               </button>
             ) : null}
@@ -947,6 +985,11 @@ export const TermsPage = () => {
         <p style={{ marginTop: 6, marginBottom: 12 }}>
           Cambios aplican en la configuracion al guardar, pero impactan la siguiente corrida programada. Usa sync manual si necesitas adelantarla.
         </p>
+        {isSelectedQueryBlocked ? (
+          <div className="alert warning">
+            Esta query esta bloqueada operativamente: falta vínculo Awario. Selecciona una alerta y guarda para activarla.
+          </div>
+        ) : null}
         {manualSyncInfo ? <div className="alert info">{manualSyncInfo}</div> : null}
 
         <div className="form-grid" style={{ gridTemplateColumns: "repeat(4, minmax(0, 1fr))" }}>
@@ -1038,7 +1081,52 @@ export const TermsPage = () => {
               maxLength={600}
             />
           </label>
+
+          <label style={{ gridColumn: "span 3" }}>
+            Alerta Awario (obligatoria)
+            <select
+              value={form.awarioAlertId}
+              onChange={(event) => setForm((current) => ({ ...current, awarioAlertId: event.target.value }))}
+              required
+            >
+              <option value="">Selecciona una alerta de Awario</option>
+              {form.awarioAlertId && !awarioAlerts.some((item) => item.alert_id === form.awarioAlertId) ? (
+                <option value={form.awarioAlertId}>{form.awarioAlertId} (no visible en el filtro actual)</option>
+              ) : null}
+              {awarioAlerts.map((alert) => (
+                <option key={alert.alert_id} value={alert.alert_id}>
+                  {alert.name || alert.alert_id} [{alert.alert_id}] {alert.is_active ? "" : "(inactive)"}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <div style={{ display: "grid", gap: 8 }}>
+            <label>
+              Buscar alerta
+              <input
+                value={awarioSearch}
+                onChange={(event) => setAwarioSearch(event.target.value)}
+                placeholder="nombre o alert_id"
+              />
+            </label>
+            <button className="btn btn-outline" type="button" onClick={() => void loadAwarioConfig()} disabled={awarioLoading}>
+              {awarioLoading ? "Cargando..." : "Recargar alertas"}
+            </button>
+          </div>
         </div>
+
+        <p className="term-meta" style={{ marginTop: 8 }}>
+          Estado vínculo:{" "}
+          {selectedQuery
+            ? selectedQuery.awario_link_status === "linked"
+              ? `linked (${selectedQuery.awario_sync_state ?? "-"})`
+              : "missing_awario"
+            : form.awarioAlertId
+              ? "seleccionado para crear"
+              : "pendiente"}
+          {selectedAwarioAlert ? ` | alerta: ${selectedAwarioAlert.name ?? selectedAwarioAlert.alert_id}` : ""}
+        </p>
 
         <section className="panel" style={{ marginTop: 16 }}>
           <div className="section-title-row">

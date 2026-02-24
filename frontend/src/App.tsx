@@ -63,7 +63,7 @@ export const App = () => {
             <MonitorFeedPage
               scope="claro"
               title="Feed Principal Claro"
-              subtitle="Triage operativo de menciones y noticias de marca. Maximo 2 noticias por query."
+              subtitle="Triage operativo unificado de news + awario deduplicado por URL."
             />
           }
         />

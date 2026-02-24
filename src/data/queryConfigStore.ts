@@ -82,6 +82,11 @@ const isUniqueViolation = (error: unknown): boolean => {
   return /duplicate key value|unique constraint/i.test(message);
 };
 
+const isAwarioBindingUniqueViolation = (error: unknown): boolean => {
+  const message = (error as Error).message ?? "";
+  return /TrackedTerm_awarioBindingId_key|awarioBindingId/i.test(message);
+};
+
 const hostFromUrl = (rawUrl: string | undefined): string | null => {
   if (!rawUrl) return null;
   try {
@@ -180,6 +185,10 @@ export type QueryRecord = {
   execution: QueryExecutionConfig;
   compiledDefinition: Record<string, unknown>;
   currentRevision: number;
+  awarioBindingId: string | null;
+  awarioAlertId: string | null;
+  awarioLinkStatus: "linked" | "missing_awario";
+  awarioSyncState: "pending_backfill" | "backfilling" | "active" | "error" | "paused" | "archived" | null;
   updatedByUserId: string | null;
   createdAt: Date;
   updatedAt: Date;
@@ -220,6 +229,7 @@ export type QueryCreateInput = {
   maxArticlesPerRun?: number;
   definition?: QueryDefinition;
   execution?: QueryExecutionConfig;
+  awarioBindingId?: string | null;
   changeReason?: string | null;
 };
 
@@ -233,6 +243,7 @@ export type QueryUpdateInput = {
   maxArticlesPerRun?: number;
   definition?: QueryDefinition;
   execution?: QueryExecutionConfig;
+  awarioBindingId?: string | null;
   changeReason?: string | null;
 };
 
@@ -316,9 +327,12 @@ const parseQueryRow = (row: SqlRow | undefined): QueryRecord | null => {
   const executionRaw = parseJsonUnknown(fieldString(row, 9));
   const compiledRaw = parseJsonObject(fieldString(row, 10));
   const currentRevision = fieldLong(row, 11);
-  const updatedByUserId = fieldString(row, 12);
-  const createdAt = fieldDate(row, 13);
-  const updatedAt = fieldDate(row, 14);
+  const awarioBindingId = fieldString(row, 12);
+  const awarioAlertId = fieldString(row, 13);
+  const awarioSyncStateRaw = fieldString(row, 14);
+  const updatedByUserId = fieldString(row, 15);
+  const createdAt = fieldDate(row, 16);
+  const updatedAt = fieldDate(row, 17);
 
   if (!id || !name || !language || isActive === null || priority === null || maxArticlesPerRun === null || !createdAt || !updatedAt) {
     return null;
@@ -346,6 +360,18 @@ const parseQueryRow = (row: SqlRow | undefined): QueryRecord | null => {
     execution,
     compiledDefinition: compiledRaw,
     currentRevision: safeCurrentRevision,
+    awarioBindingId,
+    awarioAlertId,
+    awarioLinkStatus: awarioBindingId ? "linked" : "missing_awario",
+    awarioSyncState:
+      awarioSyncStateRaw === "pending_backfill" ||
+      awarioSyncStateRaw === "backfilling" ||
+      awarioSyncStateRaw === "active" ||
+      awarioSyncStateRaw === "error" ||
+      awarioSyncStateRaw === "paused" ||
+      awarioSyncStateRaw === "archived"
+        ? awarioSyncStateRaw
+        : null,
     updatedByUserId,
     createdAt,
     updatedAt
@@ -422,10 +448,14 @@ class QueryConfigStore {
           t."execution"::text,
           t."compiledDefinition"::text,
           t."currentRevision",
+          t."awarioBindingId"::text,
+          ab."awarioAlertId",
+          ab."syncState",
           t."updatedByUserId"::text,
           t."createdAt",
           t."updatedAt"
         FROM "public"."TrackedTerm" t
+        LEFT JOIN "public"."AwarioAlertBinding" ab ON ab."id" = t."awarioBindingId"
         WHERE t."id" = CAST(:id AS UUID)
         LIMIT 1
       `,
@@ -494,10 +524,14 @@ class QueryConfigStore {
           t."execution"::text,
           t."compiledDefinition"::text,
           t."currentRevision",
+          t."awarioBindingId"::text,
+          ab."awarioAlertId",
+          ab."syncState",
           t."updatedByUserId"::text,
           t."createdAt",
           t."updatedAt"
         FROM "public"."TrackedTerm" t
+        LEFT JOIN "public"."AwarioAlertBinding" ab ON ab."id" = t."awarioBindingId"
         ${whereClause}
         ORDER BY t."createdAt" DESC, t."id" DESC
         LIMIT :limit_plus_one
@@ -529,6 +563,10 @@ class QueryConfigStore {
 
     const execution = sanitizeExecutionConfig(input.execution ?? DEFAULT_QUERY_EXECUTION_CONFIG);
     const compiled = compileQueryDefinition(definition);
+    const awarioBindingId = input.awarioBindingId ?? null;
+    if (awarioBindingId !== null && !UUID_REGEX.test(awarioBindingId)) {
+      throw new AppStoreError("validation", "awarioBindingId invalido");
+    }
 
     const tx = await this.rds.beginTransaction();
 
@@ -536,25 +574,11 @@ class QueryConfigStore {
       const response = await this.rds.execute(
         `
           INSERT INTO "public"."TrackedTerm"
-            ("id", "name", "description", "language", "scope", "isActive", "priority", "maxArticlesPerRun", "definition", "execution", "compiledDefinition", "currentRevision", "updatedByUserId", "createdAt", "updatedAt")
+            ("id", "name", "description", "language", "scope", "isActive", "priority", "maxArticlesPerRun", "definition", "execution", "compiledDefinition", "currentRevision", "awarioBindingId", "updatedByUserId", "createdAt", "updatedAt")
           VALUES
-            (CAST(:id AS UUID), :name, :description, :language, CAST(:scope AS "public"."TermScope"), :is_active, :priority, :max_articles_per_run, CAST(:definition AS JSONB), CAST(:execution AS JSONB), CAST(:compiled_definition AS JSONB), 1, CAST(:updated_by_user_id AS UUID), NOW(), NOW())
+            (CAST(:id AS UUID), :name, :description, :language, CAST(:scope AS "public"."TermScope"), :is_active, :priority, :max_articles_per_run, CAST(:definition AS JSONB), CAST(:execution AS JSONB), CAST(:compiled_definition AS JSONB), 1, CAST(:awario_binding_id AS UUID), CAST(:updated_by_user_id AS UUID), NOW(), NOW())
           RETURNING
-            "id"::text,
-            "name",
-            "description",
-            "language",
-            "scope"::text,
-            "isActive",
-            "priority",
-            "maxArticlesPerRun",
-            "definition"::text,
-            "execution"::text,
-            "compiledDefinition"::text,
-            "currentRevision",
-            "updatedByUserId"::text,
-            "createdAt",
-            "updatedAt"
+            "id"::text
         `,
         [
           sqlUuid("id", randomUUID()),
@@ -568,12 +592,14 @@ class QueryConfigStore {
           sqlJson("definition", definition),
           sqlJson("execution", execution),
           sqlJson("compiled_definition", compiled),
+          sqlUuid("awario_binding_id", awarioBindingId),
           sqlUuid("updated_by_user_id", actorUserId)
         ],
         { transactionId: tx }
       );
 
-      const created = parseQueryRow(response.records?.[0]);
+      const createdId = fieldString(response.records?.[0], 0);
+      const created = createdId ? await this.getQueryById(createdId, tx) : null;
       if (!created) {
         throw new Error("Failed to parse created query");
       }
@@ -615,11 +641,32 @@ class QueryConfigStore {
         tx
       );
 
+      if (created.awarioBindingId) {
+        await this.appendAudit(
+          {
+            actorUserId,
+            action: "query_awario_linked",
+            resourceType: "TrackedTerm",
+            resourceId: created.id,
+            requestId,
+            after: {
+              query_id: created.id,
+              awario_binding_id: created.awarioBindingId,
+              awario_alert_id: created.awarioAlertId
+            }
+          },
+          tx
+        );
+      }
+
       await this.rds.commitTransaction(tx);
       return created;
     } catch (error) {
       await this.rds.rollbackTransaction(tx).catch(() => undefined);
       if (isUniqueViolation(error)) {
+        if (isAwarioBindingUniqueViolation(error)) {
+          throw new AppStoreError("conflict", "Awario binding ya esta vinculado a otra query");
+        }
         throw new AppStoreError("conflict", "Term with same name and language already exists");
       }
       throw error;
@@ -698,6 +745,14 @@ class QueryConfigStore {
         params.push(sqlLong("max_articles_per_run", input.maxArticlesPerRun));
       }
 
+      if (input.awarioBindingId !== undefined) {
+        if (input.awarioBindingId !== null && !UUID_REGEX.test(input.awarioBindingId)) {
+          throw new AppStoreError("validation", "awarioBindingId invalido");
+        }
+        setParts.push('"awarioBindingId" = CAST(:awario_binding_id AS UUID)');
+        params.push(sqlUuid("awario_binding_id", input.awarioBindingId));
+      }
+
       await this.rds.execute(
         `
           UPDATE "public"."TrackedTerm"
@@ -727,6 +782,23 @@ class QueryConfigStore {
         ],
         { transactionId: tx }
       );
+
+      const awarioBindingChanged = input.awarioBindingId !== undefined && before.awarioBindingId !== input.awarioBindingId;
+      if (awarioBindingChanged && before.awarioBindingId) {
+        await this.rds.execute(
+          `
+            UPDATE "public"."AwarioAlertBinding"
+            SET
+              "status" = 'paused',
+              "syncState" = 'paused',
+              "updatedByUserId" = CAST(:updated_by_user_id AS UUID),
+              "updatedAt" = NOW()
+            WHERE "id" = CAST(:id AS UUID)
+          `,
+          [sqlUuid("id", before.awarioBindingId), sqlUuid("updated_by_user_id", actorUserId)],
+          { transactionId: tx }
+        );
+      }
 
       const after = await this.getQueryById(id, tx);
       if (!after) {
@@ -758,11 +830,37 @@ class QueryConfigStore {
         tx
       );
 
+      if (awarioBindingChanged && after.awarioBindingId) {
+        await this.appendAudit(
+          {
+            actorUserId,
+            action: before.awarioBindingId ? "query_awario_relinked" : "query_awario_linked",
+            resourceType: "TrackedTerm",
+            resourceId: id,
+            requestId,
+            before: {
+              query_id: before.id,
+              awario_binding_id: before.awarioBindingId,
+              awario_alert_id: before.awarioAlertId
+            },
+            after: {
+              query_id: after.id,
+              awario_binding_id: after.awarioBindingId,
+              awario_alert_id: after.awarioAlertId
+            }
+          },
+          tx
+        );
+      }
+
       await this.rds.commitTransaction(tx);
       return after;
     } catch (error) {
       await this.rds.rollbackTransaction(tx).catch(() => undefined);
       if (isUniqueViolation(error)) {
+        if (isAwarioBindingUniqueViolation(error)) {
+          throw new AppStoreError("conflict", "Awario binding ya esta vinculado a otra query");
+        }
         throw new AppStoreError("conflict", "Term with same name and language already exists");
       }
       throw error;
@@ -776,6 +874,22 @@ class QueryConfigStore {
       const before = await this.getQueryById(id, tx);
       if (!before) {
         throw new AppStoreError("not_found", "Query not found");
+      }
+
+      if (before.awarioBindingId) {
+        await this.rds.execute(
+          `
+            UPDATE "public"."AwarioAlertBinding"
+            SET
+              "status" = 'paused',
+              "syncState" = 'paused',
+              "updatedByUserId" = CAST(:updated_by_user_id AS UUID),
+              "updatedAt" = NOW()
+            WHERE "id" = CAST(:id AS UUID)
+          `,
+          [sqlUuid("id", before.awarioBindingId), sqlUuid("updated_by_user_id", actorUserId)],
+          { transactionId: tx }
+        );
       }
 
       await this.rds.execute(`DELETE FROM "public"."TrackedTerm" WHERE "id" = CAST(:id AS UUID)`, [sqlUuid("id", id)], {

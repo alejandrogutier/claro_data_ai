@@ -1,5 +1,5 @@
 import type { APIGatewayProxyEventV2 } from "aws-lambda";
-import { AppStoreError, createAppStore, type ContentRecord } from "../../data/appStore";
+import { AppStoreError, createAppStore, type FeedRecord } from "../../data/appStore";
 import { json } from "../../core/http";
 import {
   deriveOriginFields,
@@ -11,13 +11,14 @@ import {
 } from "../../core/origin";
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-const NEWS_FEED_LIMIT = 2;
 
-const toApiContent = (item: ContentRecord) => ({
+const toApiContent = (item: FeedRecord) => ({
   ...deriveOriginFields({
     sourceType: item.sourceType,
     provider: item.provider,
-    sourceName: item.sourceName
+    sourceName: item.sourceName,
+    channel: item.sourceName,
+    awarioAlertId: item.awarioAlertId
   }),
   id: item.id,
   source_type: item.sourceType,
@@ -57,6 +58,20 @@ const mapStoreError = (error: unknown) => {
         message: error.message
       });
     }
+
+    if (error.code === "conflict") {
+      if (error.message === "query_not_linked") {
+        return json(409, {
+          error: "query_not_linked",
+          message: "La query no tiene vinculo Awario activo"
+        });
+      }
+
+      return json(409, {
+        error: "conflict",
+        message: error.message
+      });
+    }
   }
 
   return json(500, {
@@ -83,6 +98,15 @@ export const getNewsFeed = async (event: APIGatewayProxyEventV2) => {
     });
   }
 
+  const limitRaw = query.limit?.trim();
+  const limit = limitRaw ? Number.parseInt(limitRaw, 10) : 20;
+  if (!Number.isFinite(limit) || Number.isNaN(limit) || limit < 1 || limit > 200) {
+    return json(422, {
+      error: "validation_error",
+      message: "limit must be an integer between 1 and 200"
+    });
+  }
+
   const originRaw = query.origin?.trim().toLowerCase();
   let originFilter: OriginType | undefined;
   if (originRaw) {
@@ -106,27 +130,60 @@ export const getNewsFeed = async (event: APIGatewayProxyEventV2) => {
   );
 
   try {
-    let items = await store.listNewsFeed(termId, hasOriginFiltering ? 200 : NEWS_FEED_LIMIT);
+    if (!hasOriginFiltering) {
+      const page = await store.listNewsFeed(termId, limit, query.cursor);
+      return json(200, {
+        term_id: termId,
+        limit,
+        items: page.items.map(toApiContent),
+        page_info: {
+          next_cursor: page.nextCursor,
+          has_next: page.hasNext
+        }
+      });
+    }
 
-    if (hasOriginFiltering) {
-      items = items
-        .filter((item) =>
-          matchesOriginFilters(
-            deriveOriginFields({
-              sourceType: item.sourceType,
-              provider: item.provider,
-              sourceName: item.sourceName
-            }),
-            originFilters
-          )
-        )
-        .slice(0, NEWS_FEED_LIMIT);
+    const filtered: FeedRecord[] = [];
+    let cursor = query.cursor;
+    let hasNext = false;
+    let nextCursor: string | null = null;
+    let guard = 0;
+
+    while (guard < 20) {
+      guard += 1;
+      const page = await store.listNewsFeed(termId, limit, cursor);
+      cursor = page.nextCursor ?? undefined;
+      hasNext = page.hasNext;
+      nextCursor = page.nextCursor;
+
+      for (const item of page.items) {
+        const matches = matchesOriginFilters(
+          deriveOriginFields({
+            sourceType: item.sourceType,
+            provider: item.provider,
+            sourceName: item.sourceName,
+            channel: item.sourceName,
+            awarioAlertId: item.awarioAlertId
+          }),
+          originFilters
+        );
+        if (!matches) continue;
+        if (filtered.length < limit) {
+          filtered.push(item);
+        }
+      }
+
+      if (!hasNext || filtered.length >= limit) break;
     }
 
     return json(200, {
       term_id: termId,
-      limit: NEWS_FEED_LIMIT,
-      items: items.map(toApiContent)
+      limit,
+      items: filtered.map(toApiContent),
+      page_info: {
+        next_cursor: hasNext ? nextCursor : null,
+        has_next: hasNext
+      }
     });
   } catch (error) {
     return mapStoreError(error);

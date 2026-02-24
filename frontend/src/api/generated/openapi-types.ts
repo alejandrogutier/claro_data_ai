@@ -640,11 +640,14 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Feed de noticias por query (maximo 2 items mas recientes) */
+        /** Feed unificado por query (news + awario) deduplicado y paginado */
         get: {
             parameters: {
                 query: {
                     term_id: string;
+                    limit?: number;
+                    /** @description Cursor opaco para paginacion */
+                    cursor?: components["parameters"]["Cursor"];
                     origin?: components["schemas"]["OriginType"];
                     medium?: string;
                     /** @description Tag individual o lista CSV (`origin:news,provider:newsapi`) */
@@ -656,7 +659,7 @@ export interface paths {
             };
             requestBody?: never;
             responses: {
-                /** @description Feed de noticias mas recientes para la query */
+                /** @description Feed unificado paginado para la query */
                 200: {
                     headers: {
                         [name: string]: unknown;
@@ -668,6 +671,7 @@ export interface paths {
                 401: components["responses"]["Unauthorized"];
                 403: components["responses"]["Forbidden"];
                 404: components["responses"]["NotFound"];
+                409: components["responses"]["Conflict"];
                 422: components["responses"]["ValidationError"];
             };
         };
@@ -4187,6 +4191,13 @@ export interface components {
             };
             current_revision: number;
             /** Format: uuid */
+            awario_binding_id: string | null;
+            awario_alert_id: string | null;
+            /** @enum {string} */
+            awario_link_status: "linked" | "missing_awario";
+            /** @enum {string|null} */
+            awario_sync_state: "pending_backfill" | "backfilling" | "active" | "error" | "paused" | "archived" | null;
+            /** Format: uuid */
             updated_by_user_id?: string | null;
             /** Format: date-time */
             created_at: string;
@@ -4199,6 +4210,7 @@ export interface components {
         };
         CreateConfigQueryRequest: {
             name: string;
+            awario_alert_id: string;
             description?: string | null;
             /** @default es */
             language: string;
@@ -4215,6 +4227,7 @@ export interface components {
             change_reason?: string | null;
         };
         UpdateConfigQueryRequest: {
+            awario_alert_id?: string;
             name?: string;
             description?: string | null;
             language?: string;
@@ -6052,9 +6065,9 @@ export interface components {
         NewsFeedResponse: {
             /** Format: uuid */
             term_id: string;
-            /** @constant */
-            limit: 2;
+            limit: number;
             items: components["schemas"]["ContentItem"][];
+            page_info: components["schemas"]["PageInfo"];
         };
         PageInfo: {
             next_cursor?: string | null;

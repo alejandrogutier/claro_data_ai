@@ -188,6 +188,14 @@ export type AwarioBindingSyncCandidate = {
   lastSyncAt: Date | null;
 };
 
+export type AwarioBindingLinkedQueryRecord = {
+  termId: string;
+  termName: string;
+  scope: "claro" | "competencia";
+  language: string;
+  isActive: boolean;
+};
+
 export type SourceWeightRecord = {
   id: string;
   provider: string;
@@ -2136,6 +2144,46 @@ class ConfigStore {
 
   async getAwarioAlertBinding(id: string): Promise<AwarioAlertBindingRecord | null> {
     return this.getAwarioAlertBindingById(id);
+  }
+
+  async getAwarioBindingLinkedQuery(bindingId: string): Promise<AwarioBindingLinkedQueryRecord | null> {
+    if (!isUuid(bindingId)) {
+      throw new AppStoreError("validation", "bindingId invalido");
+    }
+
+    const response = await this.rds.execute(
+      `
+        SELECT
+          t."id"::text,
+          t."name",
+          t."scope"::text,
+          t."language",
+          t."isActive"
+        FROM "public"."TrackedTerm" t
+        WHERE t."awarioBindingId" = CAST(:binding_id AS UUID)
+        LIMIT 1
+      `,
+      [sqlUuid("binding_id", bindingId)]
+    );
+
+    const row = response.records?.[0];
+    const termId = fieldString(row, 0);
+    const termName = fieldString(row, 1);
+    const scopeRaw = fieldString(row, 2);
+    const language = fieldString(row, 3);
+    const isActive = fieldBoolean(row, 4);
+
+    if (!termId || !termName || !language || isActive === null) {
+      return null;
+    }
+
+    return {
+      termId,
+      termName,
+      scope: scopeRaw === "competencia" ? "competencia" : "claro",
+      language,
+      isActive
+    };
   }
 
   async listAwarioRemoteAlerts(filters: AwarioRemoteAlertListFilters, limit = 200): Promise<AwarioRemoteAlertRecord[]> {

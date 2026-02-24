@@ -1,8 +1,12 @@
+import AWS from "aws-sdk";
 import type { APIGatewayProxyEventV2 } from "aws-lambda";
+import { randomUUID } from "crypto";
 import { getAuthPrincipal, getRole, hasRole } from "../../core/auth";
 import { getRequestId, getPathWithoutStage, json, parseBody } from "../../core/http";
+import { env } from "../../config/env";
 import { loadRuntimeSecrets } from "../../config/secrets";
 import { AppStoreError, createAppStore } from "../../data/appStore";
+import { createConfigStore } from "../../data/configStore";
 import {
   createQueryConfigStore,
   type QueryCreateInput,
@@ -14,6 +18,7 @@ import {
 import type { QueryDefinition, QueryExecutionConfig, QueryScope } from "../../queryBuilder";
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const sqs = new AWS.SQS({ region: env.awsRegion });
 
 type QueryCreateBody = {
   name?: unknown;
@@ -25,6 +30,7 @@ type QueryCreateBody = {
   max_articles_per_run?: unknown;
   definition?: unknown;
   execution?: unknown;
+  awario_alert_id?: unknown;
   change_reason?: unknown;
 };
 
@@ -113,6 +119,14 @@ const normalizeOptionalString = (value: unknown, max = 240): string | null | und
   return trimmed.slice(0, max);
 };
 
+const normalizeAwarioAlertId = (value: unknown): string | null | undefined => {
+  if (value === undefined) return undefined;
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  if (!trimmed || trimmed.length > 180) return null;
+  return trimmed;
+};
+
 const mapStoreError = (error: unknown) => {
   if (error instanceof AppStoreError) {
     if (error.code === "validation") {
@@ -145,6 +159,10 @@ const toApiQuery = (item: QueryRecord) => ({
   execution: item.execution,
   compiled_definition: item.compiledDefinition,
   current_revision: item.currentRevision,
+  awario_binding_id: item.awarioBindingId,
+  awario_alert_id: item.awarioAlertId,
+  awario_link_status: item.awarioLinkStatus,
+  awario_sync_state: item.awarioSyncState,
   updated_by_user_id: item.updatedByUserId,
   created_at: item.createdAt.toISOString(),
   updated_at: item.updatedAt.toISOString()
@@ -165,10 +183,35 @@ const toApiRevision = (item: QueryRevisionRecord) => ({
 const assertStores = () => {
   const queryStore = createQueryConfigStore();
   const appStore = createAppStore();
-  if (!queryStore || !appStore) {
+  const configStore = createConfigStore();
+  if (!queryStore || !appStore || !configStore) {
     return { error: json(500, { error: "misconfigured", message: "Database runtime is not configured" }) };
   }
-  return { queryStore, appStore };
+  return { queryStore, appStore, configStore };
+};
+
+const enqueueAwarioSyncJob = async (payload: {
+  run_id: string;
+  mode: "historical" | "incremental";
+  binding_id: string;
+  request_id?: string | null;
+  cursor?: string | null;
+  window_start?: string | null;
+  window_end?: string | null;
+}): Promise<void> => {
+  if (!env.awarioSyncQueueUrl) {
+    throw new Error("AWARIO_SYNC_QUEUE_URL no configurado");
+  }
+
+  await sqs
+    .sendMessage({
+      QueueUrl: env.awarioSyncQueueUrl,
+      MessageBody: JSON.stringify({
+        ...payload,
+        requested_at: new Date().toISOString()
+      })
+    })
+    .promise();
 };
 
 const getIdFromPath = (event: APIGatewayProxyEventV2, pattern: RegExp): string | null => {
@@ -260,6 +303,7 @@ export const createConfigQuery = async (event: APIGatewayProxyEventV2) => {
   const maxArticlesPerRun = normalizeOptionalInt(body.max_articles_per_run, 1, 500);
   const description = normalizeOptionalString(body.description, 600);
   const changeReason = normalizeOptionalString(body.change_reason, 240);
+  const awarioAlertId = normalizeAwarioAlertId(body.awario_alert_id);
 
   if (!name || !language || !scope) {
     return json(422, { error: "validation_error", message: "name, language y scope son requeridos" });
@@ -275,6 +319,14 @@ export const createConfigQuery = async (event: APIGatewayProxyEventV2) => {
 
   if (body.change_reason !== undefined && changeReason === undefined) {
     return json(422, { error: "validation_error", message: "change_reason invalido" });
+  }
+
+  if (body.awario_alert_id !== undefined && !awarioAlertId) {
+    return json(422, { error: "validation_error", message: "awario_alert_id invalido" });
+  }
+
+  if (env.unifiedQueryAwarioFeedV1Enabled && !awarioAlertId) {
+    return json(422, { error: "validation_error", message: "awario_alert_id es requerido" });
   }
 
   let definition: QueryDefinition | undefined;
@@ -296,6 +348,26 @@ export const createConfigQuery = async (event: APIGatewayProxyEventV2) => {
   try {
     const principal = getAuthPrincipal(event);
     const actorUserId = await stores.appStore.upsertUserFromPrincipal(principal);
+    const requestId = getRequestId(event);
+    let awarioBindingId: string | null = null;
+
+    if (awarioAlertId) {
+      const linkedBinding = await stores.configStore.linkAwarioAlert(
+        awarioAlertId,
+        { status: "active" },
+        actorUserId,
+        requestId
+      );
+      const queuedBinding = await stores.configStore.queueAwarioBackfill(linkedBinding.id, actorUserId, requestId);
+      await enqueueAwarioSyncJob({
+        run_id: randomUUID(),
+        mode: "historical",
+        binding_id: queuedBinding.id,
+        request_id: requestId
+      });
+      awarioBindingId = queuedBinding.id;
+    }
+
     const payload: QueryCreateInput = {
       name,
       description,
@@ -306,10 +378,11 @@ export const createConfigQuery = async (event: APIGatewayProxyEventV2) => {
       maxArticlesPerRun: maxArticlesPerRun ?? undefined,
       definition,
       execution: execution ?? undefined,
+      awarioBindingId: awarioBindingId ?? undefined,
       changeReason: changeReason ?? undefined
     };
 
-    const created = await stores.queryStore.createQuery(payload, actorUserId, getRequestId(event));
+    const created = await stores.queryStore.createQuery(payload, actorUserId, requestId);
     return json(201, toApiQuery(created));
   } catch (error) {
     return mapStoreError(error);
@@ -330,6 +403,11 @@ export const patchConfigQuery = async (event: APIGatewayProxyEventV2) => {
   const body = parseBody<QueryPatchBody>(event);
   if (!body) {
     return json(400, { error: "invalid_json", message: "Body JSON invalido" });
+  }
+
+  const awarioAlertId = normalizeAwarioAlertId(body.awario_alert_id);
+  if (body.awario_alert_id !== undefined && !awarioAlertId) {
+    return json(422, { error: "validation_error", message: "awario_alert_id invalido" });
   }
 
   const payload: QueryUpdateInput = {};
@@ -396,17 +474,47 @@ export const patchConfigQuery = async (event: APIGatewayProxyEventV2) => {
     payload.changeReason = changeReason;
   }
 
-  if (Object.keys(payload).length === 0) {
-    return json(422, { error: "validation_error", message: "No hay campos para actualizar" });
-  }
-
   const stores = assertStores();
   if (stores.error) return stores.error;
 
   try {
     const principal = getAuthPrincipal(event);
     const actorUserId = await stores.appStore.upsertUserFromPrincipal(principal);
-    const updated = await stores.queryStore.updateQuery(id, payload, actorUserId, getRequestId(event));
+    const requestId = getRequestId(event);
+    const existing = await stores.queryStore.getQuery(id);
+    if (!existing) {
+      return json(404, { error: "not_found", message: "Query no encontrada" });
+    }
+
+    if (env.unifiedQueryAwarioFeedV1Enabled && existing.awarioLinkStatus === "missing_awario" && awarioAlertId === undefined) {
+      return json(422, {
+        error: "validation_error",
+        message: "awario_alert_id es requerido para queries sin vínculo Awario"
+      });
+    }
+
+    if (awarioAlertId) {
+      const linkedBinding = await stores.configStore.linkAwarioAlert(
+        awarioAlertId,
+        { status: "active" },
+        actorUserId,
+        requestId
+      );
+      const queuedBinding = await stores.configStore.queueAwarioBackfill(linkedBinding.id, actorUserId, requestId);
+      await enqueueAwarioSyncJob({
+        run_id: randomUUID(),
+        mode: "historical",
+        binding_id: queuedBinding.id,
+        request_id: requestId
+      });
+      payload.awarioBindingId = queuedBinding.id;
+    }
+
+    if (Object.keys(payload).length === 0) {
+      return json(422, { error: "validation_error", message: "No hay campos para actualizar" });
+    }
+
+    const updated = await stores.queryStore.updateQuery(id, payload, actorUserId, requestId);
     return json(200, toApiQuery(updated));
   } catch (error) {
     return mapStoreError(error);

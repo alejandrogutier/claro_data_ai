@@ -433,23 +433,34 @@ fi
 
 echo "[OK] replay on completed run did not duplicate run-content links"
 
-echo "[3.1] News feed limit and order"
+echo "[3.1] News feed pagination and order"
 CODE="$(curl -s -o /tmp/claro-feed-news.json -w "%{http_code}" -H "Authorization: Bearer $VIEWER_TOKEN" "$API_BASE/v1/feed/news?term_id=$SMOKE_TERM_ID")"
-assert_code "$CODE" "200" "GET /v1/feed/news viewer"
-
-FEED_COUNT="$(jq -r '.items | length' /tmp/claro-feed-news.json)"
-if [[ "$FEED_COUNT" -gt 2 ]]; then
-  echo "[FAIL] /v1/feed/news returned more than 2 items: $FEED_COUNT"
-  cat /tmp/claro-feed-news.json
-  exit 1
-fi
-
-if [[ "$FEED_COUNT" -ge 2 ]]; then
-  FEED_ORDER_OK="$(jq -r '((.items[0].published_at // .items[0].created_at) >= (.items[1].published_at // .items[1].created_at)) | tostring' /tmp/claro-feed-news.json)"
-  if [[ "$FEED_ORDER_OK" != "true" ]]; then
-    echo "[FAIL] /v1/feed/news not ordered by recency desc"
+if [[ "$CODE" == "409" ]]; then
+  FEED_ERR="$(jq -r '.error // empty' /tmp/claro-feed-news.json)"
+  if [[ "$FEED_ERR" != "query_not_linked" ]]; then
+    echo "[FAIL] /v1/feed/news 409 without query_not_linked"
     cat /tmp/claro-feed-news.json
     exit 1
+  fi
+  echo "[WARN] /v1/feed/news blocked because query has no Awario link"
+else
+  assert_code "$CODE" "200" "GET /v1/feed/news viewer"
+
+  FEED_PAGE_HAS_NEXT="$(jq -r '.page_info.has_next | tostring' /tmp/claro-feed-news.json)"
+  if [[ "$FEED_PAGE_HAS_NEXT" != "true" && "$FEED_PAGE_HAS_NEXT" != "false" ]]; then
+    echo "[FAIL] /v1/feed/news missing page_info.has_next"
+    cat /tmp/claro-feed-news.json
+    exit 1
+  fi
+
+  FEED_COUNT="$(jq -r '.items | length' /tmp/claro-feed-news.json)"
+  if [[ "$FEED_COUNT" -ge 2 ]]; then
+    FEED_ORDER_OK="$(jq -r '((.items[0].published_at // .items[0].created_at) >= (.items[1].published_at // .items[1].created_at)) | tostring' /tmp/claro-feed-news.json)"
+    if [[ "$FEED_ORDER_OK" != "true" ]]; then
+      echo "[FAIL] /v1/feed/news not ordered by recency desc"
+      cat /tmp/claro-feed-news.json
+      exit 1
+    fi
   fi
 fi
 

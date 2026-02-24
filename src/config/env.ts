@@ -17,6 +17,7 @@ export type AppEnv = {
   awarioAccessToken?: string;
   awarioCommentsEnabled: boolean;
   awarioLinkingV2Enabled: boolean;
+  unifiedQueryAwarioFeedV1Enabled: boolean;
   awarioSyncWindowDays: number;
   awarioSyncPageLimit: number;
   awarioSyncMaxPagesPerAlert: number;
@@ -66,6 +67,9 @@ export const env: AppEnv = {
   awarioAccessToken: process.env.AWARIO_ACCESS_TOKEN ?? process.env.AWARIO_API_KEY,
   awarioCommentsEnabled: ["1", "true", "yes", "on"].includes((process.env.AWARIO_COMMENTS_ENABLED ?? "false").toLowerCase()),
   awarioLinkingV2Enabled: !["0", "false", "no", "off"].includes((process.env.AWARIO_LINKING_V2 ?? "true").toLowerCase()),
+  unifiedQueryAwarioFeedV1Enabled: !["0", "false", "no", "off"].includes(
+    (process.env.UNIFIED_QUERY_AWARIO_FEED_V1 ?? "true").toLowerCase()
+  ),
   awarioSyncWindowDays: process.env.AWARIO_SYNC_WINDOW_DAYS
     ? Number.parseInt(process.env.AWARIO_SYNC_WINDOW_DAYS, 10)
     : 30,
