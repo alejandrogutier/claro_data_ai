@@ -1,10 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
-import {
-  type AwarioAlertBinding,
-  type AwarioQueryProfile,
-  type Connector,
-  type ConnectorSyncRun
-} from "../api/client";
+import { Link } from "react-router-dom";
+import { type AwarioAlertBinding, type Connector, type ConnectorSyncRun } from "../api/client";
 import { useApiClient } from "../api/useApiClient";
 import { useAuth } from "../auth/AuthContext";
 
@@ -13,13 +9,17 @@ const toRunLabel = (run: ConnectorSyncRun): string => {
   return `${run.status} | ${started}`;
 };
 
-type AwarioStatus = "active" | "paused" | "archived";
+const formatDateTime = (value: string | null | undefined): string => {
+  if (!value) return "-";
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return value;
+  return parsed.toLocaleString();
+};
 
 export const ConnectorsPage = () => {
   const client = useApiClient();
   const { session } = useAuth();
   const canOperate = useMemo(() => session?.role === "Admin" || session?.role === "Analyst", [session?.role]);
-  const canManageAwario = useMemo(() => session?.role === "Admin", [session?.role]);
 
   const [connectors, setConnectors] = useState<Connector[]>([]);
   const [runs, setRuns] = useState<ConnectorSyncRun[]>([]);
@@ -28,15 +28,8 @@ export const ConnectorsPage = () => {
   const [loading, setLoading] = useState(true);
   const [loadingRuns, setLoadingRuns] = useState(false);
 
-  const [awarioProfiles, setAwarioProfiles] = useState<AwarioQueryProfile[]>([]);
   const [awarioBindings, setAwarioBindings] = useState<AwarioAlertBinding[]>([]);
   const [loadingAwario, setLoadingAwario] = useState(false);
-  const [newProfileName, setNewProfileName] = useState("");
-  const [newProfileQuery, setNewProfileQuery] = useState("");
-  const [newProfileStatus, setNewProfileStatus] = useState<AwarioStatus>("active");
-  const [newBindingProfileId, setNewBindingProfileId] = useState("");
-  const [newBindingAlertId, setNewBindingAlertId] = useState("");
-  const [newBindingStatus, setNewBindingStatus] = useState<AwarioStatus>("active");
 
   const [error, setError] = useState<string | null>(null);
 
@@ -44,6 +37,14 @@ export const ConnectorsPage = () => {
     () => connectors.find((item) => item.id === selectedConnectorId) ?? null,
     [connectors, selectedConnectorId]
   );
+
+  const awarioSummary = useMemo(() => {
+    const total = awarioBindings.length;
+    const active = awarioBindings.filter((item) => item.status === "active").length;
+    const pendingBackfill = awarioBindings.filter((item) => item.sync_state === "pending_backfill" || item.sync_state === "backfilling").length;
+    const withError = awarioBindings.filter((item) => item.sync_state === "error").length;
+    return { total, active, pendingBackfill, withError };
+  }, [awarioBindings]);
 
   const loadConnectors = async () => {
     setLoading(true);
@@ -89,16 +90,11 @@ export const ConnectorsPage = () => {
 
   const loadAwarioConfig = async () => {
     setLoadingAwario(true);
-    setError(null);
     try {
-      const [profilesResponse, bindingsResponse] = await Promise.all([client.listAwarioProfiles(200), client.listAwarioBindings(200)]);
-      const profiles = profilesResponse.items ?? [];
-      setAwarioProfiles(profiles);
+      const bindingsResponse = await client.listAwarioBindings(200);
       setAwarioBindings(bindingsResponse.items ?? []);
-      setNewBindingProfileId((current) => current || profiles[0]?.id || "");
     } catch (awarioError) {
       setError((awarioError as Error).message);
-      setAwarioProfiles([]);
       setAwarioBindings([]);
     } finally {
       setLoadingAwario(false);
@@ -134,74 +130,9 @@ export const ConnectorsPage = () => {
     setError(null);
     try {
       await client.triggerConnectorSync(connectorId);
-      await Promise.all([loadConnectors(), loadRuns(connectorId)]);
+      await Promise.all([loadConnectors(), loadRuns(connectorId), loadAwarioConfig()]);
     } catch (syncError) {
       setError((syncError as Error).message);
-    }
-  };
-
-  const createProfile = async () => {
-    if (!canManageAwario) return;
-    const name = newProfileName.trim();
-    const queryText = newProfileQuery.trim();
-    if (!name || !queryText) return;
-
-    setError(null);
-    try {
-      await client.createAwarioProfile({
-        name,
-        query_text: queryText,
-        status: newProfileStatus
-      });
-      setNewProfileName("");
-      setNewProfileQuery("");
-      setNewProfileStatus("active");
-      await loadAwarioConfig();
-    } catch (createError) {
-      setError((createError as Error).message);
-    }
-  };
-
-  const updateProfileStatus = async (profileId: string, status: AwarioStatus) => {
-    if (!canManageAwario) return;
-    setError(null);
-    try {
-      const updated = await client.patchAwarioProfile(profileId, { status });
-      setAwarioProfiles((current) => current.map((item) => (item.id === updated.id ? updated : item)));
-    } catch (updateError) {
-      setError((updateError as Error).message);
-    }
-  };
-
-  const createBinding = async () => {
-    if (!canManageAwario) return;
-    const profileId = newBindingProfileId.trim();
-    const awarioAlertId = newBindingAlertId.trim();
-    if (!profileId || !awarioAlertId) return;
-
-    setError(null);
-    try {
-      await client.createAwarioBinding({
-        profile_id: profileId,
-        awario_alert_id: awarioAlertId,
-        status: newBindingStatus
-      });
-      setNewBindingAlertId("");
-      setNewBindingStatus("active");
-      await loadAwarioConfig();
-    } catch (createError) {
-      setError((createError as Error).message);
-    }
-  };
-
-  const updateBindingStatus = async (bindingId: string, status: AwarioStatus) => {
-    if (!canManageAwario) return;
-    setError(null);
-    try {
-      const updated = await client.patchAwarioBinding(bindingId, { status });
-      setAwarioBindings((current) => current.map((item) => (item.id === updated.id ? updated : item)));
-    } catch (updateError) {
-      setError((updateError as Error).message);
     }
   };
 
@@ -209,7 +140,7 @@ export const ConnectorsPage = () => {
     <section>
       <header className="page-header">
         <h2>Configuracion de Conectores</h2>
-        <p>Operacion CLARO-037: salud, frecuencia, corridas manuales y mapeo Awario.</p>
+        <p>Operacion de salud, frecuencia y corridas manuales. La vinculacion Awario se gestiona desde Configuracion de Queries.</p>
       </header>
 
       {error ? <div className="alert error">{error}</div> : null}
@@ -238,7 +169,7 @@ export const ConnectorsPage = () => {
 
                   <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
                     <span>Frecuencia: {connector.frequency_minutes} min</span>
-                    <span>Ultimo sync: {connector.last_sync_at ?? "n/a"}</span>
+                    <span>Ultimo sync: {formatDateTime(connector.last_sync_at)}</span>
                     <span>p95: {connector.latency_p95_ms ?? "n/a"} ms</span>
                   </div>
 
@@ -266,13 +197,14 @@ export const ConnectorsPage = () => {
                           onChange={(event) =>
                             setFrequencyDraft((current) => ({
                               ...current,
-                              [connector.id]: Math.max(5, Number.parseInt(event.target.value || "15", 10))
+                              [connector.id]: Number.parseInt(event.target.value || String(connector.frequency_minutes), 10)
                             }))
                           }
+                          style={{ width: 110 }}
                         />
                         <button
-                          className="btn btn-primary"
                           type="button"
+                          className="btn btn-outline"
                           onClick={() =>
                             void updateConnector(connector, {
                               frequency_minutes: frequencyDraft[connector.id] ?? connector.frequency_minutes
@@ -284,19 +216,50 @@ export const ConnectorsPage = () => {
                       </label>
 
                       <button className="btn btn-primary" type="button" onClick={() => void syncConnector(connector.id)}>
-                        Sync manual
+                        Ejecutar sync
                       </button>
                     </div>
                   ) : null}
+                </div>
+              </li>
+            ))}
+            {connectors.length === 0 ? <li>Sin conectores configurados.</li> : null}
+          </ul>
+        ) : null}
+      </section>
 
-                  <button
-                    className="btn btn-outline"
-                    type="button"
-                    onClick={() => setSelectedConnectorId(connector.id)}
-                    disabled={selectedConnectorId === connector.id}
-                  >
-                    Ver corridas
-                  </button>
+      <section className="panel" style={{ marginTop: 16 }}>
+        <div className="section-title-row" style={{ alignItems: "center" }}>
+          <h3>Runs del conector</h3>
+          <select value={selectedConnectorId} onChange={(event) => setSelectedConnectorId(event.target.value)}>
+            {connectors.map((connector) => (
+              <option key={connector.id} value={connector.id}>
+                {connector.provider}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        {selectedConnector ? (
+          <p className="term-meta" style={{ marginTop: 8 }}>
+            Historial para <strong>{selectedConnector.provider}</strong>
+          </p>
+        ) : null}
+
+        {loadingRuns ? <p>Cargando runs...</p> : null}
+        {!loadingRuns && runs.length === 0 ? <p>Sin ejecuciones registradas.</p> : null}
+
+        {!loadingRuns && runs.length > 0 ? (
+          <ul className="simple-list simple-list--stacked" style={{ marginTop: 10 }}>
+            {runs.map((run) => (
+              <li key={run.id}>
+                <div style={{ display: "grid", gap: 4 }}>
+                  <strong>{toRunLabel(run)}</strong>
+                  <span className="term-meta">error: {run.error ?? "-"}</span>
+                  <details>
+                    <summary style={{ cursor: "pointer" }}>Metrics</summary>
+                    <pre style={{ whiteSpace: "pre-wrap", marginTop: 8 }}>{JSON.stringify(run.metrics ?? {}, null, 2)}</pre>
+                  </details>
                 </div>
               </li>
             ))}
@@ -304,182 +267,67 @@ export const ConnectorsPage = () => {
         ) : null}
       </section>
 
-      <section className="panel">
-        <div className="section-title-row">
-          <h3>Historial de corridas</h3>
-          <span>{selectedConnector ? `Conector: ${selectedConnector.provider}` : "Selecciona un conector"}</span>
-        </div>
-
-        {loadingRuns ? <p>Cargando corridas...</p> : null}
-        {!loadingRuns && runs.length === 0 ? <p>Sin corridas registradas.</p> : null}
-
-        {!loadingRuns && runs.length > 0 ? (
-          <ul className="simple-list">
-            {runs.map((run) => (
-              <li key={run.id}>
-                <span>{toRunLabel(run)}</span>
-                <strong>{run.error ?? "ok"}</strong>
-              </li>
-            ))}
-          </ul>
-        ) : null}
-      </section>
-
-      <section className="panel">
-        <div className="section-title-row">
-          <h3>Awario - Query Profiles</h3>
-          <button className="btn btn-outline" type="button" onClick={() => void loadAwarioConfig()} disabled={loadingAwario}>
-            Recargar
-          </button>
-        </div>
-
-        {loadingAwario ? <p>Cargando perfiles y bindings Awario...</p> : null}
-
-        {!loadingAwario && awarioProfiles.length === 0 ? <p>Sin perfiles configurados.</p> : null}
-
-        {!loadingAwario && awarioProfiles.length > 0 ? (
-          <div className="report-table-wrapper">
-            <table>
-              <thead>
-                <tr>
-                  <th>Nombre</th>
-                  <th>Estado</th>
-                  <th>Query</th>
-                  <th>Acción</th>
-                </tr>
-              </thead>
-              <tbody>
-                {awarioProfiles.map((profile) => (
-                  <tr key={profile.id}>
-                    <td>{profile.name}</td>
-                    <td>{profile.status}</td>
-                    <td>{profile.query_text.slice(0, 120)}</td>
-                    <td>
-                      {canManageAwario ? (
-                        <select
-                          value={profile.status}
-                          onChange={(event) => void updateProfileStatus(profile.id, event.target.value as AwarioStatus)}
-                        >
-                          <option value="active">active</option>
-                          <option value="paused">paused</option>
-                          <option value="archived">archived</option>
-                        </select>
-                      ) : (
-                        <span>Solo lectura</span>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+      <section className="panel" style={{ marginTop: 16 }}>
+        <div className="section-title-row" style={{ alignItems: "center" }}>
+          <h3>Awario (operativo)</h3>
+          <div className="button-row">
+            <button className="btn btn-outline" type="button" onClick={() => void loadAwarioConfig()} disabled={loadingAwario}>
+              Recargar
+            </button>
+            <Link className="btn btn-primary" to="/app/config/queries?tab=awario">
+              Ir a Vinculacion Awario
+            </Link>
           </div>
-        ) : null}
-
-        {canManageAwario ? (
-          <div className="form-grid" style={{ marginTop: 12 }}>
-            <label>
-              Nombre
-              <input value={newProfileName} onChange={(event) => setNewProfileName(event.target.value)} placeholder="Marca + objetivo" />
-            </label>
-            <label>
-              Status
-              <select value={newProfileStatus} onChange={(event) => setNewProfileStatus(event.target.value as AwarioStatus)}>
-                <option value="active">active</option>
-                <option value="paused">paused</option>
-                <option value="archived">archived</option>
-              </select>
-            </label>
-            <label style={{ gridColumn: "1 / -1" }}>
-              Query text
-              <textarea value={newProfileQuery} onChange={(event) => setNewProfileQuery(event.target.value)} rows={3} placeholder='("claro" OR "claro colombia") AND ...' />
-            </label>
-            <div>
-              <button className="btn btn-primary" type="button" onClick={() => void createProfile()}>
-                Crear profile
-              </button>
-            </div>
-          </div>
-        ) : null}
-      </section>
-
-      <section className="panel">
-        <div className="section-title-row">
-          <h3>Awario - Alert Bindings</h3>
-          <span>Mapeo profile - alert_id</span>
         </div>
 
-        {!loadingAwario && awarioBindings.length === 0 ? <p>Sin bindings configurados.</p> : null}
+        <p style={{ marginTop: 8 }}>Vista read-only para estado operativo. La vinculacion y reintentos se hacen en Configuracion de Queries.</p>
+
+        <div className="kpi-grid" style={{ marginTop: 12 }}>
+          <article className="panel kpi-card" style={{ marginBottom: 0 }}>
+            <span className="kpi-caption">Bindings</span>
+            <strong className="kpi-value">{awarioSummary.total}</strong>
+          </article>
+          <article className="panel kpi-card" style={{ marginBottom: 0 }}>
+            <span className="kpi-caption">Activos</span>
+            <strong className="kpi-value">{awarioSummary.active}</strong>
+          </article>
+          <article className="panel kpi-card" style={{ marginBottom: 0 }}>
+            <span className="kpi-caption">Backfill pendiente</span>
+            <strong className="kpi-value">{awarioSummary.pendingBackfill}</strong>
+          </article>
+          <article className="panel kpi-card" style={{ marginBottom: 0 }}>
+            <span className="kpi-caption">Con error</span>
+            <strong className="kpi-value">{awarioSummary.withError}</strong>
+          </article>
+        </div>
+
+        {loadingAwario ? <p style={{ marginTop: 12 }}>Cargando bindings Awario...</p> : null}
+        {!loadingAwario && awarioBindings.length === 0 ? <p style={{ marginTop: 12 }}>Sin bindings configurados.</p> : null}
 
         {!loadingAwario && awarioBindings.length > 0 ? (
-          <div className="report-table-wrapper">
-            <table>
+          <div className="incident-table-wrapper" style={{ marginTop: 12 }}>
+            <table className="incident-table">
               <thead>
                 <tr>
-                  <th>Profile</th>
                   <th>alert_id</th>
-                  <th>Status</th>
-                  <th>Validación</th>
-                  <th>Error</th>
+                  <th>estado</th>
+                  <th>sync_state</th>
+                  <th>ultimo sync</th>
+                  <th>error</th>
                 </tr>
               </thead>
               <tbody>
-                {awarioBindings.map((binding) => (
+                {awarioBindings.slice(0, 50).map((binding) => (
                   <tr key={binding.id}>
-                    <td>{binding.profile_name ?? binding.profile_id}</td>
                     <td>{binding.awario_alert_id}</td>
-                    <td>
-                      {canManageAwario ? (
-                        <select
-                          value={binding.status}
-                          onChange={(event) => void updateBindingStatus(binding.id, event.target.value as AwarioStatus)}
-                        >
-                          <option value="active">active</option>
-                          <option value="paused">paused</option>
-                          <option value="archived">archived</option>
-                        </select>
-                      ) : (
-                        binding.status
-                      )}
-                    </td>
-                    <td>{binding.validation_status}</td>
-                    <td>{binding.last_validation_error ?? "--"}</td>
+                    <td>{binding.status}</td>
+                    <td>{binding.sync_state}</td>
+                    <td>{formatDateTime(binding.last_sync_at)}</td>
+                    <td>{binding.last_sync_error ?? "-"}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
-          </div>
-        ) : null}
-
-        {canManageAwario ? (
-          <div className="form-grid" style={{ marginTop: 12 }}>
-            <label>
-              Profile
-              <select value={newBindingProfileId} onChange={(event) => setNewBindingProfileId(event.target.value)}>
-                <option value="">Selecciona...</option>
-                {awarioProfiles.map((profile) => (
-                  <option key={profile.id} value={profile.id}>
-                    {profile.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label>
-              Status
-              <select value={newBindingStatus} onChange={(event) => setNewBindingStatus(event.target.value as AwarioStatus)}>
-                <option value="active">active</option>
-                <option value="paused">paused</option>
-                <option value="archived">archived</option>
-              </select>
-            </label>
-            <label>
-              alert_id Awario
-              <input value={newBindingAlertId} onChange={(event) => setNewBindingAlertId(event.target.value)} placeholder="123456" />
-            </label>
-            <div>
-              <button className="btn btn-primary" type="button" onClick={() => void createBinding()}>
-                Crear binding
-              </button>
-            </div>
           </div>
         ) : null}
       </section>

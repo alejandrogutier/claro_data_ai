@@ -49,7 +49,8 @@ resource "aws_iam_role_policy" "lambda_secrets_access" {
           aws_sqs_queue.incident_evaluation.arn,
           aws_sqs_queue.report_generation.arn,
           aws_sqs_queue.analysis_generation.arn,
-          aws_sqs_queue.classification_generation.arn
+          aws_sqs_queue.classification_generation.arn,
+          aws_sqs_queue.awario_sync.arn
         ]
       },
       {
@@ -193,7 +194,12 @@ resource "aws_iam_role_policy" "lambda_export_access" {
           "secretsmanager:GetSecretValue",
           "secretsmanager:DescribeSecret"
         ]
-        Resource = [data.aws_secretsmanager_secret.database.arn]
+        Resource = [
+          data.aws_secretsmanager_secret.database.arn,
+          data.aws_secretsmanager_secret.provider_keys.arn,
+          data.aws_secretsmanager_secret.app_config.arn,
+          data.aws_secretsmanager_secret.aws_credentials.arn
+        ]
       },
       {
         Effect = "Allow"
@@ -617,6 +623,100 @@ resource "aws_iam_role_policy" "lambda_social_scheduler_access" {
           "bedrock:InvokeModel"
         ]
         Resource = ["*"]
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "kms:Decrypt",
+          "kms:Encrypt",
+          "kms:GenerateDataKey",
+          "kms:DescribeKey"
+        ]
+        Resource = [aws_kms_key.app.arn]
+      }
+    ]
+  })
+}
+
+resource "aws_iam_role_policy" "lambda_awario_sync_worker_access" {
+  name = "${local.name_prefix}-lambda-awario-sync-worker-access"
+  role = aws_iam_role.lambda_awario_sync_worker.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "secretsmanager:GetSecretValue",
+          "secretsmanager:DescribeSecret"
+        ]
+        Resource = [data.aws_secretsmanager_secret.database.arn]
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "rds-data:ExecuteStatement",
+          "rds-data:BatchExecuteStatement",
+          "rds-data:BeginTransaction",
+          "rds-data:CommitTransaction",
+          "rds-data:RollbackTransaction"
+        ]
+        Resource = [aws_rds_cluster.aurora.arn]
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "sqs:SendMessage"
+        ]
+        Resource = [aws_sqs_queue.awario_sync.arn]
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "kms:Decrypt",
+          "kms:Encrypt",
+          "kms:GenerateDataKey",
+          "kms:DescribeKey"
+        ]
+        Resource = [aws_kms_key.app.arn]
+      }
+    ]
+  })
+}
+
+resource "aws_iam_role_policy" "lambda_awario_sync_scheduler_access" {
+  name = "${local.name_prefix}-lambda-awario-sync-scheduler-access"
+  role = aws_iam_role.lambda_awario_sync_scheduler.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "secretsmanager:GetSecretValue",
+          "secretsmanager:DescribeSecret"
+        ]
+        Resource = [data.aws_secretsmanager_secret.database.arn]
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "rds-data:ExecuteStatement",
+          "rds-data:BatchExecuteStatement",
+          "rds-data:BeginTransaction",
+          "rds-data:CommitTransaction",
+          "rds-data:RollbackTransaction"
+        ]
+        Resource = [aws_rds_cluster.aurora.arn]
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "sqs:SendMessage"
+        ]
+        Resource = [aws_sqs_queue.awario_sync.arn]
       },
       {
         Effect = "Allow"

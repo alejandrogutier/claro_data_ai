@@ -2,6 +2,7 @@ import { randomUUID } from "crypto";
 import { AppStoreError } from "./appStore";
 import type { UserRole } from "../core/auth";
 import { env } from "../config/env";
+import { loadRuntimeSecrets } from "../config/secrets";
 import { AwarioClient } from "../connectors/awario/client";
 import { runAwarioCommentsSync } from "../connectors/awario/sync";
 import { createSocialStore } from "./socialStore";
@@ -33,6 +34,8 @@ export type ConnectorRunStatus = "queued" | "running" | "completed" | "failed";
 export type ConnectorHealth = "unknown" | "healthy" | "degraded" | "offline";
 export type TaxonomyKind = (typeof TAXONOMY_KINDS)[number];
 export type NotificationRecipientKind = (typeof NOTIFICATION_RECIPIENT_KINDS)[number];
+export type AwarioSyncState = "pending_backfill" | "backfilling" | "active" | "error" | "paused" | "archived";
+export type AwarioSyncMode = "historical" | "incremental";
 
 type AuditCursorPayload = {
   created_at: string;
@@ -114,9 +117,15 @@ export type AwarioAlertBindingRecord = {
   connectorId: string | null;
   awarioAlertId: string;
   status: "active" | "paused" | "archived";
+  syncState: AwarioSyncState;
   validationStatus: "valid" | "invalid" | "unknown";
   lastValidatedAt: Date | null;
   lastValidationError: string | null;
+  lastSyncAt: Date | null;
+  lastSyncError: string | null;
+  backfillStartedAt: Date | null;
+  backfillCompletedAt: Date | null;
+  backfillCursor: string | null;
   metadata: Record<string, unknown>;
   createdByUserId: string | null;
   updatedByUserId: string | null;
@@ -138,7 +147,45 @@ export type AwarioAlertBindingUpdateInput = {
   connectorId?: string | null;
   awarioAlertId?: string;
   status?: "active" | "paused" | "archived";
+  syncState?: AwarioSyncState;
   metadata?: Record<string, unknown>;
+};
+
+export type AwarioRemoteAlertRecord = {
+  alertId: string;
+  name: string | null;
+  isActive: boolean;
+  statusRaw: string | null;
+  fetchedAt: Date;
+};
+
+export type AwarioRemoteAlertListFilters = {
+  q?: string;
+  includeInactive?: boolean;
+};
+
+export type LinkAwarioAlertInput = {
+  connectorId?: string | null;
+  alias?: string | null;
+  status?: "active" | "paused" | "archived";
+  metadata?: Record<string, unknown>;
+};
+
+export type LinkAwarioAlertResult = {
+  binding: AwarioAlertBindingRecord;
+  runId: string;
+  mode: AwarioSyncMode;
+  status: "queued";
+};
+
+export type AwarioBindingSyncCandidate = {
+  id: string;
+  awarioAlertId: string;
+  status: "active" | "paused" | "archived";
+  syncState: AwarioSyncState;
+  connectorId: string | null;
+  backfillCursor: string | null;
+  lastSyncAt: Date | null;
 };
 
 export type SourceWeightRecord = {
@@ -332,7 +379,7 @@ export type AuditPage = {
 };
 
 type AuditWriteInput = {
-  actorUserId: string;
+  actorUserId: string | null;
   action: string;
   resourceType: string;
   resourceId?: string | null;
@@ -456,6 +503,20 @@ const normalizeAwarioProfileStatus = (value: string | null): "active" | "paused"
   return "active";
 };
 
+const normalizeAwarioSyncState = (value: string | null): AwarioSyncState => {
+  if (
+    value === "pending_backfill" ||
+    value === "backfilling" ||
+    value === "active" ||
+    value === "error" ||
+    value === "paused" ||
+    value === "archived"
+  ) {
+    return value;
+  }
+  return "pending_backfill";
+};
+
 const normalizeAwarioValidationStatus = (value: string | null): "valid" | "invalid" | "unknown" => {
   if (value === "valid" || value === "invalid") return value;
   return "unknown";
@@ -501,15 +562,21 @@ const parseAwarioAlertBindingRow = (row: SqlRow | undefined): AwarioAlertBinding
   const connectorId = fieldString(row, 2);
   const awarioAlertId = fieldString(row, 3);
   const status = normalizeAwarioProfileStatus(fieldString(row, 4));
-  const validationStatus = normalizeAwarioValidationStatus(fieldString(row, 5));
-  const lastValidatedAt = fieldDate(row, 6);
-  const lastValidationError = fieldString(row, 7);
-  const metadata = parseJsonObject(fieldString(row, 8));
-  const createdByUserId = fieldString(row, 9);
-  const updatedByUserId = fieldString(row, 10);
-  const createdAt = fieldDate(row, 11);
-  const updatedAt = fieldDate(row, 12);
-  const profileName = fieldString(row, 13);
+  const syncState = normalizeAwarioSyncState(fieldString(row, 5));
+  const validationStatus = normalizeAwarioValidationStatus(fieldString(row, 6));
+  const lastValidatedAt = fieldDate(row, 7);
+  const lastValidationError = fieldString(row, 8);
+  const lastSyncAt = fieldDate(row, 9);
+  const lastSyncError = fieldString(row, 10);
+  const backfillStartedAt = fieldDate(row, 11);
+  const backfillCompletedAt = fieldDate(row, 12);
+  const backfillCursor = fieldString(row, 13);
+  const metadata = parseJsonObject(fieldString(row, 14));
+  const createdByUserId = fieldString(row, 15);
+  const updatedByUserId = fieldString(row, 16);
+  const createdAt = fieldDate(row, 17);
+  const updatedAt = fieldDate(row, 18);
+  const profileName = fieldString(row, 19);
 
   if (!id || !profileId || !awarioAlertId || !createdAt || !updatedAt) return null;
 
@@ -519,9 +586,15 @@ const parseAwarioAlertBindingRow = (row: SqlRow | undefined): AwarioAlertBinding
     connectorId,
     awarioAlertId,
     status,
+    syncState,
     validationStatus,
     lastValidatedAt,
     lastValidationError,
+    lastSyncAt,
+    lastSyncError,
+    backfillStartedAt,
+    backfillCompletedAt,
+    backfillCursor,
     metadata,
     createdByUserId,
     updatedByUserId,
@@ -569,6 +642,31 @@ const normalizeAwarioStatusInput = (value: string | undefined | null): "active" 
   if (normalized === "paused") return "paused";
   if (normalized === "archived") return "archived";
   return "active";
+};
+
+const normalizeAwarioSyncStateInput = (value: string | undefined | null): AwarioSyncState => {
+  if (!value) return "pending_backfill";
+  const normalized = value.trim().toLowerCase();
+  if (
+    normalized === "pending_backfill" ||
+    normalized === "backfilling" ||
+    normalized === "active" ||
+    normalized === "error" ||
+    normalized === "paused" ||
+    normalized === "archived"
+  ) {
+    return normalized;
+  }
+  return "pending_backfill";
+};
+
+const syncStateFromBindingStatus = (
+  status: "active" | "paused" | "archived",
+  hasCompletedBackfill: boolean
+): AwarioSyncState => {
+  if (status === "paused") return "paused";
+  if (status === "archived") return "archived";
+  return hasCompletedBackfill ? "active" : "pending_backfill";
 };
 
 const normalizeAwarioName = (value: string): string | null => {
@@ -1099,11 +1197,35 @@ class ConfigStore {
     }
   }
 
-  private getAwarioAccessToken(): string | null {
-    const token = env.awarioAccessToken ?? process.env.AWARIO_API_KEY ?? null;
+  private getAwarioAccessTokenFromEnv(): string | null {
+    const token =
+      env.awarioAccessToken ??
+      process.env.AWARIO_ACCESS_TOKEN ??
+      process.env.AWARIO_API_KEY ??
+      null;
     if (!token) return null;
     const trimmed = token.trim();
     return trimmed.length > 0 ? trimmed : null;
+  }
+
+  private async getAwarioAccessToken(): Promise<string | null> {
+    const directToken = this.getAwarioAccessTokenFromEnv();
+    if (directToken) return directToken;
+
+    try {
+      const secrets = await loadRuntimeSecrets();
+      const fromSecrets =
+        secrets.providerKeys.AWARIO_ACCESS_TOKEN ??
+        secrets.providerKeys.AWARIO_API_KEY ??
+        secrets.appConfig.AWARIO_ACCESS_TOKEN ??
+        secrets.appConfig.AWARIO_API_KEY ??
+        null;
+      if (!fromSecrets) return null;
+      const trimmed = fromSecrets.trim();
+      return trimmed.length > 0 ? trimmed : null;
+    } catch {
+      return null;
+    }
   }
 
   private async listActiveAwarioBindingsForSync(connectorId: string): Promise<Array<{ id: string; profileId: string | null; awarioAlertId: string; status: string }>> {
@@ -1142,7 +1264,7 @@ class ConfigStore {
   private async validateAwarioAlertBinding(
     alertId: string
   ): Promise<{ validationStatus: "valid" | "invalid" | "unknown"; lastValidationError: string | null; lastValidatedAt: Date | null }> {
-    const token = this.getAwarioAccessToken();
+    const token = await this.getAwarioAccessToken();
     if (!token) {
       return {
         validationStatus: "unknown",
@@ -1274,7 +1396,7 @@ class ConfigStore {
         if (!env.awarioCommentsEnabled) {
           throw new AppStoreError("conflict", "AWARIO_COMMENTS_ENABLED está desactivado");
         }
-        const token = this.getAwarioAccessToken();
+        const token = await this.getAwarioAccessToken();
         if (!token) {
           throw new AppStoreError("validation", "AWARIO_ACCESS_TOKEN no configurado");
         }
@@ -1500,9 +1622,15 @@ class ConfigStore {
           b."connectorId"::text,
           b."awarioAlertId",
           b."status",
+          b."syncState",
           b."validationStatus",
           b."lastValidatedAt",
           b."lastValidationError",
+          b."lastSyncAt",
+          b."lastSyncError",
+          b."backfillStartedAt",
+          b."backfillCompletedAt",
+          b."backfillCursor",
           b."metadata"::text,
           b."createdByUserId"::text,
           b."updatedByUserId"::text,
@@ -1675,8 +1803,9 @@ class ConfigStore {
         params.push(sqlJson("countries", normalizeStringList(input.countries, 80, 8)));
       }
       if (input.status !== undefined) {
+        const normalizedStatus = normalizeAwarioStatusInput(input.status);
         setParts.push('"status" = :status');
-        params.push(sqlString("status", normalizeAwarioStatusInput(input.status)));
+        params.push(sqlString("status", normalizedStatus));
       }
       if (input.metadata !== undefined) {
         setParts.push('"metadata" = CAST(:metadata AS JSONB)');
@@ -1731,9 +1860,15 @@ class ConfigStore {
           b."connectorId"::text,
           b."awarioAlertId",
           b."status",
+          b."syncState",
           b."validationStatus",
           b."lastValidatedAt",
           b."lastValidationError",
+          b."lastSyncAt",
+          b."lastSyncError",
+          b."backfillStartedAt",
+          b."backfillCompletedAt",
+          b."backfillCursor",
           b."metadata"::text,
           b."createdByUserId"::text,
           b."updatedByUserId"::text,
@@ -1776,12 +1911,19 @@ class ConfigStore {
         throw new AppStoreError("validation", "connectorId invalido");
       }
 
+      const normalizedStatus = normalizeAwarioStatusInput(input.status);
+      const syncState: AwarioSyncState =
+        normalizedStatus === "paused"
+          ? "paused"
+          : normalizedStatus === "archived"
+            ? "archived"
+            : "pending_backfill";
       const validation = await this.validateAwarioAlertBinding(awarioAlertId);
       const id = randomUUID();
       await this.rds.execute(
         `
           INSERT INTO "public"."AwarioAlertBinding"
-            ("id", "profileId", "connectorId", "awarioAlertId", "status", "validationStatus", "lastValidatedAt", "lastValidationError", "metadata", "createdByUserId", "updatedByUserId", "createdAt", "updatedAt")
+            ("id", "profileId", "connectorId", "awarioAlertId", "status", "syncState", "validationStatus", "lastValidatedAt", "lastValidationError", "lastSyncAt", "lastSyncError", "backfillStartedAt", "backfillCompletedAt", "backfillCursor", "metadata", "createdByUserId", "updatedByUserId", "createdAt", "updatedAt")
           VALUES
             (
               CAST(:id AS UUID),
@@ -1789,9 +1931,15 @@ class ConfigStore {
               CAST(:connector_id AS UUID),
               :awario_alert_id,
               :status,
+              :sync_state,
               :validation_status,
               :last_validated_at,
               :last_validation_error,
+              :last_sync_at,
+              :last_sync_error,
+              :backfill_started_at,
+              :backfill_completed_at,
+              :backfill_cursor,
               CAST(:metadata AS JSONB),
               CAST(:created_by_user_id AS UUID),
               CAST(:updated_by_user_id AS UUID),
@@ -1804,10 +1952,16 @@ class ConfigStore {
           sqlUuid("profile_id", input.profileId),
           sqlUuid("connector_id", connectorId ?? null),
           sqlString("awario_alert_id", awarioAlertId),
-          sqlString("status", normalizeAwarioStatusInput(input.status)),
+          sqlString("status", normalizedStatus),
+          sqlString("sync_state", syncState),
           sqlString("validation_status", validation.validationStatus),
           sqlTimestamp("last_validated_at", validation.lastValidatedAt),
           sqlString("last_validation_error", validation.lastValidationError),
+          sqlTimestamp("last_sync_at", null),
+          sqlString("last_sync_error", null),
+          sqlTimestamp("backfill_started_at", null),
+          sqlTimestamp("backfill_completed_at", null),
+          sqlString("backfill_cursor", null),
           sqlJson("metadata", input.metadata ?? {}),
           sqlUuid("created_by_user_id", actorUserId),
           sqlUuid("updated_by_user_id", actorUserId)
@@ -1880,12 +2034,39 @@ class ConfigStore {
         if (!awarioAlertId) throw new AppStoreError("validation", "awarioAlertId invalido");
         setParts.push('"awarioAlertId" = :awario_alert_id');
         params.push(sqlString("awario_alert_id", awarioAlertId));
+        setParts.push('"syncState" = :sync_state_alert_change');
+        setParts.push('"lastSyncAt" = NULL');
+        setParts.push('"lastSyncError" = NULL');
+        setParts.push('"backfillStartedAt" = NULL');
+        setParts.push('"backfillCompletedAt" = NULL');
+        setParts.push('"backfillCursor" = NULL');
+        params.push(sqlString("sync_state_alert_change", "pending_backfill"));
         alertIdForValidation = awarioAlertId;
       }
 
       if (input.status !== undefined) {
+        const normalizedStatus = normalizeAwarioStatusInput(input.status);
         setParts.push('"status" = :status');
-        params.push(sqlString("status", normalizeAwarioStatusInput(input.status)));
+        params.push(sqlString("status", normalizedStatus));
+
+        if (input.syncState === undefined && normalizedStatus === "paused") {
+          setParts.push('"syncState" = :sync_state_from_status');
+          params.push(sqlString("sync_state_from_status", "paused"));
+        } else if (input.syncState === undefined && normalizedStatus === "archived") {
+          setParts.push('"syncState" = :sync_state_from_status');
+          setParts.push('"backfillCursor" = NULL');
+          params.push(sqlString("sync_state_from_status", "archived"));
+        } else if (input.syncState === undefined) {
+          const recoveredState: AwarioSyncState = before.backfillCompletedAt ? "active" : "pending_backfill";
+          setParts.push('"syncState" = :sync_state_from_status');
+          setParts.push('"lastSyncError" = NULL');
+          params.push(sqlString("sync_state_from_status", recoveredState));
+        }
+      }
+
+      if (input.syncState !== undefined) {
+        setParts.push('"syncState" = :sync_state_override');
+        params.push(sqlString("sync_state_override", normalizeAwarioSyncStateInput(input.syncState)));
       }
 
       if (input.metadata !== undefined) {
@@ -1940,6 +2121,643 @@ class ConfigStore {
       if (isUniqueViolation(error)) {
         throw new AppStoreError("conflict", "Ya existe binding para ese profileId + alertId");
       }
+      throw error;
+    }
+  }
+
+  async getAwarioAlertBinding(id: string): Promise<AwarioAlertBindingRecord | null> {
+    return this.getAwarioAlertBindingById(id);
+  }
+
+  async listAwarioRemoteAlerts(filters: AwarioRemoteAlertListFilters, limit = 200): Promise<AwarioRemoteAlertRecord[]> {
+    const token = await this.getAwarioAccessToken();
+    if (!token) {
+      throw new AppStoreError("validation", "AWARIO_ACCESS_TOKEN no configurado");
+    }
+
+    const safeLimit = Math.min(500, Math.max(1, Math.floor(limit)));
+    const q = (filters.q ?? "").trim().toLowerCase();
+    const includeInactive = Boolean(filters.includeInactive);
+    const client = new AwarioClient(token, {
+      baseUrl: process.env.AWARIO_API_BASE_URL,
+      throttleMs: env.awarioSyncThrottleMs,
+      maxRetries: 4
+    });
+
+    const fetchedAt = new Date();
+    const alerts = await client.listAlerts();
+    const mapped = alerts
+      .map((item) => {
+        const statusRaw = typeof item.raw.status === "string" ? item.raw.status : null;
+        return {
+          alertId: item.id,
+          name: item.name,
+          isActive: item.isActive,
+          statusRaw,
+          fetchedAt
+        } satisfies AwarioRemoteAlertRecord;
+      })
+      .filter((item) => (includeInactive ? true : item.isActive))
+      .filter((item) => {
+        if (!q) return true;
+        return item.alertId.toLowerCase().includes(q) || (item.name ?? "").toLowerCase().includes(q);
+      })
+      .sort((a, b) => {
+        const aName = (a.name ?? a.alertId).toLowerCase();
+        const bName = (b.name ?? b.alertId).toLowerCase();
+        if (aName === bName) return a.alertId.localeCompare(b.alertId);
+        return aName.localeCompare(bName);
+      });
+
+    return mapped.slice(0, safeLimit);
+  }
+
+  async linkAwarioAlert(
+    alertId: string,
+    input: LinkAwarioAlertInput,
+    actorUserId: string,
+    requestId?: string
+  ): Promise<AwarioAlertBindingRecord> {
+    const normalizedAlertId = alertId.trim();
+    if (!normalizedAlertId) {
+      throw new AppStoreError("validation", "awario_alert_id invalido");
+    }
+
+    const token = await this.getAwarioAccessToken();
+    if (!token) {
+      throw new AppStoreError("validation", "AWARIO_ACCESS_TOKEN no configurado");
+    }
+
+    const client = new AwarioClient(token, {
+      baseUrl: process.env.AWARIO_API_BASE_URL,
+      throttleMs: env.awarioSyncThrottleMs,
+      maxRetries: 4
+    });
+    const remoteAlerts = await client.listAlerts();
+    const remoteAlert = remoteAlerts.find((item) => item.id === normalizedAlertId);
+    if (!remoteAlert) {
+      throw new AppStoreError("not_found", `alert_id ${normalizedAlertId} no existe en Awario`);
+    }
+
+    const tx = await this.rds.beginTransaction();
+    try {
+      const connectorId = input.connectorId === undefined ? await this.getAwarioConnectorId(tx) : input.connectorId;
+      if (connectorId !== null && connectorId !== undefined && !isUuid(connectorId)) {
+        throw new AppStoreError("validation", "connectorId invalido");
+      }
+
+      const desiredStatus = normalizeAwarioStatusInput(input.status);
+      const validation = await this.validateAwarioAlertBinding(normalizedAlertId);
+      const alias = (input.alias ?? "").trim().slice(0, 180);
+
+      const existingBindingResponse = await this.rds.execute(
+        `
+          SELECT "id"::text
+          FROM "public"."AwarioAlertBinding"
+          WHERE "awarioAlertId" = :awario_alert_id
+          ORDER BY "updatedAt" DESC, "createdAt" DESC
+          LIMIT 1
+        `,
+        [sqlString("awario_alert_id", normalizedAlertId)],
+        { transactionId: tx }
+      );
+
+      let bindingId = fieldString(existingBindingResponse.records?.[0], 0);
+      const before = bindingId ? await this.getAwarioAlertBindingById(bindingId, tx) : null;
+
+      if (!bindingId) {
+        const profileId = randomUUID();
+        const profileName = alias || remoteAlert.name?.trim() || `awario-alert-${normalizedAlertId}`;
+        const profileMetadata = {
+          source: "awario_remote",
+          awario_alert_id: normalizedAlertId,
+          linked_at: new Date().toISOString()
+        };
+
+        await this.rds.execute(
+          `
+            INSERT INTO "public"."AwarioQueryProfile"
+              ("id", "name", "objective", "queryText", "sources", "language", "countries", "status", "metadata", "createdByUserId", "updatedByUserId", "createdAt", "updatedAt")
+            VALUES
+              (
+                CAST(:id AS UUID),
+                :name,
+                NULL,
+                :query_text,
+                CAST(:sources AS JSONB),
+                NULL,
+                CAST(:countries AS JSONB),
+                'active',
+                CAST(:metadata AS JSONB),
+                CAST(:created_by_user_id AS UUID),
+                CAST(:updated_by_user_id AS UUID),
+                NOW(),
+                NOW()
+              )
+          `,
+          [
+            sqlUuid("id", profileId),
+            sqlString("name", profileName),
+            sqlString("query_text", `awario_alert:${normalizedAlertId}`),
+            sqlJson("sources", []),
+            sqlJson("countries", []),
+            sqlJson("metadata", profileMetadata),
+            sqlUuid("created_by_user_id", actorUserId),
+            sqlUuid("updated_by_user_id", actorUserId)
+          ],
+          { transactionId: tx }
+        );
+
+        bindingId = randomUUID();
+        const syncState = syncStateFromBindingStatus(desiredStatus, false);
+        await this.rds.execute(
+          `
+            INSERT INTO "public"."AwarioAlertBinding"
+              ("id", "profileId", "connectorId", "awarioAlertId", "status", "syncState", "validationStatus", "lastValidatedAt", "lastValidationError", "lastSyncAt", "lastSyncError", "backfillStartedAt", "backfillCompletedAt", "backfillCursor", "metadata", "createdByUserId", "updatedByUserId", "createdAt", "updatedAt")
+            VALUES
+              (
+                CAST(:id AS UUID),
+                CAST(:profile_id AS UUID),
+                CAST(:connector_id AS UUID),
+                :awario_alert_id,
+                :status,
+                :sync_state,
+                :validation_status,
+                :last_validated_at,
+                :last_validation_error,
+                NULL,
+                NULL,
+                NULL,
+                NULL,
+                NULL,
+                CAST(:metadata AS JSONB),
+                CAST(:created_by_user_id AS UUID),
+                CAST(:updated_by_user_id AS UUID),
+                NOW(),
+                NOW()
+              )
+          `,
+          [
+            sqlUuid("id", bindingId),
+            sqlUuid("profile_id", profileId),
+            sqlUuid("connector_id", connectorId ?? null),
+            sqlString("awario_alert_id", normalizedAlertId),
+            sqlString("status", desiredStatus),
+            sqlString("sync_state", syncState),
+            sqlString("validation_status", validation.validationStatus),
+            sqlTimestamp("last_validated_at", validation.lastValidatedAt),
+            sqlString("last_validation_error", validation.lastValidationError),
+            sqlJson("metadata", {
+              source: "awario_remote",
+              awario_alert_id: normalizedAlertId,
+              ...(input.metadata ?? {})
+            }),
+            sqlUuid("created_by_user_id", actorUserId),
+            sqlUuid("updated_by_user_id", actorUserId)
+          ],
+          { transactionId: tx }
+        );
+      } else {
+        const syncState = syncStateFromBindingStatus(desiredStatus, false);
+        await this.rds.execute(
+          `
+            UPDATE "public"."AwarioAlertBinding"
+            SET
+              "connectorId" = CAST(:connector_id AS UUID),
+              "status" = :status,
+              "syncState" = :sync_state,
+              "validationStatus" = :validation_status,
+              "lastValidatedAt" = :last_validated_at,
+              "lastValidationError" = :last_validation_error,
+              "lastSyncAt" = NULL,
+              "lastSyncError" = NULL,
+              "backfillStartedAt" = NULL,
+              "backfillCompletedAt" = NULL,
+              "backfillCursor" = NULL,
+              "metadata" = CAST(:metadata AS JSONB),
+              "updatedByUserId" = CAST(:updated_by_user_id AS UUID),
+              "updatedAt" = NOW()
+            WHERE "id" = CAST(:id AS UUID)
+          `,
+          [
+            sqlUuid("id", bindingId),
+            sqlUuid("connector_id", connectorId ?? null),
+            sqlString("status", desiredStatus),
+            sqlString("sync_state", syncState),
+            sqlString("validation_status", validation.validationStatus),
+            sqlTimestamp("last_validated_at", validation.lastValidatedAt),
+            sqlString("last_validation_error", validation.lastValidationError),
+            sqlJson("metadata", {
+              ...(before?.metadata ?? {}),
+              source: "awario_remote",
+              awario_alert_id: normalizedAlertId,
+              ...(input.metadata ?? {})
+            }),
+            sqlUuid("updated_by_user_id", actorUserId)
+          ],
+          { transactionId: tx }
+        );
+      }
+
+      const after = await this.getAwarioAlertBindingById(bindingId, tx);
+      if (!after) {
+        throw new Error("Failed to parse linked Awario binding");
+      }
+
+      await this.appendAudit(
+        {
+          actorUserId,
+          action: "awario_alert_linked",
+          resourceType: "AwarioAlertBinding",
+          resourceId: after.id,
+          requestId,
+          before,
+          after: {
+            ...after,
+            remote_alert_name: remoteAlert.name ?? null,
+            remote_alert_is_active: remoteAlert.isActive
+          }
+        },
+        tx
+      );
+
+      await this.rds.commitTransaction(tx);
+      return after;
+    } catch (error) {
+      await this.rds.rollbackTransaction(tx).catch(() => undefined);
+      if (isUniqueViolation(error)) {
+        throw new AppStoreError("conflict", "Ya existe binding para ese profileId + alertId");
+      }
+      throw error;
+    }
+  }
+
+  async queueAwarioBackfill(bindingId: string, actorUserId: string | null, requestId?: string): Promise<AwarioAlertBindingRecord> {
+    const tx = await this.rds.beginTransaction();
+    try {
+      const before = await this.getAwarioAlertBindingById(bindingId, tx);
+      if (!before) throw new AppStoreError("not_found", "Awario binding not found");
+      if (before.status !== "active") {
+        throw new AppStoreError("conflict", "Binding debe estar active para encolar backfill");
+      }
+
+      await this.rds.execute(
+        `
+          UPDATE "public"."AwarioAlertBinding"
+          SET
+            "syncState" = 'pending_backfill',
+            "backfillStartedAt" = NULL,
+            "backfillCompletedAt" = NULL,
+            "backfillCursor" = NULL,
+            "lastSyncAt" = NULL,
+            "lastSyncError" = NULL,
+            "updatedByUserId" = CAST(:updated_by_user_id AS UUID),
+            "updatedAt" = NOW()
+          WHERE "id" = CAST(:id AS UUID)
+        `,
+        [sqlUuid("id", bindingId), sqlUuid("updated_by_user_id", actorUserId)],
+        { transactionId: tx }
+      );
+
+      const after = await this.getAwarioAlertBindingById(bindingId, tx);
+      if (!after) throw new Error("Failed to parse queued Awario binding");
+
+      await this.appendAudit(
+        {
+          actorUserId,
+          action: "awario_backfill_queued",
+          resourceType: "AwarioAlertBinding",
+          resourceId: after.id,
+          requestId,
+          before,
+          after
+        },
+        tx
+      );
+
+      await this.rds.commitTransaction(tx);
+      return after;
+    } catch (error) {
+      await this.rds.rollbackTransaction(tx).catch(() => undefined);
+      throw error;
+    }
+  }
+
+  async listAwarioBindingSyncCandidates(limit = 200): Promise<AwarioBindingSyncCandidate[]> {
+    const safeLimit = Math.min(500, Math.max(1, Math.floor(limit)));
+    const response = await this.rds.execute(
+      `
+        SELECT
+          b."id"::text,
+          b."awarioAlertId",
+          b."status",
+          b."syncState",
+          b."connectorId"::text,
+          b."backfillCursor",
+          b."lastSyncAt"
+        FROM "public"."AwarioAlertBinding" b
+        WHERE LOWER(b."status") = 'active'
+        ORDER BY b."updatedAt" ASC, b."id" ASC
+        LIMIT :limit
+      `,
+      [sqlLong("limit", safeLimit)]
+    );
+
+    return (response.records ?? [])
+      .map((row) => {
+        const id = fieldString(row, 0);
+        const awarioAlertId = fieldString(row, 1);
+        const status = normalizeAwarioProfileStatus(fieldString(row, 2));
+        const syncState = normalizeAwarioSyncState(fieldString(row, 3));
+        const connectorId = fieldString(row, 4);
+        const backfillCursor = fieldString(row, 5);
+        const lastSyncAt = fieldDate(row, 6);
+        if (!id || !awarioAlertId) return null;
+        return {
+          id,
+          awarioAlertId,
+          status,
+          syncState,
+          connectorId,
+          backfillCursor,
+          lastSyncAt
+        } satisfies AwarioBindingSyncCandidate;
+      })
+      .filter((item): item is AwarioBindingSyncCandidate => item !== null);
+  }
+
+  async markAwarioSyncStarted(bindingId: string, mode: AwarioSyncMode, requestId?: string): Promise<AwarioAlertBindingRecord> {
+    const tx = await this.rds.beginTransaction();
+    try {
+      const before = await this.getAwarioAlertBindingById(bindingId, tx);
+      if (!before) throw new AppStoreError("not_found", "Awario binding not found");
+
+      if (mode === "historical") {
+        await this.rds.execute(
+          `
+            UPDATE "public"."AwarioAlertBinding"
+            SET
+              "syncState" = 'backfilling',
+              "backfillStartedAt" = COALESCE("backfillStartedAt", NOW()),
+              "lastSyncError" = NULL,
+              "updatedAt" = NOW()
+            WHERE "id" = CAST(:id AS UUID)
+          `,
+          [sqlUuid("id", bindingId)],
+          { transactionId: tx }
+        );
+      } else {
+        await this.rds.execute(
+          `
+            UPDATE "public"."AwarioAlertBinding"
+            SET
+              "lastSyncError" = NULL,
+              "updatedAt" = NOW()
+            WHERE "id" = CAST(:id AS UUID)
+          `,
+          [sqlUuid("id", bindingId)],
+          { transactionId: tx }
+        );
+      }
+
+      const after = await this.getAwarioAlertBindingById(bindingId, tx);
+      if (!after) throw new Error("Failed to parse started Awario binding");
+
+      if (mode === "historical") {
+        await this.appendAudit(
+          {
+            actorUserId: null,
+            action: "awario_backfill_started",
+            resourceType: "AwarioAlertBinding",
+            resourceId: after.id,
+            requestId,
+            before,
+            after
+          },
+          tx
+        );
+      }
+
+      await this.rds.commitTransaction(tx);
+      return after;
+    } catch (error) {
+      await this.rds.rollbackTransaction(tx).catch(() => undefined);
+      throw error;
+    }
+  }
+
+  async markAwarioHistoricalProgress(
+    bindingId: string,
+    nextCursor: string | null,
+    metrics: Record<string, unknown>,
+    requestId?: string
+  ): Promise<AwarioAlertBindingRecord> {
+    const tx = await this.rds.beginTransaction();
+    try {
+      const before = await this.getAwarioAlertBindingById(bindingId, tx);
+      if (!before) throw new AppStoreError("not_found", "Awario binding not found");
+
+      await this.rds.execute(
+        `
+          UPDATE "public"."AwarioAlertBinding"
+          SET
+            "syncState" = 'backfilling',
+            "backfillCursor" = :backfill_cursor,
+            "lastSyncAt" = NOW(),
+            "lastSyncError" = NULL,
+            "metadata" = CAST(:metadata AS JSONB),
+            "updatedAt" = NOW()
+          WHERE "id" = CAST(:id AS UUID)
+        `,
+        [
+          sqlUuid("id", bindingId),
+          sqlString("backfill_cursor", nextCursor),
+          sqlJson("metadata", {
+            ...(before.metadata ?? {}),
+            awario_sync_metrics: metrics
+          })
+        ],
+        { transactionId: tx }
+      );
+
+      const after = await this.getAwarioAlertBindingById(bindingId, tx);
+      if (!after) throw new Error("Failed to parse Awario historical progress");
+
+      await this.rds.commitTransaction(tx);
+      return after;
+    } catch (error) {
+      await this.rds.rollbackTransaction(tx).catch(() => undefined);
+      throw error;
+    }
+  }
+
+  async markAwarioHistoricalCompleted(
+    bindingId: string,
+    metrics: Record<string, unknown>,
+    requestId?: string
+  ): Promise<AwarioAlertBindingRecord> {
+    const tx = await this.rds.beginTransaction();
+    try {
+      const before = await this.getAwarioAlertBindingById(bindingId, tx);
+      if (!before) throw new AppStoreError("not_found", "Awario binding not found");
+
+      await this.rds.execute(
+        `
+          UPDATE "public"."AwarioAlertBinding"
+          SET
+            "syncState" = 'active',
+            "backfillCursor" = NULL,
+            "backfillCompletedAt" = NOW(),
+            "lastSyncAt" = NOW(),
+            "lastSyncError" = NULL,
+            "metadata" = CAST(:metadata AS JSONB),
+            "updatedAt" = NOW()
+          WHERE "id" = CAST(:id AS UUID)
+        `,
+        [
+          sqlUuid("id", bindingId),
+          sqlJson("metadata", {
+            ...(before.metadata ?? {}),
+            awario_sync_metrics: metrics
+          })
+        ],
+        { transactionId: tx }
+      );
+
+      const after = await this.getAwarioAlertBindingById(bindingId, tx);
+      if (!after) throw new Error("Failed to parse Awario historical completion");
+
+      await this.appendAudit(
+        {
+          actorUserId: null,
+          action: "awario_backfill_completed",
+          resourceType: "AwarioAlertBinding",
+          resourceId: after.id,
+          requestId,
+          before,
+          after
+        },
+        tx
+      );
+
+      await this.rds.commitTransaction(tx);
+      return after;
+    } catch (error) {
+      await this.rds.rollbackTransaction(tx).catch(() => undefined);
+      throw error;
+    }
+  }
+
+  async markAwarioIncrementalCompleted(
+    bindingId: string,
+    metrics: Record<string, unknown>,
+    requestId?: string
+  ): Promise<AwarioAlertBindingRecord> {
+    const tx = await this.rds.beginTransaction();
+    try {
+      const before = await this.getAwarioAlertBindingById(bindingId, tx);
+      if (!before) throw new AppStoreError("not_found", "Awario binding not found");
+
+      await this.rds.execute(
+        `
+          UPDATE "public"."AwarioAlertBinding"
+          SET
+            "syncState" = CASE WHEN LOWER("status") = 'active' THEN 'active' ELSE "syncState" END,
+            "lastSyncAt" = NOW(),
+            "lastSyncError" = NULL,
+            "metadata" = CAST(:metadata AS JSONB),
+            "updatedAt" = NOW()
+          WHERE "id" = CAST(:id AS UUID)
+        `,
+        [
+          sqlUuid("id", bindingId),
+          sqlJson("metadata", {
+            ...(before.metadata ?? {}),
+            awario_sync_metrics: metrics
+          })
+        ],
+        { transactionId: tx }
+      );
+
+      const after = await this.getAwarioAlertBindingById(bindingId, tx);
+      if (!after) throw new Error("Failed to parse Awario incremental completion");
+
+      await this.appendAudit(
+        {
+          actorUserId: null,
+          action: "awario_incremental_sync_completed",
+          resourceType: "AwarioAlertBinding",
+          resourceId: after.id,
+          requestId,
+          before: {
+            sync_state: before.syncState,
+            last_sync_at: before.lastSyncAt?.toISOString() ?? null
+          },
+          after: {
+            sync_state: after.syncState,
+            last_sync_at: after.lastSyncAt?.toISOString() ?? null,
+            metrics
+          }
+        },
+        tx
+      );
+
+      await this.rds.commitTransaction(tx);
+      return after;
+    } catch (error) {
+      await this.rds.rollbackTransaction(tx).catch(() => undefined);
+      throw error;
+    }
+  }
+
+  async markAwarioSyncFailed(
+    bindingId: string,
+    mode: AwarioSyncMode,
+    errorMessage: string,
+    requestId?: string
+  ): Promise<AwarioAlertBindingRecord> {
+    const tx = await this.rds.beginTransaction();
+    try {
+      const before = await this.getAwarioAlertBindingById(bindingId, tx);
+      if (!before) throw new AppStoreError("not_found", "Awario binding not found");
+
+      const trimmedError = errorMessage.trim().slice(0, 500) || "awario_sync_failed";
+      await this.rds.execute(
+        `
+          UPDATE "public"."AwarioAlertBinding"
+          SET
+            "syncState" = 'error',
+            "lastSyncError" = :last_sync_error,
+            "updatedAt" = NOW()
+          WHERE "id" = CAST(:id AS UUID)
+        `,
+        [sqlUuid("id", bindingId), sqlString("last_sync_error", trimmedError)],
+        { transactionId: tx }
+      );
+
+      const after = await this.getAwarioAlertBindingById(bindingId, tx);
+      if (!after) throw new Error("Failed to parse failed Awario binding");
+
+      await this.appendAudit(
+        {
+          actorUserId: null,
+          action: mode === "historical" ? "awario_backfill_failed" : "awario_incremental_sync_failed",
+          resourceType: "AwarioAlertBinding",
+          resourceId: after.id,
+          requestId,
+          before,
+          after: {
+            ...after,
+            error: trimmedError
+          }
+        },
+        tx
+      );
+
+      await this.rds.commitTransaction(tx);
+      return after;
+    } catch (error) {
+      await this.rds.rollbackTransaction(tx).catch(() => undefined);
       throw error;
     }
   }

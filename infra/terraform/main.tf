@@ -514,6 +514,55 @@ resource "aws_iam_role_policy_attachment" "lambda_social_scheduler_basic" {
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
 }
 
+resource "aws_iam_role" "lambda_awario_sync_worker" {
+  name = "${local.name_prefix}-lambda-awario-sync-worker-role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Action = "sts:AssumeRole"
+        Effect = "Allow"
+        Principal = {
+          Service = "lambda.amazonaws.com"
+        }
+      }
+    ]
+  })
+}
+
+resource "aws_iam_role_policy_attachment" "lambda_awario_sync_worker_basic" {
+  role       = aws_iam_role.lambda_awario_sync_worker.name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+}
+
+resource "aws_iam_role_policy_attachment" "lambda_awario_sync_worker_sqs" {
+  role       = aws_iam_role.lambda_awario_sync_worker.name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaSQSQueueExecutionRole"
+}
+
+resource "aws_iam_role" "lambda_awario_sync_scheduler" {
+  name = "${local.name_prefix}-lambda-awario-sync-scheduler-role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Action = "sts:AssumeRole"
+        Effect = "Allow"
+        Principal = {
+          Service = "lambda.amazonaws.com"
+        }
+      }
+    ]
+  })
+}
+
+resource "aws_iam_role_policy_attachment" "lambda_awario_sync_scheduler_basic" {
+  role       = aws_iam_role.lambda_awario_sync_scheduler.name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+}
+
 resource "aws_iam_role" "lambda_migrations" {
   name = "${local.name_prefix}-lambda-migrations-role"
 
@@ -555,34 +604,40 @@ resource "aws_lambda_function" "api" {
 
   environment {
     variables = {
-      BEDROCK_MODEL_ID             = "us.anthropic.claude-haiku-4-5-20251001-v1:0"
-      APP_ENV                      = var.environment
-      PROVIDER_KEYS_SECRET_ARN     = data.aws_secretsmanager_secret.provider_keys.arn
-      APP_CONFIG_SECRET_ARN        = data.aws_secretsmanager_secret.app_config.arn
-      AWS_CREDENTIALS_SECRET_ARN   = data.aws_secretsmanager_secret.aws_credentials.arn
-      PROVIDER_KEYS_SECRET_NAME    = data.aws_secretsmanager_secret.provider_keys.name
-      APP_CONFIG_SECRET_NAME       = data.aws_secretsmanager_secret.app_config.name
-      AWS_CREDENTIALS_SECRET_NAME  = data.aws_secretsmanager_secret.aws_credentials.name
-      DB_RESOURCE_ARN              = aws_rds_cluster.aurora.arn
-      DB_SECRET_ARN                = data.aws_secretsmanager_secret.database.arn
-      DB_NAME                      = var.db_name
-      INGESTION_STATE_MACHINE_ARN  = aws_sfn_state_machine.ingestion.arn
-      RAW_BUCKET_NAME              = aws_s3_bucket.raw.bucket
-      SOCIAL_RAW_BUCKET_NAME       = var.social_raw_bucket_name
-      SOCIAL_RAW_PREFIX            = var.social_raw_prefix
-      SOCIAL_SCHEDULER_LAMBDA_NAME = aws_lambda_function.social_scheduler.function_name
-      EXPORT_BUCKET_NAME           = aws_s3_bucket.exports.bucket
-      EXPORT_QUEUE_URL             = aws_sqs_queue.export.url
-      INCIDENT_QUEUE_URL           = aws_sqs_queue.incident_evaluation.url
-      REPORT_QUEUE_URL             = aws_sqs_queue.report_generation.url
-      ANALYSIS_QUEUE_URL           = aws_sqs_queue.analysis_generation.url
-      CLASSIFICATION_QUEUE_URL     = aws_sqs_queue.classification_generation.url
-      REPORT_CONFIDENCE_THRESHOLD  = tostring(var.report_confidence_threshold)
-      REPORT_DEFAULT_TIMEZONE      = var.report_default_timezone
-      REPORT_EMAIL_SENDER          = var.ses_sender_email
-      EXPORT_SIGNED_URL_SECONDS    = "900"
-      INGESTION_DEFAULT_TERMS      = var.ingestion_default_terms
-      SOCIAL_ANALYTICS_V2_ENABLED  = "true"
+      BEDROCK_MODEL_ID                        = "us.anthropic.claude-haiku-4-5-20251001-v1:0"
+      APP_ENV                                 = var.environment
+      PROVIDER_KEYS_SECRET_ARN                = data.aws_secretsmanager_secret.provider_keys.arn
+      APP_CONFIG_SECRET_ARN                   = data.aws_secretsmanager_secret.app_config.arn
+      AWS_CREDENTIALS_SECRET_ARN              = data.aws_secretsmanager_secret.aws_credentials.arn
+      PROVIDER_KEYS_SECRET_NAME               = data.aws_secretsmanager_secret.provider_keys.name
+      APP_CONFIG_SECRET_NAME                  = data.aws_secretsmanager_secret.app_config.name
+      AWS_CREDENTIALS_SECRET_NAME             = data.aws_secretsmanager_secret.aws_credentials.name
+      DB_RESOURCE_ARN                         = aws_rds_cluster.aurora.arn
+      DB_SECRET_ARN                           = data.aws_secretsmanager_secret.database.arn
+      DB_NAME                                 = var.db_name
+      INGESTION_STATE_MACHINE_ARN             = aws_sfn_state_machine.ingestion.arn
+      RAW_BUCKET_NAME                         = aws_s3_bucket.raw.bucket
+      SOCIAL_RAW_BUCKET_NAME                  = var.social_raw_bucket_name
+      SOCIAL_RAW_PREFIX                       = var.social_raw_prefix
+      SOCIAL_SCHEDULER_LAMBDA_NAME            = aws_lambda_function.social_scheduler.function_name
+      EXPORT_BUCKET_NAME                      = aws_s3_bucket.exports.bucket
+      EXPORT_QUEUE_URL                        = aws_sqs_queue.export.url
+      INCIDENT_QUEUE_URL                      = aws_sqs_queue.incident_evaluation.url
+      REPORT_QUEUE_URL                        = aws_sqs_queue.report_generation.url
+      ANALYSIS_QUEUE_URL                      = aws_sqs_queue.analysis_generation.url
+      CLASSIFICATION_QUEUE_URL                = aws_sqs_queue.classification_generation.url
+      AWARIO_SYNC_QUEUE_URL                   = aws_sqs_queue.awario_sync.url
+      AWARIO_LINKING_V2                       = "true"
+      AWARIO_BACKFILL_PAGES_PER_INVOCATION    = "20"
+      AWARIO_BACKFILL_MAX_PAGES_TOTAL         = "5000"
+      AWARIO_INCREMENTAL_PAGES_PER_INVOCATION = "10"
+      AWARIO_INCREMENTAL_OVERLAP_MINUTES      = "30"
+      REPORT_CONFIDENCE_THRESHOLD             = tostring(var.report_confidence_threshold)
+      REPORT_DEFAULT_TIMEZONE                 = var.report_default_timezone
+      REPORT_EMAIL_SENDER                     = var.ses_sender_email
+      EXPORT_SIGNED_URL_SECONDS               = "900"
+      INGESTION_DEFAULT_TERMS                 = var.ingestion_default_terms
+      SOCIAL_ANALYTICS_V2_ENABLED             = "true"
     }
   }
 }
@@ -827,6 +882,59 @@ resource "aws_lambda_function" "social_scheduler" {
   }
 }
 
+resource "aws_lambda_function" "awario_sync_worker" {
+  function_name = "${local.name_prefix}-awario-sync-worker"
+  role          = aws_iam_role.lambda_awario_sync_worker.arn
+  runtime       = "nodejs22.x"
+  handler       = "awario/syncWorker.main"
+
+  filename         = var.lambda_package_path
+  source_code_hash = filebase64sha256(var.lambda_package_path)
+
+  timeout     = 300
+  memory_size = 1024
+
+  environment {
+    variables = {
+      APP_ENV                                 = var.environment
+      PROVIDER_KEYS_SECRET_NAME               = data.aws_secretsmanager_secret.provider_keys.name
+      APP_CONFIG_SECRET_NAME                  = data.aws_secretsmanager_secret.app_config.name
+      AWS_CREDENTIALS_SECRET_NAME             = data.aws_secretsmanager_secret.aws_credentials.name
+      DB_RESOURCE_ARN                         = aws_rds_cluster.aurora.arn
+      DB_SECRET_ARN                           = data.aws_secretsmanager_secret.database.arn
+      DB_NAME                                 = var.db_name
+      AWARIO_SYNC_QUEUE_URL                   = aws_sqs_queue.awario_sync.url
+      AWARIO_BACKFILL_PAGES_PER_INVOCATION    = "20"
+      AWARIO_BACKFILL_MAX_PAGES_TOTAL         = "5000"
+      AWARIO_INCREMENTAL_PAGES_PER_INVOCATION = "10"
+      AWARIO_INCREMENTAL_OVERLAP_MINUTES      = "30"
+    }
+  }
+}
+
+resource "aws_lambda_function" "awario_sync_scheduler" {
+  function_name = "${local.name_prefix}-awario-sync-scheduler"
+  role          = aws_iam_role.lambda_awario_sync_scheduler.arn
+  runtime       = "nodejs22.x"
+  handler       = "awario/scheduler.main"
+
+  filename         = var.lambda_package_path
+  source_code_hash = filebase64sha256(var.lambda_package_path)
+
+  timeout     = 120
+  memory_size = 512
+
+  environment {
+    variables = {
+      APP_ENV               = var.environment
+      DB_RESOURCE_ARN       = aws_rds_cluster.aurora.arn
+      DB_SECRET_ARN         = data.aws_secretsmanager_secret.database.arn
+      DB_NAME               = var.db_name
+      AWARIO_SYNC_QUEUE_URL = aws_sqs_queue.awario_sync.url
+    }
+  }
+}
+
 resource "aws_lambda_function" "report_scheduler" {
   function_name = "${local.name_prefix}-report-scheduler"
   role          = aws_iam_role.lambda_report.arn
@@ -999,9 +1107,12 @@ resource "aws_apigatewayv2_route" "private_routes" {
     "GET /v1/config/awario/profiles",
     "POST /v1/config/awario/profiles",
     "PATCH /v1/config/awario/profiles/{id}",
+    "GET /v1/config/awario/alerts",
+    "POST /v1/config/awario/alerts/{alert_id}/link",
     "GET /v1/config/awario/bindings",
     "POST /v1/config/awario/bindings",
     "PATCH /v1/config/awario/bindings/{id}",
+    "POST /v1/config/awario/bindings/{id}/backfill/retry",
     "GET /v1/config/competitors",
     "POST /v1/config/competitors",
     "PATCH /v1/config/competitors/{id}",
@@ -1201,6 +1312,29 @@ resource "aws_lambda_event_source_mapping" "analysis_queue_to_worker" {
   batch_size       = 1
 }
 
+resource "aws_sqs_queue" "awario_sync_dlq" {
+  name                      = "${local.name_prefix}-awario-sync-dlq"
+  message_retention_seconds = 1209600
+  kms_master_key_id         = aws_kms_key.app.arn
+}
+
+resource "aws_sqs_queue" "awario_sync" {
+  name                       = "${local.name_prefix}-awario-sync"
+  visibility_timeout_seconds = 300
+  message_retention_seconds  = 345600
+  kms_master_key_id          = aws_kms_key.app.arn
+  redrive_policy = jsonencode({
+    deadLetterTargetArn = aws_sqs_queue.awario_sync_dlq.arn
+    maxReceiveCount     = 5
+  })
+}
+
+resource "aws_lambda_event_source_mapping" "awario_sync_queue_to_worker" {
+  event_source_arn = aws_sqs_queue.awario_sync.arn
+  function_name    = aws_lambda_function.awario_sync_worker.arn
+  batch_size       = 1
+}
+
 resource "aws_cloudwatch_event_rule" "incident_evaluation_schedule" {
   name                = "${local.name_prefix}-incident-evaluation-every-15m"
   schedule_expression = "rate(15 minutes)"
@@ -1260,6 +1394,29 @@ resource "aws_lambda_permission" "classification_scheduler_eventbridge" {
   function_name = aws_lambda_function.classification_scheduler.function_name
   principal     = "events.amazonaws.com"
   source_arn    = aws_cloudwatch_event_rule.classification_schedule.arn
+}
+
+resource "aws_cloudwatch_event_rule" "awario_sync_schedule" {
+  name                = "${local.name_prefix}-awario-sync-every-15m"
+  schedule_expression = "rate(15 minutes)"
+}
+
+resource "aws_cloudwatch_event_target" "awario_sync_schedule" {
+  rule      = aws_cloudwatch_event_rule.awario_sync_schedule.name
+  target_id = "awario-sync-scheduler-lambda"
+  arn       = aws_lambda_function.awario_sync_scheduler.arn
+  input = jsonencode({
+    trigger_type = "scheduled"
+    requested_at = "eventbridge"
+  })
+}
+
+resource "aws_lambda_permission" "awario_sync_scheduler_eventbridge" {
+  statement_id  = "AllowExecutionFromEventBridgeAwarioSyncScheduler"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.awario_sync_scheduler.function_name
+  principal     = "events.amazonaws.com"
+  source_arn    = aws_cloudwatch_event_rule.awario_sync_schedule.arn
 }
 
 resource "aws_cloudwatch_event_rule" "social_daily_8am_bogota" {

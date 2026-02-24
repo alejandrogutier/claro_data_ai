@@ -36,6 +36,7 @@ const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-
 const CSV_EXPORT_MAX_ROWS = 5000;
 
 const s3 = new AWS.S3({ region: env.awsRegion, signatureVersion: "v4" });
+const sqs = new AWS.SQS({ region: env.awsRegion });
 
 type ConnectorPatchBody = {
   enabled?: unknown;
@@ -57,6 +58,13 @@ type AwarioBindingBody = {
   profile_id?: unknown;
   connector_id?: unknown;
   awario_alert_id?: unknown;
+  status?: unknown;
+  metadata?: unknown;
+};
+
+type AwarioAlertLinkBody = {
+  connector_id?: unknown;
+  alias?: unknown;
   status?: unknown;
   metadata?: unknown;
 };
@@ -323,15 +331,64 @@ const toApiAwarioBinding = (item: AwarioAlertBindingRecord) => ({
   connector_id: item.connectorId,
   awario_alert_id: item.awarioAlertId,
   status: item.status,
+  sync_state: item.syncState,
   validation_status: item.validationStatus,
   last_validated_at: item.lastValidatedAt?.toISOString() ?? null,
   last_validation_error: item.lastValidationError,
+  last_sync_at: item.lastSyncAt?.toISOString() ?? null,
+  last_sync_error: item.lastSyncError,
+  backfill_started_at: item.backfillStartedAt?.toISOString() ?? null,
+  backfill_completed_at: item.backfillCompletedAt?.toISOString() ?? null,
+  backfill_cursor: item.backfillCursor,
   metadata: item.metadata,
   created_by_user_id: item.createdByUserId,
   updated_by_user_id: item.updatedByUserId,
   created_at: item.createdAt.toISOString(),
   updated_at: item.updatedAt.toISOString()
 });
+
+const toApiAwarioRemoteAlert = (item: { alertId: string; name: string | null; isActive: boolean; statusRaw: string | null; fetchedAt: Date }) => ({
+  alert_id: item.alertId,
+  name: item.name,
+  is_active: item.isActive,
+  status_raw: item.statusRaw,
+  fetched_at: item.fetchedAt.toISOString()
+});
+
+const withHeaders = <T extends { headers: Record<string, string> }>(response: T, headers: Record<string, string>): T => ({
+  ...response,
+  headers: {
+    ...response.headers,
+    ...headers
+  }
+});
+
+const withLegacyHeader = <T extends { headers: Record<string, string> }>(response: T, value: string): T =>
+  withHeaders(response, { "X-Legacy-Endpoint": value });
+
+const enqueueAwarioSyncJob = async (payload: {
+  run_id: string;
+  mode: "historical" | "incremental";
+  binding_id: string;
+  request_id?: string | null;
+  cursor?: string | null;
+  window_start?: string | null;
+  window_end?: string | null;
+}): Promise<void> => {
+  if (!env.awarioSyncQueueUrl) {
+    throw new Error("AWARIO_SYNC_QUEUE_URL no configurado");
+  }
+
+  await sqs
+    .sendMessage({
+      QueueUrl: env.awarioSyncQueueUrl,
+      MessageBody: JSON.stringify({
+        ...payload,
+        requested_at: new Date().toISOString()
+      })
+    })
+    .promise();
+};
 
 const sanitizeAuditRecord = (record: AuditRecord, role: UserRole) => {
   const isAdmin = role === "Admin";
@@ -618,71 +675,73 @@ export const listConnectorRuns = async (event: APIGatewayProxyEventV2) => {
 };
 
 export const listAwarioProfiles = async (event: APIGatewayProxyEventV2) => {
+  const respond = (response: ReturnType<typeof json>) => withLegacyHeader(response, "awario_profiles_internal");
   const stores = assertStores();
-  if (stores.error) return stores.error;
+  if (stores.error) return respond(stores.error);
 
   const limit = parseLimit(event.queryStringParameters?.limit, 200, 500);
   if (limit === null) {
-    return json(422, { error: "validation_error", message: "limit debe ser entero entre 1 y 500" });
+    return respond(json(422, { error: "validation_error", message: "limit debe ser entero entre 1 y 500" }));
   }
 
   try {
     const items = await stores.store.listAwarioQueryProfiles(limit);
-    return json(200, { items: items.map(toApiAwarioProfile) });
+    return respond(json(200, { items: items.map(toApiAwarioProfile) }));
   } catch (error) {
-    return mapStoreError(error);
+    return respond(mapStoreError(error));
   }
 };
 
 export const createAwarioProfile = async (event: APIGatewayProxyEventV2) => {
+  const respond = (response: ReturnType<typeof json>) => withLegacyHeader(response, "awario_profiles_internal");
   const role = getRole(event);
   if (!hasRole(role, "Admin")) {
-    return json(403, { error: "forbidden", message: "Solo Admin puede crear perfiles de Awario" });
+    return respond(json(403, { error: "forbidden", message: "Solo Admin puede crear perfiles de Awario" }));
   }
 
   const body = parseBody<AwarioProfileBody>(event);
   if (!body) {
-    return json(400, { error: "invalid_json", message: "Body JSON invalido" });
+    return respond(json(400, { error: "invalid_json", message: "Body JSON invalido" }));
   }
 
   const name = normalizeString(body.name, 2, 180);
   const queryText = normalizeString(body.query_text, 2, 4000);
   if (!name || !queryText) {
-    return json(422, { error: "validation_error", message: "name y query_text son requeridos" });
+    return respond(json(422, { error: "validation_error", message: "name y query_text son requeridos" }));
   }
 
   const sources = normalizeOptionalStringArray(body.sources, 30, 64);
   if (sources === null) {
-    return json(422, { error: "validation_error", message: "sources debe ser arreglo de strings" });
+    return respond(json(422, { error: "validation_error", message: "sources debe ser arreglo de strings" }));
   }
 
   const countries = normalizeOptionalStringArray(body.countries, 80, 8);
   if (countries === null) {
-    return json(422, { error: "validation_error", message: "countries debe ser arreglo de strings" });
+    return respond(json(422, { error: "validation_error", message: "countries debe ser arreglo de strings" }));
   }
 
   const status = normalizeAwarioStatus(body.status);
   if (status === null) {
-    return json(422, { error: "validation_error", message: "status debe ser active|paused|archived" });
+    return respond(json(422, { error: "validation_error", message: "status debe ser active|paused|archived" }));
   }
 
   const objective = normalizeOptionalString(body.objective, 1000);
   if (body.objective !== undefined && objective === undefined) {
-    return json(422, { error: "validation_error", message: "objective invalido" });
+    return respond(json(422, { error: "validation_error", message: "objective invalido" }));
   }
 
   const language = normalizeOptionalString(body.language, 16);
   if (body.language !== undefined && language === undefined) {
-    return json(422, { error: "validation_error", message: "language invalido" });
+    return respond(json(422, { error: "validation_error", message: "language invalido" }));
   }
 
   const metadata = normalizeMetadata(body.metadata);
   if (metadata === null) {
-    return json(422, { error: "validation_error", message: "metadata debe ser objeto JSON" });
+    return respond(json(422, { error: "validation_error", message: "metadata debe ser objeto JSON" }));
   }
 
   const stores = assertStores();
-  if (stores.error) return stores.error;
+  if (stores.error) return respond(stores.error);
 
   try {
     const principal = getAuthPrincipal(event);
@@ -698,83 +757,226 @@ export const createAwarioProfile = async (event: APIGatewayProxyEventV2) => {
       metadata: metadata ?? undefined
     };
     const created = await stores.store.createAwarioQueryProfile(payload, actorUserId, getRequestId(event));
-    return json(201, toApiAwarioProfile(created));
+    return respond(json(201, toApiAwarioProfile(created)));
   } catch (error) {
-    return mapStoreError(error);
+    return respond(mapStoreError(error));
   }
 };
 
 export const patchAwarioProfile = async (event: APIGatewayProxyEventV2) => {
+  const respond = (response: ReturnType<typeof json>) => withLegacyHeader(response, "awario_profiles_internal");
   const role = getRole(event);
   if (!hasRole(role, "Admin")) {
-    return json(403, { error: "forbidden", message: "Solo Admin puede editar perfiles de Awario" });
+    return respond(json(403, { error: "forbidden", message: "Solo Admin puede editar perfiles de Awario" }));
   }
 
   const profileId = getIdFromPath(event, /^\/v1\/config\/awario\/profiles\/([^/]+)$/);
   if (!profileId || !UUID_REGEX.test(profileId)) {
-    return json(422, { error: "validation_error", message: "profile id invalido" });
+    return respond(json(422, { error: "validation_error", message: "profile id invalido" }));
   }
 
   const body = parseBody<AwarioProfileBody>(event);
   if (!body) {
-    return json(400, { error: "invalid_json", message: "Body JSON invalido" });
+    return respond(json(400, { error: "invalid_json", message: "Body JSON invalido" }));
   }
 
   const payload: AwarioQueryProfileUpdateInput = {};
 
   if (body.name !== undefined) {
     const name = normalizeString(body.name, 2, 180);
-    if (!name) return json(422, { error: "validation_error", message: "name invalido" });
+    if (!name) return respond(json(422, { error: "validation_error", message: "name invalido" }));
     payload.name = name;
   }
   if (body.query_text !== undefined) {
     const queryText = normalizeString(body.query_text, 2, 4000);
-    if (!queryText) return json(422, { error: "validation_error", message: "query_text invalido" });
+    if (!queryText) return respond(json(422, { error: "validation_error", message: "query_text invalido" }));
     payload.queryText = queryText;
   }
   if (body.objective !== undefined) {
     const objective = normalizeOptionalString(body.objective, 1000);
-    if (objective === undefined) return json(422, { error: "validation_error", message: "objective invalido" });
+    if (objective === undefined) return respond(json(422, { error: "validation_error", message: "objective invalido" }));
     payload.objective = objective;
   }
   if (body.language !== undefined) {
     const language = normalizeOptionalString(body.language, 16);
-    if (language === undefined) return json(422, { error: "validation_error", message: "language invalido" });
+    if (language === undefined) return respond(json(422, { error: "validation_error", message: "language invalido" }));
     payload.language = language;
   }
   if (body.sources !== undefined) {
     const sources = normalizeOptionalStringArray(body.sources, 30, 64);
-    if (sources === null) return json(422, { error: "validation_error", message: "sources debe ser arreglo de strings" });
+    if (sources === null) return respond(json(422, { error: "validation_error", message: "sources debe ser arreglo de strings" }));
     payload.sources = sources;
   }
   if (body.countries !== undefined) {
     const countries = normalizeOptionalStringArray(body.countries, 80, 8);
-    if (countries === null) return json(422, { error: "validation_error", message: "countries debe ser arreglo de strings" });
+    if (countries === null) return respond(json(422, { error: "validation_error", message: "countries debe ser arreglo de strings" }));
     payload.countries = countries;
   }
   if (body.status !== undefined) {
     const status = normalizeAwarioStatus(body.status);
-    if (status === null) return json(422, { error: "validation_error", message: "status debe ser active|paused|archived" });
+    if (status === null) return respond(json(422, { error: "validation_error", message: "status debe ser active|paused|archived" }));
     payload.status = status;
   }
   if (body.metadata !== undefined) {
     const metadata = normalizeMetadata(body.metadata);
-    if (metadata === null) return json(422, { error: "validation_error", message: "metadata debe ser objeto JSON" });
+    if (metadata === null) return respond(json(422, { error: "validation_error", message: "metadata debe ser objeto JSON" }));
     payload.metadata = metadata;
   }
 
   if (Object.keys(payload).length === 0) {
-    return json(422, { error: "validation_error", message: "No hay campos para actualizar" });
+    return respond(json(422, { error: "validation_error", message: "No hay campos para actualizar" }));
   }
 
   const stores = assertStores();
-  if (stores.error) return stores.error;
+  if (stores.error) return respond(stores.error);
 
   try {
     const principal = getAuthPrincipal(event);
     const actorUserId = await stores.appStore.upsertUserFromPrincipal(principal);
     const updated = await stores.store.updateAwarioQueryProfile(profileId, payload, actorUserId, getRequestId(event));
-    return json(200, toApiAwarioProfile(updated));
+    return respond(json(200, toApiAwarioProfile(updated)));
+  } catch (error) {
+    return respond(mapStoreError(error));
+  }
+};
+
+export const listAwarioAlerts = async (event: APIGatewayProxyEventV2) => {
+  if (!env.awarioLinkingV2Enabled) {
+    return json(404, { error: "not_found", message: "AWARIO_LINKING_V2 disabled" });
+  }
+
+  const stores = assertStores();
+  if (stores.error) return stores.error;
+
+  const limit = parseLimit(event.queryStringParameters?.limit, 100, 500);
+  if (limit === null) {
+    return json(422, { error: "validation_error", message: "limit debe ser entero entre 1 y 500" });
+  }
+
+  const qRaw = event.queryStringParameters?.q;
+  const qCandidate = qRaw === undefined ? undefined : normalizeString(qRaw, 1, 180);
+  if (qRaw !== undefined && !qCandidate) {
+    return json(422, { error: "validation_error", message: "q invalido" });
+  }
+  const q = qCandidate ?? undefined;
+
+  const includeInactive = event.queryStringParameters?.include_inactive === "true";
+
+  try {
+    const alerts = await stores.store.listAwarioRemoteAlerts(
+      {
+        q,
+        includeInactive
+      },
+      limit
+    );
+    return json(200, { items: alerts.map(toApiAwarioRemoteAlert) });
+  } catch (error) {
+    return mapStoreError(error);
+  }
+};
+
+export const linkAwarioAlert = async (event: APIGatewayProxyEventV2) => {
+  if (!env.awarioLinkingV2Enabled) {
+    return json(404, { error: "not_found", message: "AWARIO_LINKING_V2 disabled" });
+  }
+
+  const role = getRole(event);
+  if (!hasRole(role, "Admin")) {
+    return json(403, { error: "forbidden", message: "Solo Admin puede vincular alertas de Awario" });
+  }
+
+  const alertIdRaw = getIdFromPath(event, /^\/v1\/config\/awario\/alerts\/([^/]+)\/link$/);
+  if (!alertIdRaw) {
+    return json(422, { error: "validation_error", message: "alert_id invalido" });
+  }
+  let alertId = alertIdRaw.trim();
+  try {
+    alertId = decodeURIComponent(alertIdRaw).trim();
+  } catch {
+    return json(422, { error: "validation_error", message: "alert_id invalido" });
+  }
+  if (!alertId) {
+    return json(422, { error: "validation_error", message: "alert_id invalido" });
+  }
+
+  const parsedBody = parseBody<AwarioAlertLinkBody>(event);
+  if (event.body && !parsedBody) {
+    return json(400, { error: "invalid_json", message: "Body JSON invalido" });
+  }
+  const body = parsedBody ?? {};
+  const metadata = normalizeMetadata(body.metadata);
+  if (metadata === null) {
+    return json(422, { error: "validation_error", message: "metadata debe ser objeto JSON" });
+  }
+
+  let connectorId: string | null | undefined;
+  if (body.connector_id !== undefined) {
+    if (body.connector_id === null) {
+      connectorId = null;
+    } else {
+      const parsedConnectorId = normalizeString(body.connector_id, 36, 36);
+      if (!parsedConnectorId || !UUID_REGEX.test(parsedConnectorId)) {
+        return json(422, { error: "validation_error", message: "connector_id invalido" });
+      }
+      connectorId = parsedConnectorId;
+    }
+  }
+
+  const alias = body.alias === undefined ? undefined : normalizeOptionalString(body.alias, 180);
+  if (body.alias !== undefined && alias === undefined) {
+    return json(422, { error: "validation_error", message: "alias invalido" });
+  }
+
+  const status = normalizeAwarioStatus(body.status);
+  if (status === null) {
+    return json(422, { error: "validation_error", message: "status debe ser active|paused|archived" });
+  }
+  if (status !== undefined && status !== "active") {
+    return json(422, { error: "validation_error", message: "status debe ser active al vincular para encolar backfill" });
+  }
+
+  const stores = assertStores();
+  if (stores.error) return stores.error;
+
+  if (!env.awarioSyncQueueUrl) {
+    return json(500, { error: "misconfigured", message: "AWARIO_SYNC_QUEUE_URL no configurado" });
+  }
+
+  const requestId = getRequestId(event);
+  const runId = randomUUID();
+
+  try {
+    const principal = getAuthPrincipal(event);
+    const actorUserId = await stores.appStore.upsertUserFromPrincipal(principal);
+    const linkedBinding = await stores.store.linkAwarioAlert(
+      alertId,
+      {
+        connectorId,
+        alias,
+        status,
+        metadata: metadata ?? undefined
+      },
+      actorUserId,
+      requestId
+    );
+    const queuedBinding = await stores.store.queueAwarioBackfill(linkedBinding.id, actorUserId, requestId);
+
+    await enqueueAwarioSyncJob({
+      run_id: runId,
+      mode: "historical",
+      binding_id: queuedBinding.id,
+      request_id: requestId
+    });
+
+    return json(202, {
+      binding: toApiAwarioBinding(queuedBinding),
+      backfill: {
+        run_id: runId,
+        status: "queued",
+        mode: "historical"
+      }
+    });
   } catch (error) {
     return mapStoreError(error);
   }
@@ -930,6 +1132,56 @@ export const patchAwarioBinding = async (event: APIGatewayProxyEventV2) => {
     const actorUserId = await stores.appStore.upsertUserFromPrincipal(principal);
     const updated = await stores.store.updateAwarioAlertBinding(bindingId, payload, actorUserId, getRequestId(event));
     return json(200, toApiAwarioBinding(updated));
+  } catch (error) {
+    return mapStoreError(error);
+  }
+};
+
+export const retryAwarioBindingBackfill = async (event: APIGatewayProxyEventV2) => {
+  if (!env.awarioLinkingV2Enabled) {
+    return json(404, { error: "not_found", message: "AWARIO_LINKING_V2 disabled" });
+  }
+
+  const role = getRole(event);
+  if (!hasRole(role, "Admin")) {
+    return json(403, { error: "forbidden", message: "Solo Admin puede reintentar backfill de Awario" });
+  }
+
+  const bindingId = getIdFromPath(event, /^\/v1\/config\/awario\/bindings\/([^/]+)\/backfill\/retry$/);
+  if (!bindingId || !UUID_REGEX.test(bindingId)) {
+    return json(422, { error: "validation_error", message: "binding id invalido" });
+  }
+
+  const stores = assertStores();
+  if (stores.error) return stores.error;
+
+  if (!env.awarioSyncQueueUrl) {
+    return json(500, { error: "misconfigured", message: "AWARIO_SYNC_QUEUE_URL no configurado" });
+  }
+
+  const requestId = getRequestId(event);
+  const runId = randomUUID();
+
+  try {
+    const principal = getAuthPrincipal(event);
+    const actorUserId = await stores.appStore.upsertUserFromPrincipal(principal);
+    const binding = await stores.store.queueAwarioBackfill(bindingId, actorUserId, requestId);
+
+    await enqueueAwarioSyncJob({
+      run_id: runId,
+      mode: "historical",
+      binding_id: binding.id,
+      request_id: requestId
+    });
+
+    return json(202, {
+      binding: toApiAwarioBinding(binding),
+      backfill: {
+        run_id: runId,
+        status: "queued",
+        mode: "historical"
+      }
+    });
   } catch (error) {
     return mapStoreError(error);
   }

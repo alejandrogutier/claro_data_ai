@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import {
+  type AwarioAlertBinding,
+  type AwarioRemoteAlert,
   ApiError,
   type ConfigQuery,
   type OriginType,
@@ -281,6 +283,14 @@ const formatDateTime = (value: string | null | undefined): string => {
   return parsed.toLocaleString();
 };
 
+const formatBackfillState = (binding: AwarioAlertBinding): string => {
+  if (binding.backfill_completed_at) return "completo";
+  if (binding.sync_state === "backfilling") return "en progreso";
+  if (binding.sync_state === "pending_backfill") return "pendiente";
+  if (binding.sync_state === "error") return "error";
+  return "-";
+};
+
 type OriginSampleItem = {
   origin: OriginType;
   medium: string | null;
@@ -308,6 +318,11 @@ export const TermsPage = () => {
   const client = useApiClient();
   const { session } = useAuth();
   const canMutate = useMemo(() => session?.role === "Admin", [session?.role]);
+  const [configTab, setConfigTab] = useState<"news" | "awario">(() => {
+    if (typeof window === "undefined") return "news";
+    const tab = new URLSearchParams(window.location.search).get("tab");
+    return tab === "awario" ? "awario" : "news";
+  });
 
   const [queries, setQueries] = useState<ConfigQuery[]>([]);
   const [loading, setLoading] = useState(true);
@@ -345,7 +360,20 @@ export const TermsPage = () => {
   const [isManualSyncing, setIsManualSyncing] = useState(false);
   const [manualSyncInfo, setManualSyncInfo] = useState<string | null>(null);
 
+  const [awarioAlerts, setAwarioAlerts] = useState<AwarioRemoteAlert[]>([]);
+  const [awarioBindings, setAwarioBindings] = useState<AwarioAlertBinding[]>([]);
+  const [awarioLoading, setAwarioLoading] = useState(false);
+  const [awarioSearch, setAwarioSearch] = useState("");
+  const [awarioIncludeInactive, setAwarioIncludeInactive] = useState(false);
+  const [awarioInfo, setAwarioInfo] = useState<string | null>(null);
+  const [awarioLinkingAlertId, setAwarioLinkingAlertId] = useState<string | null>(null);
+  const [awarioBindingActionId, setAwarioBindingActionId] = useState<string | null>(null);
+
   const selectedQuery = useMemo(() => queries.find((item) => item.id === selectedId) ?? null, [queries, selectedId]);
+  const linkedAwarioAlertIds = useMemo(
+    () => new Set(awarioBindings.filter((item) => item.status !== "archived").map((item) => item.awario_alert_id)),
+    [awarioBindings]
+  );
   const filteredPreviewSample = useMemo(
     () =>
       (previewResult?.sample ?? []).filter((item) =>
@@ -473,6 +501,28 @@ export const TermsPage = () => {
     }
   };
 
+  const loadAwarioConfig = async () => {
+    setAwarioLoading(true);
+    try {
+      const [alertsResponse, bindingsResponse] = await Promise.all([
+        client.listAwarioAlerts({
+          limit: 200,
+          q: awarioSearch.trim() || undefined,
+          include_inactive: awarioIncludeInactive
+        }),
+        client.listAwarioBindings(200)
+      ]);
+      setAwarioAlerts(alertsResponse.items ?? []);
+      setAwarioBindings(bindingsResponse.items ?? []);
+    } catch (awarioError) {
+      setError((awarioError as Error).message);
+      setAwarioAlerts([]);
+      setAwarioBindings([]);
+    } finally {
+      setAwarioLoading(false);
+    }
+  };
+
   useEffect(() => {
     void loadQueries();
   }, [scopeFilter, statusFilter]);
@@ -484,6 +534,25 @@ export const TermsPage = () => {
 
     return () => window.clearTimeout(timeout);
   }, [searchFilter]);
+
+  useEffect(() => {
+    const timeout = window.setTimeout(() => {
+      void loadAwarioConfig();
+    }, 250);
+
+    return () => window.clearTimeout(timeout);
+  }, [awarioSearch, awarioIncludeInactive]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const url = new URL(window.location.href);
+    if (configTab === "awario") {
+      url.searchParams.set("tab", "awario");
+    } else {
+      url.searchParams.delete("tab");
+    }
+    window.history.replaceState({}, "", url.toString());
+  }, [configTab]);
 
   useEffect(() => {
     if (!selectedQuery) {
@@ -687,16 +756,92 @@ export const TermsPage = () => {
     }
   };
 
+  const onLinkAwarioAlert = async (alertId: string) => {
+    if (!canMutate) return;
+    setAwarioLinkingAlertId(alertId);
+    setError(null);
+    setAwarioInfo(null);
+
+    try {
+      const response = await client.linkAwarioAlert(alertId, {
+        status: "active"
+      });
+      setAwarioInfo(`Alerta vinculada. Backfill encolado: ${response.backfill.run_id}`);
+      await loadAwarioConfig();
+    } catch (linkError) {
+      setError((linkError as Error).message);
+    } finally {
+      setAwarioLinkingAlertId(null);
+    }
+  };
+
+  const onToggleAwarioBindingStatus = async (binding: AwarioAlertBinding) => {
+    if (!canMutate) return;
+    const nextStatus = binding.status === "active" ? "paused" : "active";
+    setAwarioBindingActionId(binding.id);
+    setError(null);
+
+    try {
+      await client.patchAwarioBinding(binding.id, { status: nextStatus });
+      await loadAwarioConfig();
+    } catch (statusError) {
+      setError((statusError as Error).message);
+    } finally {
+      setAwarioBindingActionId(null);
+    }
+  };
+
+  const onRetryAwarioBackfill = async (bindingId: string) => {
+    if (!canMutate) return;
+    setAwarioBindingActionId(bindingId);
+    setError(null);
+    setAwarioInfo(null);
+
+    try {
+      const response = await client.retryAwarioBindingBackfill(bindingId);
+      setAwarioInfo(`Backfill reencolado: ${response.backfill.run_id}`);
+      await loadAwarioConfig();
+    } catch (retryError) {
+      setError((retryError as Error).message);
+    } finally {
+      setAwarioBindingActionId(null);
+    }
+  };
+
   return (
     <section>
       <header className="page-header">
-        <h2>Configurador de Queries (Noticias)</h2>
+        <h2>Configurador de Queries</h2>
         <p>
-          Flujo simplificado: editor rapido para frases + editor avanzado JSON para AND/OR/NOT y facetas.
-          Los cambios quedan en configuracion al guardar y corren en la siguiente ejecucion programada.
+          Gestiona queries de noticias y vinculacion de alertas Awario. Los cambios quedan en configuracion al guardar
+          y corren en la siguiente ejecucion programada.
         </p>
       </header>
 
+      <section className="panel" style={{ marginBottom: 16 }}>
+        <div className="button-row" role="tablist" aria-label="Secciones de configuracion">
+          <button
+            type="button"
+            role="tab"
+            className={configTab === "news" ? "btn btn-primary" : "btn btn-outline"}
+            onClick={() => setConfigTab("news")}
+            aria-selected={configTab === "news"}
+          >
+            Noticias
+          </button>
+          <button
+            type="button"
+            role="tab"
+            className={configTab === "awario" ? "btn btn-primary" : "btn btn-outline"}
+            onClick={() => setConfigTab("awario")}
+            aria-selected={configTab === "awario"}
+          >
+            Awario
+          </button>
+        </div>
+      </section>
+
+      <div style={{ display: configTab === "news" ? "block" : "none" }}>
       {error ? <div className="alert error">{error}</div> : null}
       {!canMutate ? (
         <div className="alert info">Tu rol es {session?.role}. Solo Admin puede guardar, rollback, dry-run y eliminar.</div>
@@ -1320,6 +1465,166 @@ export const TermsPage = () => {
           </details>
         </section>
       ) : null}
+      </div>
+
+      <div style={{ display: configTab === "awario" ? "block" : "none" }}>
+        {error ? <div className="alert error">{error}</div> : null}
+        {!canMutate ? (
+          <div className="alert info">Tu rol es {session?.role}. Solo Admin puede vincular, pausar/reanudar y reintentar backfill.</div>
+        ) : null}
+        {awarioInfo ? <div className="alert info">{awarioInfo}</div> : null}
+
+        <section className="panel">
+          <div className="section-title-row">
+            <h3>Alertas disponibles en Awario</h3>
+            <button className="btn btn-outline" type="button" onClick={() => void loadAwarioConfig()} disabled={awarioLoading}>
+              Recargar
+            </button>
+          </div>
+
+          <div className="form-grid" style={{ gridTemplateColumns: "2fr auto auto", marginTop: 10 }}>
+            <label>
+              Buscar alerta
+              <input
+                value={awarioSearch}
+                onChange={(event) => setAwarioSearch(event.target.value)}
+                placeholder="nombre o alert_id"
+              />
+            </label>
+            <label style={{ display: "flex", gap: 8, alignItems: "end", fontWeight: 600 }}>
+              <input
+                type="checkbox"
+                checked={awarioIncludeInactive}
+                onChange={(event) => setAwarioIncludeInactive(event.target.checked)}
+              />
+              incluir inactivas
+            </label>
+            <div style={{ display: "flex", alignItems: "end" }}>
+              <span className="term-meta">items: {awarioAlerts.length}</span>
+            </div>
+          </div>
+
+          {awarioLoading ? <p style={{ marginTop: 10 }}>Cargando alertas...</p> : null}
+          {!awarioLoading && awarioAlerts.length === 0 ? <p style={{ marginTop: 10 }}>No hay alertas remotas para mostrar.</p> : null}
+
+          {!awarioLoading && awarioAlerts.length > 0 ? (
+            <div className="incident-table-wrapper" style={{ marginTop: 12 }}>
+              <table className="incident-table">
+                <thead>
+                  <tr>
+                    <th>Nombre</th>
+                    <th>alert_id</th>
+                    <th>Estado</th>
+                    <th>Accion</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {awarioAlerts.map((alert) => {
+                    const isLinked = linkedAwarioAlertIds.has(alert.alert_id);
+                    return (
+                      <tr key={alert.alert_id}>
+                        <td>{alert.name ?? "(sin nombre)"}</td>
+                        <td>{alert.alert_id}</td>
+                        <td>{alert.is_active ? "active" : "inactive"}</td>
+                        <td>
+                          {canMutate ? (
+                            <button
+                              className="btn btn-outline"
+                              type="button"
+                              onClick={() => void onLinkAwarioAlert(alert.alert_id)}
+                              disabled={awarioLinkingAlertId === alert.alert_id}
+                            >
+                              {awarioLinkingAlertId === alert.alert_id
+                                ? "Vinculando..."
+                                : isLinked
+                                  ? "Re-vincular"
+                                  : "Vincular"}
+                            </button>
+                          ) : (
+                            <span className="term-meta">{isLinked ? "vinculada" : "-"}</span>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          ) : null}
+        </section>
+
+        <section className="panel" style={{ marginTop: 16 }}>
+          <div className="section-title-row">
+            <h3>Alertas vinculadas</h3>
+            <span className="term-meta">{awarioBindings.length} bindings</span>
+          </div>
+
+          {awarioLoading ? <p>Cargando bindings...</p> : null}
+          {!awarioLoading && awarioBindings.length === 0 ? <p>Sin bindings configurados.</p> : null}
+
+          {!awarioLoading && awarioBindings.length > 0 ? (
+            <div className="incident-table-wrapper" style={{ marginTop: 8 }}>
+              <table className="incident-table">
+                <thead>
+                  <tr>
+                    <th>alert_id</th>
+                    <th>status</th>
+                    <th>sync_state</th>
+                    <th>ultimo sync</th>
+                    <th>backfill</th>
+                    <th>error</th>
+                    <th>acciones</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {awarioBindings.map((binding) => (
+                    <tr key={binding.id}>
+                      <td>{binding.awario_alert_id}</td>
+                      <td>{binding.status}</td>
+                      <td>{binding.sync_state}</td>
+                      <td>{formatDateTime(binding.last_sync_at)}</td>
+                      <td>{formatBackfillState(binding)}</td>
+                      <td>{binding.last_sync_error ?? "-"}</td>
+                      <td>
+                        <div className="button-row">
+                          {canMutate ? (
+                            <button
+                              className="btn btn-outline"
+                              type="button"
+                              onClick={() => void onToggleAwarioBindingStatus(binding)}
+                              disabled={awarioBindingActionId === binding.id}
+                            >
+                              {awarioBindingActionId === binding.id
+                                ? "Actualizando..."
+                                : binding.status === "active"
+                                  ? "Pausar"
+                                  : "Reanudar"}
+                            </button>
+                          ) : null}
+                          {canMutate ? (
+                            <button
+                              className="btn btn-outline"
+                              type="button"
+                              onClick={() => void onRetryAwarioBackfill(binding.id)}
+                              disabled={awarioBindingActionId === binding.id || binding.status !== "active"}
+                            >
+                              Reintentar backfill
+                            </button>
+                          ) : null}
+                        </div>
+                        <details style={{ marginTop: 6 }}>
+                          <summary style={{ cursor: "pointer" }}>Detalle tecnico</summary>
+                          <pre style={{ whiteSpace: "pre-wrap", marginTop: 6 }}>{JSON.stringify(binding.metadata ?? {}, null, 2)}</pre>
+                        </details>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : null}
+        </section>
+      </div>
     </section>
   );
 };

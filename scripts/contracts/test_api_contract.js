@@ -74,6 +74,7 @@ const request = async ({ method, url, token, body }) => {
 
   return {
     status: response.status,
+    headers: Object.fromEntries(response.headers.entries()),
     json,
     raw
   };
@@ -331,6 +332,9 @@ const ensureConfigSurface = async (apiBase, viewerToken, analystToken, adminToke
   });
   assertStatus(awarioProfilesList.status, 200, "GET /v1/config/awario/profiles");
   assertCondition(Array.isArray(awarioProfilesList.json?.items), "awario profiles must return items[]");
+  if ((awarioProfilesList.headers?.["x-legacy-endpoint"] ?? "") !== "awario_profiles_internal") {
+    console.log("[WARN] awario profiles legacy header not present yet");
+  }
 
   const createdProfileResponse = await request({
     method: "POST",
@@ -343,6 +347,9 @@ const ensureConfigSurface = async (apiBase, viewerToken, analystToken, adminToke
     }
   });
   assertStatus(createdProfileResponse.status, 201, "POST /v1/config/awario/profiles");
+  if ((createdProfileResponse.headers?.["x-legacy-endpoint"] ?? "") !== "awario_profiles_internal") {
+    console.log("[WARN] awario profile create legacy header not present yet");
+  }
   const awarioProfileId = createdProfileResponse.json?.id;
   assertCondition(typeof awarioProfileId === "string" && UUID_REGEX.test(awarioProfileId), "awario profile id invalid");
 
@@ -356,6 +363,9 @@ const ensureConfigSurface = async (apiBase, viewerToken, analystToken, adminToke
   });
   assertStatus(patchedProfileResponse.status, 200, "PATCH /v1/config/awario/profiles/{id}");
   assertCondition(patchedProfileResponse.json?.status === "paused", "awario profile status patch mismatch");
+  if ((patchedProfileResponse.headers?.["x-legacy-endpoint"] ?? "") !== "awario_profiles_internal") {
+    console.log("[WARN] awario profile patch legacy header not present yet");
+  }
 
   const awarioBindingsList = await request({
     method: "GET",
@@ -364,6 +374,14 @@ const ensureConfigSurface = async (apiBase, viewerToken, analystToken, adminToke
   });
   assertStatus(awarioBindingsList.status, 200, "GET /v1/config/awario/bindings");
   assertCondition(Array.isArray(awarioBindingsList.json?.items), "awario bindings must return items[]");
+  for (const item of awarioBindingsList.json?.items ?? []) {
+    if (typeof item.sync_state !== "string") {
+      console.log("[WARN] awario binding missing sync_state (deploy pendiente)");
+    }
+    if (!Object.prototype.hasOwnProperty.call(item, "last_sync_at")) {
+      console.log("[WARN] awario binding missing last_sync_at (deploy pendiente)");
+    }
+  }
 
   const createdBindingResponse = await request({
     method: "POST",
@@ -396,6 +414,57 @@ const ensureConfigSurface = async (apiBase, viewerToken, analystToken, adminToke
     });
     assertStatus(patchedBindingResponse.status, 200, "PATCH /v1/config/awario/bindings/{id}");
     assertCondition(patchedBindingResponse.json?.status === "paused", "awario binding status patch mismatch");
+  }
+
+  const awarioAlertsList = await request({
+    method: "GET",
+    url: `${apiBase}/v1/config/awario/alerts?limit=20`,
+    token: viewerToken
+  });
+  if (awarioAlertsList.status === 200) {
+    console.log("[OK] GET /v1/config/awario/alerts -> 200");
+    assertCondition(Array.isArray(awarioAlertsList.json?.items), "awario alerts must return items[]");
+
+    const firstRemoteAlert = awarioAlertsList.json?.items?.[0];
+    if (firstRemoteAlert?.alert_id) {
+      const linkResponse = await request({
+        method: "POST",
+        url: `${apiBase}/v1/config/awario/alerts/${encodeURIComponent(firstRemoteAlert.alert_id)}/link`,
+        token: adminToken,
+        body: {}
+      });
+
+      if (linkResponse.status === 202) {
+        console.log("[OK] POST /v1/config/awario/alerts/{alert_id}/link -> 202");
+        assertCondition(typeof linkResponse.json?.binding?.id === "string", "awario link response missing binding.id");
+        assertCondition(linkResponse.json?.backfill?.status === "queued", "awario link response missing queued status");
+
+        const retryResponse = await request({
+          method: "POST",
+          url: `${apiBase}/v1/config/awario/bindings/${linkResponse.json.binding.id}/backfill/retry`,
+          token: adminToken,
+          body: {}
+        });
+        assertCondition(
+          retryResponse.status === 202 || retryResponse.status === 409,
+          `POST /v1/config/awario/bindings/{id}/backfill/retry expected 202/409, got ${retryResponse.status}`
+        );
+      } else {
+        assertCondition(
+          [404, 409, 422, 500].includes(linkResponse.status),
+          `POST /v1/config/awario/alerts/{alert_id}/link unexpected status ${linkResponse.status}`
+        );
+        console.log(`[WARN] awario link skipped: status ${linkResponse.status}`);
+      }
+    } else {
+      console.log("[WARN] awario link skipped: no remote alerts available");
+    }
+  } else {
+    assertCondition(
+      awarioAlertsList.status === 404 || awarioAlertsList.status === 422 || awarioAlertsList.status === 500,
+      `GET /v1/config/awario/alerts unexpected status ${awarioAlertsList.status}`
+    );
+    console.log(`[WARN] awario alerts skipped: status ${awarioAlertsList.status}`);
   }
 
   const competitorName = `competitor-contract-${Date.now()}`;

@@ -3107,7 +3107,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Listar perfiles internos de query de Awario */
+        /** Listar perfiles internos legacy de Awario */
         get: {
             parameters: {
                 query?: {
@@ -3122,6 +3122,8 @@ export interface paths {
                 /** @description Lista de perfiles */
                 200: {
                     headers: {
+                        /** @description awario_profiles_internal */
+                        "X-Legacy-Endpoint"?: string;
                         [name: string]: unknown;
                     };
                     content: {
@@ -3134,7 +3136,7 @@ export interface paths {
             };
         };
         put?: never;
-        /** Crear perfil interno de query de Awario */
+        /** Crear perfil interno legacy de Awario */
         post: {
             parameters: {
                 query?: never;
@@ -3151,6 +3153,8 @@ export interface paths {
                 /** @description Perfil creado */
                 201: {
                     headers: {
+                        /** @description awario_profiles_internal */
+                        "X-Legacy-Endpoint"?: string;
                         [name: string]: unknown;
                     };
                     content: {
@@ -3182,7 +3186,7 @@ export interface paths {
         delete?: never;
         options?: never;
         head?: never;
-        /** Actualizar perfil interno de query de Awario */
+        /** Actualizar perfil interno legacy de Awario */
         patch: {
             parameters: {
                 query?: never;
@@ -3201,6 +3205,8 @@ export interface paths {
                 /** @description Perfil actualizado */
                 200: {
                     headers: {
+                        /** @description awario_profiles_internal */
+                        "X-Legacy-Endpoint"?: string;
                         [name: string]: unknown;
                     };
                     content: {
@@ -3214,6 +3220,96 @@ export interface paths {
                 422: components["responses"]["ValidationError"];
             };
         };
+        trace?: never;
+    };
+    "/v1/config/awario/alerts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Listar alertas remotas disponibles en Awario */
+        get: {
+            parameters: {
+                query?: {
+                    limit?: number;
+                    q?: string;
+                    include_inactive?: boolean;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Alertas remotas de Awario */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["AwarioRemoteAlertListResponse"];
+                    };
+                };
+                401: components["responses"]["Unauthorized"];
+                403: components["responses"]["Forbidden"];
+                422: components["responses"]["ValidationError"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/config/awario/alerts/{alert_id}/link": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Vincular una alerta remota de Awario y encolar backfill historico */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    alert_id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["LinkAwarioAlertRequest"];
+                };
+            };
+            responses: {
+                /** @description Alerta vinculada y backfill encolado */
+                202: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["LinkAwarioAlertResponse"];
+                    };
+                };
+                401: components["responses"]["Unauthorized"];
+                403: components["responses"]["Forbidden"];
+                404: components["responses"]["NotFound"];
+                409: components["responses"]["Conflict"];
+                422: components["responses"]["ValidationError"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/v1/config/awario/bindings": {
@@ -3330,6 +3426,49 @@ export interface paths {
                 422: components["responses"]["ValidationError"];
             };
         };
+        trace?: never;
+    };
+    "/v1/config/awario/bindings/{id}/backfill/retry": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Reencolar backfill historico para un binding de Awario */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: components["parameters"]["Id"];
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Backfill reencolado */
+                202: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["LinkAwarioAlertResponse"];
+                    };
+                };
+                401: components["responses"]["Unauthorized"];
+                403: components["responses"]["Forbidden"];
+                404: components["responses"]["NotFound"];
+                409: components["responses"]["Conflict"];
+                422: components["responses"]["ValidationError"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/v1/config/competitors": {
@@ -5499,6 +5638,8 @@ export interface components {
         AwarioStatus: "active" | "paused" | "archived";
         /** @enum {string} */
         AwarioValidationStatus: "valid" | "invalid" | "unknown";
+        /** @enum {string} */
+        AwarioSyncState: "pending_backfill" | "backfilling" | "active" | "error" | "paused" | "archived";
         AwarioQueryProfile: {
             /** Format: uuid */
             id: string;
@@ -5558,10 +5699,19 @@ export interface components {
             connector_id?: string | null;
             awario_alert_id: string;
             status: components["schemas"]["AwarioStatus"];
+            sync_state: components["schemas"]["AwarioSyncState"];
             validation_status: components["schemas"]["AwarioValidationStatus"];
             /** Format: date-time */
             last_validated_at?: string | null;
             last_validation_error?: string | null;
+            /** Format: date-time */
+            last_sync_at?: string | null;
+            last_sync_error?: string | null;
+            /** Format: date-time */
+            backfill_started_at?: string | null;
+            /** Format: date-time */
+            backfill_completed_at?: string | null;
+            backfill_cursor?: string | null;
             metadata: {
                 [key: string]: unknown;
             };
@@ -5598,6 +5748,38 @@ export interface components {
             metadata?: {
                 [key: string]: unknown;
             };
+        };
+        AwarioRemoteAlert: {
+            alert_id: string;
+            name?: string | null;
+            is_active: boolean;
+            status_raw?: string | null;
+            /** Format: date-time */
+            fetched_at: string;
+        };
+        AwarioRemoteAlertListResponse: {
+            items: components["schemas"]["AwarioRemoteAlert"][];
+        };
+        LinkAwarioAlertRequest: {
+            /** Format: uuid */
+            connector_id?: string | null;
+            alias?: string | null;
+            status?: components["schemas"]["AwarioStatus"];
+            metadata?: {
+                [key: string]: unknown;
+            };
+        };
+        AwarioBackfillQueued: {
+            /** Format: uuid */
+            run_id: string;
+            /** @enum {string} */
+            status: "queued";
+            /** @enum {string} */
+            mode: "historical";
+        };
+        LinkAwarioAlertResponse: {
+            binding: components["schemas"]["AwarioAlertBinding"];
+            backfill: components["schemas"]["AwarioBackfillQueued"];
         };
         OwnedAccount: {
             /** Format: uuid */

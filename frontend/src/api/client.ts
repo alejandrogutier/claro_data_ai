@@ -58,10 +58,16 @@ export type AwarioQueryProfile = components["schemas"]["AwarioQueryProfile"];
 export type AwarioQueryProfileListResponse = components["schemas"]["AwarioQueryProfileListResponse"];
 export type CreateAwarioQueryProfileRequest = components["schemas"]["CreateAwarioQueryProfileRequest"];
 export type UpdateAwarioQueryProfileRequest = components["schemas"]["UpdateAwarioQueryProfileRequest"];
+export type AwarioSyncState = components["schemas"]["AwarioSyncState"];
 export type AwarioAlertBinding = components["schemas"]["AwarioAlertBinding"];
 export type AwarioAlertBindingListResponse = components["schemas"]["AwarioAlertBindingListResponse"];
 export type CreateAwarioAlertBindingRequest = components["schemas"]["CreateAwarioAlertBindingRequest"];
 export type UpdateAwarioAlertBindingRequest = components["schemas"]["UpdateAwarioAlertBindingRequest"];
+export type AwarioRemoteAlert = components["schemas"]["AwarioRemoteAlert"];
+export type AwarioRemoteAlertListResponse = components["schemas"]["AwarioRemoteAlertListResponse"];
+export type LinkAwarioAlertRequest = components["schemas"]["LinkAwarioAlertRequest"];
+export type AwarioBackfillQueued = components["schemas"]["AwarioBackfillQueued"];
+export type LinkAwarioAlertResponse = components["schemas"]["LinkAwarioAlertResponse"];
 export type OwnedAccount = components["schemas"]["OwnedAccount"];
 export type OwnedAccountListResponse = components["schemas"]["OwnedAccountListResponse"];
 export type CreateOwnedAccountRequest = components["schemas"]["CreateOwnedAccountRequest"];
@@ -877,6 +883,24 @@ export class ApiClient {
     });
   }
 
+  listAwarioAlerts(options: { limit?: number; q?: string; include_inactive?: boolean } = {}): Promise<AwarioRemoteAlertListResponse> {
+    const query = {
+      limit: options.limit ?? 100,
+      q: options.q,
+      include_inactive: options.include_inactive ? "true" : undefined
+    };
+    return this.request<AwarioRemoteAlertListResponse>("/v1/config/awario/alerts", {
+      query
+    });
+  }
+
+  linkAwarioAlert(alertId: string, payload: LinkAwarioAlertRequest = {}): Promise<LinkAwarioAlertResponse> {
+    return this.request<LinkAwarioAlertResponse>(`/v1/config/awario/alerts/${encodeURIComponent(alertId)}/link`, {
+      method: "POST",
+      body: payload
+    });
+  }
+
   createAwarioBinding(payload: CreateAwarioAlertBindingRequest): Promise<AwarioAlertBinding> {
     return this.request<AwarioAlertBinding>("/v1/config/awario/bindings", {
       method: "POST",
@@ -888,6 +912,13 @@ export class ApiClient {
     return this.request<AwarioAlertBinding>(`/v1/config/awario/bindings/${id}`, {
       method: "PATCH",
       body: payload
+    });
+  }
+
+  retryAwarioBindingBackfill(id: string): Promise<LinkAwarioAlertResponse> {
+    return this.request<LinkAwarioAlertResponse>(`/v1/config/awario/bindings/${id}/backfill/retry`, {
+      method: "POST",
+      body: {}
     });
   }
 

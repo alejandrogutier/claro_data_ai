@@ -16,11 +16,17 @@ export type AppEnv = {
   socialAnalyticsV2Enabled: boolean;
   awarioAccessToken?: string;
   awarioCommentsEnabled: boolean;
+  awarioLinkingV2Enabled: boolean;
   awarioSyncWindowDays: number;
   awarioSyncPageLimit: number;
   awarioSyncMaxPagesPerAlert: number;
   awarioSyncThrottleMs: number;
   awarioCommentsReviewThreshold: number;
+  awarioSyncQueueUrl?: string;
+  awarioBackfillPagesPerInvocation: number;
+  awarioBackfillMaxPagesTotal: number;
+  awarioIncrementalPagesPerInvocation: number;
+  awarioIncrementalOverlapMinutes: number;
   exportBucketName?: string;
   exportQueueUrl?: string;
   exportSignedUrlSeconds?: number;
@@ -59,6 +65,7 @@ export const env: AppEnv = {
   socialAnalyticsV2Enabled: ["1", "true", "yes", "on"].includes((process.env.SOCIAL_ANALYTICS_V2_ENABLED ?? "true").toLowerCase()),
   awarioAccessToken: process.env.AWARIO_ACCESS_TOKEN ?? process.env.AWARIO_API_KEY,
   awarioCommentsEnabled: ["1", "true", "yes", "on"].includes((process.env.AWARIO_COMMENTS_ENABLED ?? "false").toLowerCase()),
+  awarioLinkingV2Enabled: !["0", "false", "no", "off"].includes((process.env.AWARIO_LINKING_V2 ?? "true").toLowerCase()),
   awarioSyncWindowDays: process.env.AWARIO_SYNC_WINDOW_DAYS
     ? Number.parseInt(process.env.AWARIO_SYNC_WINDOW_DAYS, 10)
     : 30,
@@ -74,6 +81,19 @@ export const env: AppEnv = {
   awarioCommentsReviewThreshold: process.env.AWARIO_COMMENTS_REVIEW_THRESHOLD
     ? Number.parseFloat(process.env.AWARIO_COMMENTS_REVIEW_THRESHOLD)
     : 0.6,
+  awarioSyncQueueUrl: process.env.AWARIO_SYNC_QUEUE_URL,
+  awarioBackfillPagesPerInvocation: process.env.AWARIO_BACKFILL_PAGES_PER_INVOCATION
+    ? Number.parseInt(process.env.AWARIO_BACKFILL_PAGES_PER_INVOCATION, 10)
+    : 20,
+  awarioBackfillMaxPagesTotal: process.env.AWARIO_BACKFILL_MAX_PAGES_TOTAL
+    ? Number.parseInt(process.env.AWARIO_BACKFILL_MAX_PAGES_TOTAL, 10)
+    : 5000,
+  awarioIncrementalPagesPerInvocation: process.env.AWARIO_INCREMENTAL_PAGES_PER_INVOCATION
+    ? Number.parseInt(process.env.AWARIO_INCREMENTAL_PAGES_PER_INVOCATION, 10)
+    : 10,
+  awarioIncrementalOverlapMinutes: process.env.AWARIO_INCREMENTAL_OVERLAP_MINUTES
+    ? Number.parseInt(process.env.AWARIO_INCREMENTAL_OVERLAP_MINUTES, 10)
+    : 30,
   exportBucketName: process.env.EXPORT_BUCKET_NAME,
   exportQueueUrl: process.env.EXPORT_QUEUE_URL,
   exportSignedUrlSeconds: process.env.EXPORT_SIGNED_URL_SECONDS

@@ -2439,7 +2439,7 @@ paths:
   /v1/config/awario/profiles:
     get:
       tags: [Config]
-      summary: Listar perfiles internos de query de Awario
+      summary: Listar perfiles internos legacy de Awario
       parameters:
         - name: limit
           in: query
@@ -2451,6 +2451,11 @@ paths:
       responses:
         '200':
           description: Lista de perfiles
+          headers:
+            X-Legacy-Endpoint:
+              schema:
+                type: string
+              description: awario_profiles_internal
           content:
             application/json:
               schema:
@@ -2463,7 +2468,7 @@ paths:
           $ref: '#/components/responses/ValidationError'
     post:
       tags: [Config]
-      summary: Crear perfil interno de query de Awario
+      summary: Crear perfil interno legacy de Awario
       requestBody:
         required: true
         content:
@@ -2473,6 +2478,11 @@ paths:
       responses:
         '201':
           description: Perfil creado
+          headers:
+            X-Legacy-Endpoint:
+              schema:
+                type: string
+              description: awario_profiles_internal
           content:
             application/json:
               schema:
@@ -2488,7 +2498,7 @@ paths:
   /v1/config/awario/profiles/{id}:
     patch:
       tags: [Config]
-      summary: Actualizar perfil interno de query de Awario
+      summary: Actualizar perfil interno legacy de Awario
       parameters:
         - $ref: '#/components/parameters/Id'
       requestBody:
@@ -2500,10 +2510,84 @@ paths:
       responses:
         '200':
           description: Perfil actualizado
+          headers:
+            X-Legacy-Endpoint:
+              schema:
+                type: string
+              description: awario_profiles_internal
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/AwarioQueryProfile'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+  /v1/config/awario/alerts:
+    get:
+      tags: [Config]
+      summary: Listar alertas remotas disponibles en Awario
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 500
+            default: 100
+        - name: q
+          in: query
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 180
+        - name: include_inactive
+          in: query
+          schema:
+            type: boolean
+            default: false
+      responses:
+        '200':
+          description: Alertas remotas de Awario
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AwarioRemoteAlertListResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+  /v1/config/awario/alerts/{alert_id}/link:
+    post:
+      tags: [Config]
+      summary: Vincular una alerta remota de Awario y encolar backfill historico
+      parameters:
+        - name: alert_id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LinkAwarioAlertRequest'
+      responses:
+        '202':
+          description: Alerta vinculada y backfill encolado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LinkAwarioAlertResponse'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
@@ -2582,6 +2666,29 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/AwarioAlertBinding'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+  /v1/config/awario/bindings/{id}/backfill/retry:
+    post:
+      tags: [Config]
+      summary: Reencolar backfill historico para un binding de Awario
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      responses:
+        '202':
+          description: Backfill reencolado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LinkAwarioAlertResponse'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
@@ -6467,6 +6574,9 @@ components:
     AwarioValidationStatus:
       type: string
       enum: [valid, invalid, unknown]
+    AwarioSyncState:
+      type: string
+      enum: [pending_backfill, backfilling, active, error, paused, archived]
     AwarioQueryProfile:
       type: object
       required: [id, name, query_text, sources, countries, status, metadata, created_at, updated_at]
@@ -6581,7 +6691,7 @@ components:
     AwarioAlertBinding:
       type: object
       required:
-        [id, profile_id, awario_alert_id, status, validation_status, metadata, created_at, updated_at]
+        [id, profile_id, awario_alert_id, status, sync_state, validation_status, metadata, created_at, updated_at]
       properties:
         id:
           type: string
@@ -6600,6 +6710,8 @@ components:
           type: string
         status:
           $ref: '#/components/schemas/AwarioStatus'
+        sync_state:
+          $ref: '#/components/schemas/AwarioSyncState'
         validation_status:
           $ref: '#/components/schemas/AwarioValidationStatus'
         last_validated_at:
@@ -6607,6 +6719,24 @@ components:
           format: date-time
           nullable: true
         last_validation_error:
+          type: string
+          nullable: true
+        last_sync_at:
+          type: string
+          format: date-time
+          nullable: true
+        last_sync_error:
+          type: string
+          nullable: true
+        backfill_started_at:
+          type: string
+          format: date-time
+          nullable: true
+        backfill_completed_at:
+          type: string
+          format: date-time
+          nullable: true
+        backfill_cursor:
           type: string
           nullable: true
         metadata:
@@ -6671,6 +6801,68 @@ components:
         metadata:
           type: object
           additionalProperties: true
+    AwarioRemoteAlert:
+      type: object
+      required: [alert_id, is_active, fetched_at]
+      properties:
+        alert_id:
+          type: string
+        name:
+          type: string
+          nullable: true
+        is_active:
+          type: boolean
+        status_raw:
+          type: string
+          nullable: true
+        fetched_at:
+          type: string
+          format: date-time
+    AwarioRemoteAlertListResponse:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/AwarioRemoteAlert'
+    LinkAwarioAlertRequest:
+      type: object
+      properties:
+        connector_id:
+          type: string
+          format: uuid
+          nullable: true
+        alias:
+          type: string
+          maxLength: 180
+          nullable: true
+        status:
+          $ref: '#/components/schemas/AwarioStatus'
+        metadata:
+          type: object
+          additionalProperties: true
+    AwarioBackfillQueued:
+      type: object
+      required: [run_id, status, mode]
+      properties:
+        run_id:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum: [queued]
+        mode:
+          type: string
+          enum: [historical]
+    LinkAwarioAlertResponse:
+      type: object
+      required: [binding, backfill]
+      properties:
+        binding:
+          $ref: '#/components/schemas/AwarioAlertBinding'
+        backfill:
+          $ref: '#/components/schemas/AwarioBackfillQueued'
     OwnedAccount:
       type: object
       required: [id, plataforma, handle, nombre_cuenta, idioma, estado, tags_campana, created_at, updated_at]

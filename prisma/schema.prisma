@@ -725,9 +725,15 @@ model AwarioAlertBinding {
   connectorId         String?            @db.Uuid
   awarioAlertId       String
   status              String             @default("active")
+  syncState           String             @default("pending_backfill")
   validationStatus    String             @default("unknown")
   lastValidatedAt     DateTime?
   lastValidationError String?
+  lastSyncAt          DateTime?
+  lastSyncError       String?
+  backfillStartedAt   DateTime?
+  backfillCompletedAt DateTime?
+  backfillCursor      String?
   metadata            Json?
   createdByUserId     String?            @db.Uuid
   updatedByUserId     String?            @db.Uuid
@@ -741,6 +747,9 @@ model AwarioAlertBinding {
   @@unique([profileId, awarioAlertId])
   @@index([connectorId, status])
   @@index([validationStatus, updatedAt])
+  @@index([status, syncState])
+  @@index([backfillCompletedAt])
+  @@index([lastSyncAt])
 }
 
 model OwnedAccount {

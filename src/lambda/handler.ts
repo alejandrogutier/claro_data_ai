@@ -58,6 +58,7 @@ import {
 } from "../routes/v1/monitorSocial";
 import {
   createAwarioBinding,
+  linkAwarioAlert,
   createAwarioProfile,
   createConfigAccount,
   createConfigCompetitor,
@@ -65,6 +66,7 @@ import {
   createTaxonomy,
   exportConfigAudit,
   listConfigAccounts,
+  listAwarioAlerts,
   listAwarioBindings,
   listAwarioProfiles,
   listConfigAudit,
@@ -78,6 +80,7 @@ import {
   patchConfigAccount,
   patchAwarioBinding,
   patchAwarioProfile,
+  retryAwarioBindingBackfill,
   patchConfigCompetitor,
   patchNotificationRecipient,
   patchSourceScoringWeight,
@@ -176,9 +179,12 @@ const roleRules: RoleRule[] = [
   { pattern: /^GET \/v1\/config\/awario\/profiles$/, requiredRole: "Viewer" },
   { pattern: /^POST \/v1\/config\/awario\/profiles$/, requiredRole: "Admin" },
   { pattern: /^PATCH \/v1\/config\/awario\/profiles\/[^/]+$/, requiredRole: "Admin" },
+  { pattern: /^GET \/v1\/config\/awario\/alerts$/, requiredRole: "Viewer" },
+  { pattern: /^POST \/v1\/config\/awario\/alerts\/[^/]+\/link$/, requiredRole: "Admin" },
   { pattern: /^GET \/v1\/config\/awario\/bindings$/, requiredRole: "Viewer" },
   { pattern: /^POST \/v1\/config\/awario\/bindings$/, requiredRole: "Admin" },
   { pattern: /^PATCH \/v1\/config\/awario\/bindings\/[^/]+$/, requiredRole: "Admin" },
+  { pattern: /^POST \/v1\/config\/awario\/bindings\/[^/]+\/backfill\/retry$/, requiredRole: "Admin" },
   { pattern: /^GET \/v1\/config\/competitors$/, requiredRole: "Viewer" },
   { pattern: /^POST \/v1\/config\/competitors$/, requiredRole: "Admin" },
   { pattern: /^PATCH \/v1\/config\/competitors\/[^/]+$/, requiredRole: "Admin" },
@@ -316,9 +322,12 @@ export const main = async (event: APIGatewayProxyEventV2) => {
   if (key === "GET /v1/config/awario/profiles") return listAwarioProfiles(event);
   if (key === "POST /v1/config/awario/profiles") return createAwarioProfile(event);
   if (key.match(/^PATCH \/v1\/config\/awario\/profiles\/[^/]+$/)) return patchAwarioProfile(event);
+  if (key === "GET /v1/config/awario/alerts") return listAwarioAlerts(event);
+  if (key.match(/^POST \/v1\/config\/awario\/alerts\/[^/]+\/link$/)) return linkAwarioAlert(event);
   if (key === "GET /v1/config/awario/bindings") return listAwarioBindings(event);
   if (key === "POST /v1/config/awario/bindings") return createAwarioBinding(event);
   if (key.match(/^PATCH \/v1\/config\/awario\/bindings\/[^/]+$/)) return patchAwarioBinding(event);
+  if (key.match(/^POST \/v1\/config\/awario\/bindings\/[^/]+\/backfill\/retry$/)) return retryAwarioBindingBackfill(event);
   if (key === "GET /v1/config/competitors") return listConfigCompetitors(event);
   if (key === "POST /v1/config/competitors") return createConfigCompetitor(event);
   if (key.match(/^PATCH \/v1\/config\/competitors\/[^/]+$/)) return patchConfigCompetitor(event);

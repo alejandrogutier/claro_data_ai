@@ -46,6 +46,26 @@ export type RunAwarioCommentsSyncInput = {
   reviewThreshold?: number;
 };
 
+export type SyncSingleAwarioBindingInput = {
+  client: AwarioClient;
+  socialStore: SocialStoreLike;
+  binding: AwarioBindingSyncRecord;
+  windowStart?: Date;
+  windowEnd?: Date;
+  maxPages?: number;
+  pageLimit?: number;
+  reviewThreshold?: number;
+  startCursor?: string | null;
+  throwOnError?: boolean;
+};
+
+export type SyncSingleAwarioBindingResult = {
+  metrics: AwarioSyncMetrics;
+  nextCursor: string | null;
+  pagesProcessed: number;
+  completed: boolean;
+};
+
 const STOPWORDS = new Set([
   "el",
   "la",
@@ -225,136 +245,184 @@ const getMentionUrl = (record: AwarioMentionRecord): string | null =>
 const getMentionId = (record: AwarioMentionRecord, fallback: string): string =>
   asString(record.id) ?? asString(record.mention_id) ?? asString(record.mentionId) ?? fallback;
 
-export const runAwarioCommentsSync = async (input: RunAwarioCommentsSyncInput): Promise<AwarioSyncResult> => {
-  const metrics: AwarioSyncMetrics = {
-    fetched: 0,
-    linked: 0,
-    persisted: 0,
-    deduped: 0,
-    skipped_unlinked: 0,
-    flagged_spam: 0,
-    flagged_related: 0,
-    errors: 0
-  };
+const createEmptyMetrics = (): AwarioSyncMetrics => ({
+  fetched: 0,
+  linked: 0,
+  persisted: 0,
+  deduped: 0,
+  skipped_unlinked: 0,
+  flagged_spam: 0,
+  flagged_related: 0,
+  errors: 0
+});
+
+const mergeMetrics = (target: AwarioSyncMetrics, source: AwarioSyncMetrics): void => {
+  target.fetched += source.fetched;
+  target.linked += source.linked;
+  target.persisted += source.persisted;
+  target.deduped += source.deduped;
+  target.skipped_unlinked += source.skipped_unlinked;
+  target.flagged_spam += source.flagged_spam;
+  target.flagged_related += source.flagged_related;
+  target.errors += source.errors;
+};
+
+export const syncAwarioBindingComments = async (input: SyncSingleAwarioBindingInput): Promise<SyncSingleAwarioBindingResult> => {
+  const metrics = createEmptyMetrics();
+
+  const binding = input.binding;
+  if (binding.status.toLowerCase() !== "active" || !binding.awarioAlertId.trim()) {
+    return {
+      metrics,
+      nextCursor: null,
+      pagesProcessed: 0,
+      completed: true
+    };
+  }
 
   const now = new Date();
   const windowEnd = input.windowEnd ?? now;
   const windowStart = input.windowStart ?? new Date(windowEnd.getTime() - 30 * 24 * 60 * 60 * 1000);
-  const maxPagesPerAlert = Math.max(1, input.maxPagesPerAlert ?? 50);
+  const maxPages = Math.max(1, input.maxPages ?? 50);
   const pageLimit = Math.max(1, Math.min(200, input.pageLimit ?? 100));
   const reviewThreshold = clamp(input.reviewThreshold ?? 0.6, 0.45, 0.9);
 
+  let next: string | null = input.startCursor ?? null;
+  let pages = 0;
+
+  try {
+    do {
+      const page = await input.client.listMentionsPage(binding.awarioAlertId, {
+        nextUrl: next,
+        since: windowStart,
+        until: windowEnd,
+        limit: pageLimit
+      });
+
+      pages += 1;
+      next = page.next;
+
+      for (const mention of page.mentions) {
+        metrics.fetched += 1;
+
+        try {
+          const source = asString(mention.source) ?? asString(mention.network) ?? asString(mention.platform);
+          const channel = mapAwarioSourceToChannel(source) as SocialChannel | "unknown";
+          if (channel === "unknown") {
+            metrics.skipped_unlinked += 1;
+            continue;
+          }
+
+          const mentionUrl = getMentionUrl(mention);
+          const idsFromUrl = extractAwarioCommentIdsFromUrl(mentionUrl);
+          const parentExternalPostId =
+            idsFromUrl.parentExternalPostId ??
+            asString(mention.parent_post_id) ??
+            asString(mention.post_id) ??
+            asString(mention.story_fbid);
+
+          if (!parentExternalPostId) {
+            metrics.skipped_unlinked += 1;
+            continue;
+          }
+
+          const normalizedParentUrl = idsFromUrl.normalizedParentUrl ?? normalizeAwarioUrl(mentionUrl);
+
+          const postMatch = await input.socialStore.resolvePostMatchForAwario({
+            channel,
+            parentExternalPostId,
+            normalizedParentUrl
+          });
+
+          if (!postMatch) {
+            metrics.skipped_unlinked += 1;
+            continue;
+          }
+
+          metrics.linked += 1;
+
+          const text = getMentionText(mention);
+          const awarioSentiment = normalizeSentiment(asString(mention.sentiment));
+          const fallbackSentiment = classifySentimentFallback(text);
+          const sentiment = awarioSentiment !== "unknown" ? awarioSentiment : fallbackSentiment.sentiment;
+          const sentimentSource = awarioSentiment !== "unknown" ? "awario" : "model";
+          const sentimentConfidence = awarioSentiment !== "unknown"
+            ? clamp(asNumber(mention.sentiment_confidence) ?? asNumber(mention.confidence) ?? 0.8, 0, 1)
+            : fallbackSentiment.confidence;
+
+          const spamClassification = classifySpam(text, mentionUrl);
+          const relatedClassification = classifyRelatedToPostText(text, postMatch.postText);
+          const confidence = clamp(Math.min(sentimentConfidence, spamClassification.confidence, relatedClassification.confidence), 0, 1);
+          const needsReview = confidence < reviewThreshold;
+
+          if (spamClassification.isSpam) metrics.flagged_spam += 1;
+          if (relatedClassification.related) metrics.flagged_related += 1;
+
+          const mentionIdFallback = `${binding.awarioAlertId}:${parentExternalPostId}:${idsFromUrl.externalCommentId ?? mentionUrl ?? metrics.fetched}`;
+          const awarioMentionId = getMentionId(mention, mentionIdFallback);
+
+          const persisted = await input.socialStore.upsertAwarioComment({
+            socialPostMetricId: postMatch.socialPostMetricId,
+            awarioMentionId,
+            awarioAlertId: binding.awarioAlertId,
+            channel,
+            parentExternalPostId,
+            externalCommentId: idsFromUrl.externalCommentId ?? asString(mention.comment_id),
+            externalReplyCommentId: idsFromUrl.externalReplyCommentId ?? asString(mention.reply_comment_id),
+            commentUrl: mentionUrl,
+            authorName: getAuthorName(mention),
+            authorProfileUrl: getAuthorProfileUrl(mention),
+            publishedAt: asDate(mention.published_at) ?? asDate(mention.date) ?? asDate(mention.created_at),
+            text,
+            sentiment,
+            sentimentSource,
+            isSpam: spamClassification.isSpam,
+            relatedToPostText: relatedClassification.related,
+            needsReview,
+            confidence,
+            rawPayload: mention
+          });
+
+          if (persisted.status === "persisted") metrics.persisted += 1;
+          else metrics.deduped += 1;
+        } catch {
+          metrics.errors += 1;
+        }
+      }
+
+      if (pages >= maxPages) break;
+    } while (next);
+  } catch (error) {
+    if (input.throwOnError) {
+      throw error;
+    }
+    metrics.errors += 1;
+  }
+
+  return {
+    metrics,
+    nextCursor: next,
+    pagesProcessed: pages,
+    completed: !next
+  };
+};
+
+export const runAwarioCommentsSync = async (input: RunAwarioCommentsSyncInput): Promise<AwarioSyncResult> => {
+  const metrics = createEmptyMetrics();
   const activeBindings = input.bindings.filter((binding) => binding.status.toLowerCase() === "active" && binding.awarioAlertId.trim());
 
   for (const binding of activeBindings) {
-    let next: string | null = null;
-    let pages = 0;
-
-    try {
-      do {
-        const page = await input.client.listMentionsPage(binding.awarioAlertId, {
-          nextUrl: next,
-          since: windowStart,
-          until: windowEnd,
-          limit: pageLimit
-        });
-
-        pages += 1;
-        next = page.next;
-
-        for (const mention of page.mentions) {
-          metrics.fetched += 1;
-
-          try {
-            const source = asString(mention.source) ?? asString(mention.network) ?? asString(mention.platform);
-            const channel = mapAwarioSourceToChannel(source) as SocialChannel | "unknown";
-            if (channel === "unknown") {
-              metrics.skipped_unlinked += 1;
-              continue;
-            }
-
-            const mentionUrl = getMentionUrl(mention);
-            const idsFromUrl = extractAwarioCommentIdsFromUrl(mentionUrl);
-            const parentExternalPostId =
-              idsFromUrl.parentExternalPostId ??
-              asString(mention.parent_post_id) ??
-              asString(mention.post_id) ??
-              asString(mention.story_fbid);
-
-            if (!parentExternalPostId) {
-              metrics.skipped_unlinked += 1;
-              continue;
-            }
-
-            const normalizedParentUrl = idsFromUrl.normalizedParentUrl ?? normalizeAwarioUrl(mentionUrl);
-
-            const postMatch = await input.socialStore.resolvePostMatchForAwario({
-              channel,
-              parentExternalPostId,
-              normalizedParentUrl
-            });
-
-            if (!postMatch) {
-              metrics.skipped_unlinked += 1;
-              continue;
-            }
-
-            metrics.linked += 1;
-
-            const text = getMentionText(mention);
-            const awarioSentiment = normalizeSentiment(asString(mention.sentiment));
-            const fallbackSentiment = classifySentimentFallback(text);
-            const sentiment = awarioSentiment !== "unknown" ? awarioSentiment : fallbackSentiment.sentiment;
-            const sentimentSource = awarioSentiment !== "unknown" ? "awario" : "model";
-            const sentimentConfidence = awarioSentiment !== "unknown"
-              ? clamp(asNumber(mention.sentiment_confidence) ?? asNumber(mention.confidence) ?? 0.8, 0, 1)
-              : fallbackSentiment.confidence;
-
-            const spamClassification = classifySpam(text, mentionUrl);
-            const relatedClassification = classifyRelatedToPostText(text, postMatch.postText);
-            const confidence = clamp(Math.min(sentimentConfidence, spamClassification.confidence, relatedClassification.confidence), 0, 1);
-            const needsReview = confidence < reviewThreshold;
-
-            if (spamClassification.isSpam) metrics.flagged_spam += 1;
-            if (relatedClassification.related) metrics.flagged_related += 1;
-
-            const mentionIdFallback = `${binding.awarioAlertId}:${parentExternalPostId}:${idsFromUrl.externalCommentId ?? mentionUrl ?? metrics.fetched}`;
-            const awarioMentionId = getMentionId(mention, mentionIdFallback);
-
-            const persisted = await input.socialStore.upsertAwarioComment({
-              socialPostMetricId: postMatch.socialPostMetricId,
-              awarioMentionId,
-              awarioAlertId: binding.awarioAlertId,
-              channel,
-              parentExternalPostId,
-              externalCommentId: idsFromUrl.externalCommentId ?? asString(mention.comment_id),
-              externalReplyCommentId: idsFromUrl.externalReplyCommentId ?? asString(mention.reply_comment_id),
-              commentUrl: mentionUrl,
-              authorName: getAuthorName(mention),
-              authorProfileUrl: getAuthorProfileUrl(mention),
-              publishedAt: asDate(mention.published_at) ?? asDate(mention.date) ?? asDate(mention.created_at),
-              text,
-              sentiment,
-              sentimentSource,
-              isSpam: spamClassification.isSpam,
-              relatedToPostText: relatedClassification.related,
-              needsReview,
-              confidence,
-              rawPayload: mention
-            });
-
-            if (persisted.status === "persisted") metrics.persisted += 1;
-            else metrics.deduped += 1;
-          } catch {
-            metrics.errors += 1;
-          }
-        }
-
-        if (pages >= maxPagesPerAlert) break;
-      } while (next);
-    } catch {
-      metrics.errors += 1;
-    }
+    const result = await syncAwarioBindingComments({
+      client: input.client,
+      socialStore: input.socialStore,
+      binding,
+      windowStart: input.windowStart,
+      windowEnd: input.windowEnd,
+      maxPages: input.maxPagesPerAlert,
+      pageLimit: input.pageLimit,
+      reviewThreshold: input.reviewThreshold
+    });
+    mergeMetrics(metrics, result.metrics);
   }
 
   return { metrics };
