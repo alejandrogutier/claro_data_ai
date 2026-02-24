@@ -58,9 +58,29 @@ type AxisSide = "left" | "right";
 type MonitorSocialUiError = "none" | "permission_denied" | "error_retriable";
 
 type NumberFormatMode = "number" | "percent" | "score";
-type AccountMetric = "er_ponderado" | "exposure_total" | "engagement_total" | "posts" | "sov_interno";
-type MixMetric = "posts" | "exposure_total" | "engagement_total" | "er_global" | "riesgo_activo" | "sov_interno";
-type TrendMetric = "posts" | "exposure_total" | "engagement_total" | "er_global" | "riesgo_activo" | "shs";
+type BaseMetricTotal =
+  | "impressions_total"
+  | "reach_total"
+  | "clicks_total"
+  | "likes_total"
+  | "comments_total"
+  | "shares_total"
+  | "views_total";
+type DerivedMetricRate = "ctr" | "er_impressions" | "er_reach" | "view_rate" | "likes_share" | "comments_share" | "shares_share";
+type TrendMetric = "posts" | "exposure_total" | "engagement_total" | BaseMetricTotal | "er_global" | DerivedMetricRate | "riesgo_activo" | "shs";
+type MixMetric = "posts" | "exposure_total" | "engagement_total" | BaseMetricTotal | "er_global" | DerivedMetricRate | "riesgo_activo" | "sov_interno";
+type AccountMetric =
+  | "posts"
+  | "exposure_total"
+  | "engagement_total"
+  | BaseMetricTotal
+  | "er_ponderado"
+  | DerivedMetricRate
+  | "riesgo_activo"
+  | "sov_interno";
+type ScatterMetric = "posts" | "exposure_total" | "engagement_total" | BaseMetricTotal | "er_global" | DerivedMetricRate;
+type BreakdownMetric = "posts" | "exposure_total" | "engagement_total" | BaseMetricTotal | "er_global" | DerivedMetricRate;
+type SecondaryKpiMetric = BaseMetricTotal | DerivedMetricRate;
 
 type KpiCard = {
   id: string;
@@ -126,7 +146,22 @@ const METRIC_META: Record<string, { label: string; format: NumberFormatMode }> =
   posts: { label: "Posts", format: "number" },
   exposure_total: { label: "Exposición", format: "number" },
   engagement_total: { label: "Interacciones", format: "number" },
+  impressions_total: { label: "Impresiones", format: "number" },
+  reach_total: { label: "Reach", format: "number" },
+  clicks_total: { label: "Clicks", format: "number" },
+  likes_total: { label: "Likes", format: "number" },
+  comments_total: { label: "Comments", format: "number" },
+  shares_total: { label: "Shares", format: "number" },
+  views_total: { label: "Views", format: "number" },
   er_global: { label: "ER", format: "percent" },
+  ctr: { label: "CTR", format: "percent" },
+  er_impressions: { label: "ER por impresiones", format: "percent" },
+  er_reach: { label: "ER por reach", format: "percent" },
+  view_rate: { label: "View rate", format: "percent" },
+  likes_share: { label: "Mix likes", format: "percent" },
+  comments_share: { label: "Mix comments", format: "percent" },
+  shares_share: { label: "Mix shares", format: "percent" },
+  sentimiento_neto: { label: "Sentimiento neto", format: "percent" },
   riesgo_activo: { label: "Riesgo", format: "percent" },
   shs: { label: "SHS", format: "score" },
   sov_interno: { label: "SOV interno", format: "percent" },
@@ -136,9 +171,128 @@ const METRIC_META: Record<string, { label: string; format: NumberFormatMode }> =
   gap: { label: "Gap ER", format: "percent" }
 };
 
-const TREND_METRICS: TrendMetric[] = ["posts", "exposure_total", "engagement_total", "er_global", "riesgo_activo", "shs"];
-const MIX_METRICS: MixMetric[] = ["posts", "exposure_total", "engagement_total", "er_global", "riesgo_activo", "sov_interno"];
-const ACCOUNT_METRICS: AccountMetric[] = ["er_ponderado", "exposure_total", "engagement_total", "posts", "sov_interno"];
+const TREND_METRICS: TrendMetric[] = [
+  "posts",
+  "exposure_total",
+  "engagement_total",
+  "impressions_total",
+  "reach_total",
+  "clicks_total",
+  "likes_total",
+  "comments_total",
+  "shares_total",
+  "views_total",
+  "er_global",
+  "ctr",
+  "er_impressions",
+  "er_reach",
+  "view_rate",
+  "likes_share",
+  "comments_share",
+  "shares_share",
+  "riesgo_activo",
+  "shs"
+];
+const MIX_METRICS: MixMetric[] = [
+  "posts",
+  "exposure_total",
+  "engagement_total",
+  "impressions_total",
+  "reach_total",
+  "clicks_total",
+  "likes_total",
+  "comments_total",
+  "shares_total",
+  "views_total",
+  "er_global",
+  "ctr",
+  "er_impressions",
+  "er_reach",
+  "view_rate",
+  "likes_share",
+  "comments_share",
+  "shares_share",
+  "riesgo_activo",
+  "sov_interno"
+];
+const ACCOUNT_METRICS: AccountMetric[] = [
+  "er_ponderado",
+  "posts",
+  "exposure_total",
+  "engagement_total",
+  "impressions_total",
+  "reach_total",
+  "clicks_total",
+  "likes_total",
+  "comments_total",
+  "shares_total",
+  "views_total",
+  "ctr",
+  "er_impressions",
+  "er_reach",
+  "view_rate",
+  "likes_share",
+  "comments_share",
+  "shares_share",
+  "riesgo_activo",
+  "sov_interno"
+];
+const SCATTER_METRICS: ScatterMetric[] = [
+  "exposure_total",
+  "engagement_total",
+  "impressions_total",
+  "reach_total",
+  "clicks_total",
+  "likes_total",
+  "comments_total",
+  "shares_total",
+  "views_total",
+  "er_global",
+  "ctr",
+  "er_impressions",
+  "er_reach",
+  "view_rate",
+  "likes_share",
+  "comments_share",
+  "shares_share",
+  "posts"
+];
+const BREAKDOWN_METRICS: BreakdownMetric[] = [
+  "er_global",
+  "ctr",
+  "er_impressions",
+  "er_reach",
+  "view_rate",
+  "likes_share",
+  "comments_share",
+  "shares_share",
+  "exposure_total",
+  "engagement_total",
+  "impressions_total",
+  "reach_total",
+  "clicks_total",
+  "likes_total",
+  "comments_total",
+  "shares_total",
+  "views_total",
+  "posts"
+];
+const SECONDARY_KPI_METRICS: SecondaryKpiMetric[] = [
+  "impressions_total",
+  "reach_total",
+  "clicks_total",
+  "likes_total",
+  "comments_total",
+  "shares_total",
+  "views_total",
+  "ctr",
+  "er_impressions",
+  "er_reach",
+  "view_rate",
+  "likes_share",
+  "comments_share",
+  "shares_share"
+];
 
 const formatNumber = (value: number): string => new Intl.NumberFormat("es-CO", { maximumFractionDigits: 0 }).format(value);
 const formatPercent = (value: number): string => `${new Intl.NumberFormat("es-CO", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(value)}%`;
@@ -334,10 +488,27 @@ const CHART_QUESTION_BY_KEY: Record<string, string> = {
   mix: "¿Qué responde?: ¿Qué canal aporta más y cómo se comporta su segunda métrica?",
   ranking: "¿Qué responde?: ¿Qué cuentas lideran según las métricas seleccionadas?",
   gap: "¿Qué responde?: ¿Qué tan lejos está cada canal de su meta ER?",
-  scatter: "¿Qué responde?: ¿Qué grupos combinan mayor exposición con mejor ER?",
+  scatter: "¿Qué responde?: ¿Qué grupos destacan al cruzar dos métricas seleccionadas?",
   heatmap: "¿Qué responde?: ¿Qué días y meses concentran mejor rendimiento?",
-  breakdown: "¿Qué responde?: ¿Qué dimensión explica mejor variaciones del ER?",
+  breakdown: "¿Qué responde?: ¿Qué dimensión explica mejor la métrica seleccionada?",
   share: "¿Qué responde?: ¿Cómo se distribuye el SOV interno entre cuentas?"
+};
+
+const toHeatmapMetricKey = (metric: SocialHeatmapMetric | undefined): string => {
+  if (metric === "er") return "er_global";
+  if (metric === "engagement_total") return "engagement_total";
+  if (metric === "likes") return "likes_total";
+  if (metric === "comments") return "comments_total";
+  if (metric === "shares") return "shares_total";
+  if (metric === "views") return "views_total";
+  if (metric === "view_rate") return "view_rate";
+  if (metric === "impressions") return "impressions_total";
+  if (metric === "reach") return "reach_total";
+  if (metric === "clicks") return "clicks_total";
+  if (metric === "ctr") return "ctr";
+  if (metric === "er_impressions") return "er_impressions";
+  if (metric === "er_reach") return "er_reach";
+  return "engagement_total";
 };
 
 const toDeltaClass = (value: number): string => {
@@ -527,7 +698,7 @@ const Heatmap = ({ data }: { data: MonitorSocialHeatmapResponse | null }) => {
   const [hovered, setHovered] = useState<{ label: string; value: number; posts: number; x: number; y: number } | null>(null);
 
   const byKey = new Map((data?.items ?? []).map((item) => [`${item.month}-${item.weekday}`, item]));
-  const tooltipMetric = data?.metric === "er" || data?.metric === "view_rate" ? "er_global" : "engagement_total";
+  const tooltipMetric = toHeatmapMetricKey(data?.metric);
 
   const toColor = (value: number) => {
     const ratio = (value - min) / Math.max(max - min, 0.0001);
@@ -670,7 +841,10 @@ export const MonitorSocialOverviewPage = () => {
 
   const [heatmapMetric, setHeatmapMetric] = useState<SocialHeatmapMetric>("er");
   const [scatterDimension, setScatterDimension] = useState<SocialScatterDimension>("channel");
+  const [scatterXMetric, setScatterXMetric] = useState<ScatterMetric>("exposure_total");
+  const [scatterYMetric, setScatterYMetric] = useState<ScatterMetric>("er_global");
   const [breakdownDimension, setBreakdownDimension] = useState<SocialErBreakdownDimension>("post_type");
+  const [breakdownMetric, setBreakdownMetric] = useState<BreakdownMetric>("er_global");
 
   const [trendLeftMetric, setTrendLeftMetric] = useState<TrendMetric>("exposure_total");
   const [trendRightMetric, setTrendRightMetric] = useState<TrendMetric>("er_global");
@@ -1258,7 +1432,21 @@ export const MonitorSocialOverviewPage = () => {
         posts: Number(item.posts ?? 0),
         exposure_total: Number(item.exposure_total ?? 0),
         engagement_total: Number(item.engagement_total ?? 0),
+        impressions_total: Number(item.impressions_total ?? 0),
+        reach_total: Number(item.reach_total ?? 0),
+        clicks_total: Number(item.clicks_total ?? 0),
+        likes_total: Number(item.likes_total ?? 0),
+        comments_total: Number(item.comments_total ?? 0),
+        shares_total: Number(item.shares_total ?? 0),
+        views_total: Number(item.views_total ?? 0),
         er_global: Number(item.er_global ?? 0),
+        ctr: Number(item.ctr ?? 0),
+        er_impressions: Number(item.er_impressions ?? 0),
+        er_reach: Number(item.er_reach ?? 0),
+        view_rate: Number(item.view_rate ?? 0),
+        likes_share: Number(item.likes_share ?? 0),
+        comments_share: Number(item.comments_share ?? 0),
+        shares_share: Number(item.shares_share ?? 0),
         riesgo_activo: Number(item.riesgo_activo ?? 0),
         shs: Number(item.shs ?? 0)
       }));
@@ -1273,7 +1461,21 @@ export const MonitorSocialOverviewPage = () => {
         posts: Number(item.posts ?? 0),
         exposure_total: Number(item.exposure_total ?? 0),
         engagement_total: Number(item.engagement_total ?? 0),
+        impressions_total: Number(item.impressions_total ?? 0),
+        reach_total: Number(item.reach_total ?? 0),
+        clicks_total: Number(item.clicks_total ?? 0),
+        likes_total: Number(item.likes_total ?? 0),
+        comments_total: Number(item.comments_total ?? 0),
+        shares_total: Number(item.shares_total ?? 0),
+        views_total: Number(item.views_total ?? 0),
         er_global: Number(item.er_global ?? 0),
+        ctr: Number(item.ctr ?? 0),
+        er_impressions: Number(item.er_impressions ?? 0),
+        er_reach: Number(item.er_reach ?? 0),
+        view_rate: Number(item.view_rate ?? 0),
+        likes_share: Number(item.likes_share ?? 0),
+        comments_share: Number(item.comments_share ?? 0),
+        shares_share: Number(item.shares_share ?? 0),
         riesgo_activo: Number(item.riesgo_activo ?? 0),
         sov_interno: Number(item.sov_interno ?? 0)
       })),
@@ -1345,10 +1547,25 @@ export const MonitorSocialOverviewPage = () => {
       .slice(0, 10)
       .map((item) => ({
         account_name: item.account_name,
-        er_ponderado: Number(item.er_ponderado ?? 0),
+        posts: Number(item.posts ?? 0),
         exposure_total: Number(item.exposure_total ?? 0),
         engagement_total: Number(item.engagement_total ?? 0),
-        posts: Number(item.posts ?? 0),
+        impressions_total: Number(item.impressions_total ?? 0),
+        reach_total: Number(item.reach_total ?? 0),
+        clicks_total: Number(item.clicks_total ?? 0),
+        likes_total: Number(item.likes_total ?? 0),
+        comments_total: Number(item.comments_total ?? 0),
+        shares_total: Number(item.shares_total ?? 0),
+        views_total: Number(item.views_total ?? 0),
+        er_ponderado: Number(item.er_ponderado ?? 0),
+        ctr: Number(item.ctr ?? 0),
+        er_impressions: Number(item.er_impressions ?? 0),
+        er_reach: Number(item.er_reach ?? 0),
+        view_rate: Number(item.view_rate ?? 0),
+        likes_share: Number(item.likes_share ?? 0),
+        comments_share: Number(item.comments_share ?? 0),
+        shares_share: Number(item.shares_share ?? 0),
+        riesgo_activo: Number(item.riesgo_activo ?? 0),
         sov_interno: Number(item.sov_interno ?? 0)
       }));
     return rows;
@@ -1448,9 +1665,21 @@ export const MonitorSocialOverviewPage = () => {
     return Array.from(new Set(metrics));
   }, [mixBarAxis, mixLineAxis, mixBarMetric, mixLineMetric]);
 
+  const breakdownChartData = useMemo(
+    () =>
+      [...(breakdownData?.items ?? [])]
+        .map((item) => ({
+          ...item,
+          metric_value: Number(item[breakdownMetric] ?? 0)
+        }))
+        .sort((a, b) => Number(b.metric_value) - Number(a.metric_value) || Number(b.posts) - Number(a.posts))
+        .slice(0, 100),
+    [breakdownData, breakdownMetric]
+  );
+
   const breakdownScale = useMemo(
-    () => resolveScale(breakdownScaleMode, (breakdownData?.items ?? []).map((item) => item.er_global)),
-    [breakdownScaleMode, breakdownData]
+    () => resolveScale(breakdownScaleMode, breakdownChartData.map((item) => Number(item.metric_value))),
+    [breakdownScaleMode, breakdownChartData]
   );
 
   const sovPieData = useMemo(() => {
@@ -1463,17 +1692,42 @@ export const MonitorSocialOverviewPage = () => {
 
   const pieColors = ["#e30613", "#1d4ed8", "#0f766e", "#f59f00", "#9333ea", "#64748b"];
 
+  const scatterValues = useMemo(() => {
+    const xValues = (scatterData?.items ?? []).map((item) => Number(item[scatterXMetric] ?? 0));
+    const yValues = (scatterData?.items ?? []).map((item) => Number(item[scatterYMetric] ?? 0));
+    return { xValues, yValues };
+  }, [scatterData, scatterXMetric, scatterYMetric]);
+
+  const scatterXScale = useMemo(() => resolveScale("auto", scatterValues.xValues), [scatterValues.xValues]);
+  const scatterYScale = useMemo(() => resolveScale("auto", scatterValues.yValues), [scatterValues.yValues]);
+
   const scatterChartData = useMemo(
     () =>
       (scatterData?.items ?? []).map((item) => ({
         label: item.label,
+        posts: Number(item.posts ?? 0),
         exposure_total: Number(item.exposure_total ?? 0),
         engagement_total: Number(item.engagement_total ?? 0),
+        impressions_total: Number(item.impressions_total ?? 0),
+        reach_total: Number(item.reach_total ?? 0),
+        clicks_total: Number(item.clicks_total ?? 0),
+        likes_total: Number(item.likes_total ?? 0),
+        comments_total: Number(item.comments_total ?? 0),
+        shares_total: Number(item.shares_total ?? 0),
+        views_total: Number(item.views_total ?? 0),
         er_global: Number(item.er_global ?? 0),
-        posts: Number(item.posts ?? 0),
+        ctr: Number(item.ctr ?? 0),
+        er_impressions: Number(item.er_impressions ?? 0),
+        er_reach: Number(item.er_reach ?? 0),
+        view_rate: Number(item.view_rate ?? 0),
+        likes_share: Number(item.likes_share ?? 0),
+        comments_share: Number(item.comments_share ?? 0),
+        shares_share: Number(item.shares_share ?? 0),
+        x_value: Number(item[scatterXMetric] ?? 0),
+        y_value: Number(item[scatterYMetric] ?? 0),
         z: Math.max(1, Number(item.posts ?? 0))
       })),
-    [scatterData]
+    [scatterData, scatterXMetric, scatterYMetric]
   );
 
   const riskTopChannels = useMemo(
@@ -1586,6 +1840,23 @@ export const MonitorSocialOverviewPage = () => {
       }
     ];
   }, [normalizedOverview, targetErGlobal, overview]);
+
+  const secondaryKpis = useMemo(
+    () =>
+      SECONDARY_KPI_METRICS.map((metric) => {
+        const current = Number(normalizedOverview.kpis?.[metric] ?? 0);
+        const previous = Number(normalizedOverview.previous_period?.[metric] ?? 0);
+        const delta = current - previous;
+        return {
+          metric,
+          label: METRIC_META[metric]?.label ?? metric,
+          value: formatMetricValue(metric, current),
+          delta,
+          deltaLabel: `${delta >= 0 ? "+" : ""}${formatMetricValue(metric, delta)}`
+        };
+      }),
+    [normalizedOverview]
+  );
 
   return (
     <section className="space-y-4">
@@ -1878,6 +2149,16 @@ export const MonitorSocialOverviewPage = () => {
                 <p className="truncate text-xs text-slate-600">Periodo anterior: {card.previous}</p>
                 <p className="mt-1 truncate text-xs text-slate-600">{card.goal}</p>
                 <p className={`mt-1 truncate text-xs font-semibold ${card.statusClass}`}>{card.status}</p>
+              </article>
+            ))}
+          </section>
+
+          <section className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7">
+            {secondaryKpis.map((item) => (
+              <article key={item.metric} className="min-w-0 rounded-xl border border-slate-200 bg-white px-3 py-2 shadow-panel">
+                <p className="truncate text-[11px] font-semibold uppercase tracking-wide text-slate-500">{item.label}</p>
+                <p className="mt-1 text-base font-bold text-slate-900">{item.value}</p>
+                <p className={`mt-0.5 text-[11px] font-semibold ${toDeltaClass(item.delta)}`}>Vs anterior: {item.deltaLabel}</p>
               </article>
             ))}
           </section>
@@ -2333,20 +2614,42 @@ export const MonitorSocialOverviewPage = () => {
               <article className="min-w-0 rounded-2xl border border-slate-200 bg-white p-4 shadow-panel xl:col-span-2">
                 <div className="mb-2 flex flex-wrap items-start justify-between gap-2">
                   <div>
-                    <h3 className="text-base font-semibold text-slate-900">ER vs Exposición (scatter)</h3>
+                    <h3 className="text-base font-semibold text-slate-900">Scatter por métricas</h3>
                     <p className="text-xs text-slate-500">{CHART_QUESTION_BY_KEY.scatter}</p>
                   </div>
-                  <label className="text-xs font-semibold text-slate-600">
-                    Dimensión
-                    <select value={scatterDimension} onChange={(event) => setScatterDimension(event.target.value as SocialScatterDimension)} className="ml-2 rounded-md border border-slate-200 px-2 py-1 text-xs">
-                      <option value="post_type">Tipo de post</option>
-                      <option value="channel">Canal</option>
-                      <option value="account">Cuenta</option>
-                      <option value="campaign">Campaña</option>
-                      <option value="strategy">Estrategia</option>
-                      <option value="hashtag">Hashtag</option>
-                    </select>
-                  </label>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <label className="text-xs font-semibold text-slate-600">
+                      Dimensión
+                      <select value={scatterDimension} onChange={(event) => setScatterDimension(event.target.value as SocialScatterDimension)} className="ml-2 rounded-md border border-slate-200 px-2 py-1 text-xs">
+                        <option value="post_type">Tipo de post</option>
+                        <option value="channel">Canal</option>
+                        <option value="account">Cuenta</option>
+                        <option value="campaign">Campaña</option>
+                        <option value="strategy">Estrategia</option>
+                        <option value="hashtag">Hashtag</option>
+                      </select>
+                    </label>
+                    <label className="text-xs font-semibold text-slate-600">
+                      Eje X
+                      <select value={scatterXMetric} onChange={(event) => setScatterXMetric(event.target.value as ScatterMetric)} className="ml-2 rounded-md border border-slate-200 px-2 py-1 text-xs">
+                        {SCATTER_METRICS.map((metric) => (
+                          <option key={metric} value={metric}>
+                            {METRIC_META[metric].label}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="text-xs font-semibold text-slate-600">
+                      Eje Y
+                      <select value={scatterYMetric} onChange={(event) => setScatterYMetric(event.target.value as ScatterMetric)} className="ml-2 rounded-md border border-slate-200 px-2 py-1 text-xs">
+                        {SCATTER_METRICS.map((metric) => (
+                          <option key={metric} value={metric}>
+                            {METRIC_META[metric].label}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  </div>
                 </div>
                 <div className="h-[320px] w-full min-w-0">
                   <ResponsiveContainer width="100%" height="100%">
@@ -2354,17 +2657,21 @@ export const MonitorSocialOverviewPage = () => {
                       <CartesianGrid />
                       <XAxis
                         type="number"
-                        dataKey="exposure_total"
-                        name="Exposición"
-                        tickFormatter={(value) => formatCompactAxisNumber(Number(value))}
-                        label={{ value: "Exposición", position: "insideBottom", offset: -6, fontSize: 11 }}
+                        dataKey="x_value"
+                        name={METRIC_META[scatterXMetric].label}
+                        scale={scatterXScale}
+                        domain={resolveAxisDomain(scatterXScale, scatterValues.xValues)}
+                        tickFormatter={(value) => formatChartAxisByMetrics([scatterXMetric], Number(value))}
+                        label={{ value: METRIC_META[scatterXMetric].label, position: "insideBottom", offset: -6, fontSize: 11 }}
                       />
                       <YAxis
                         type="number"
-                        dataKey="er_global"
-                        name="ER"
-                        tickFormatter={(value) => formatAxisPercentNoDecimals(Number(value))}
-                        label={{ value: "ER (%)", angle: -90, position: "insideLeft", offset: -2, fontSize: 11 }}
+                        dataKey="y_value"
+                        name={METRIC_META[scatterYMetric].label}
+                        scale={scatterYScale}
+                        domain={resolveAxisDomain(scatterYScale, scatterValues.yValues)}
+                        tickFormatter={(value) => formatChartAxisByMetrics([scatterYMetric], Number(value))}
+                        label={{ value: METRIC_META[scatterYMetric].label, angle: -90, position: "insideLeft", offset: -2, fontSize: 11 }}
                       />
                       <ZAxis dataKey="z" name="Posts" range={[110, 680]} />
                       <Tooltip
@@ -2372,18 +2679,22 @@ export const MonitorSocialOverviewPage = () => {
                           if (!tooltip.active || !tooltip.payload || tooltip.payload.length === 0) return null;
                           const point = tooltip.payload[0]?.payload ?? {};
                           const label = String((point.label as string | undefined) ?? "n/a");
-                          const exposure = Number((point.exposure_total as number | undefined) ?? 0);
-                          const engagement = Number((point.engagement_total as number | undefined) ?? 0);
-                          const er = Number((point.er_global as number | undefined) ?? 0);
+                          const xValue = Number((point.x_value as number | undefined) ?? 0);
+                          const yValue = Number((point.y_value as number | undefined) ?? 0);
                           const postsCount = Number((point.posts as number | undefined) ?? 0);
                           return (
                             <div className="min-w-[210px] rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs shadow-lg">
                               <p className="font-semibold text-slate-800">{label}</p>
                               <p className="text-slate-600">Dimensión: {toScatterDimensionLabel(scatterDimension)}</p>
                               <p className="mt-1 flex items-center justify-between gap-2"><span>Posts</span><strong>{formatCompactAxisNumber(postsCount)}</strong></p>
-                              <p className="mt-1 flex items-center justify-between gap-2"><span>Exposición</span><strong>{formatCompactAxisNumber(exposure)}</strong></p>
-                              <p className="mt-1 flex items-center justify-between gap-2"><span>Interacciones</span><strong>{formatCompactAxisNumber(engagement)}</strong></p>
-                              <p className="mt-1 flex items-center justify-between gap-2"><span>ER</span><strong>{formatAxisPercentNoDecimals(er)}</strong></p>
+                              <p className="mt-1 flex items-center justify-between gap-2">
+                                <span>{METRIC_META[scatterXMetric].label}</span>
+                                <strong>{formatChartMetricValue(scatterXMetric, xValue)}</strong>
+                              </p>
+                              <p className="mt-1 flex items-center justify-between gap-2">
+                                <span>{METRIC_META[scatterYMetric].label}</span>
+                                <strong>{formatChartMetricValue(scatterYMetric, yValue)}</strong>
+                              </p>
                             </div>
                           );
                         }}
@@ -2405,10 +2716,16 @@ export const MonitorSocialOverviewPage = () => {
                     <select value={heatmapMetric} onChange={(event) => setHeatmapMetric(event.target.value as SocialHeatmapMetric)} className="ml-2 rounded-md border border-slate-200 px-2 py-1 text-xs">
                       <option value="er">ER</option>
                       <option value="engagement_total">Interacciones</option>
+                      <option value="impressions">Impresiones</option>
+                      <option value="reach">Reach</option>
+                      <option value="clicks">Clicks</option>
                       <option value="likes">Likes</option>
                       <option value="comments">Comments</option>
                       <option value="shares">Shares</option>
                       <option value="views">Views</option>
+                      <option value="ctr">CTR</option>
+                      <option value="er_impressions">ER impresiones</option>
+                      <option value="er_reach">ER reach</option>
                       <option value="view_rate">View rate</option>
                     </select>
                   </label>
@@ -2423,7 +2740,7 @@ export const MonitorSocialOverviewPage = () => {
               <article className="min-w-0 rounded-2xl border border-slate-200 bg-white p-4 shadow-panel xl:col-span-2">
                 <div className="mb-2 flex flex-wrap items-start justify-between gap-2">
                   <div>
-                    <h3 className="text-base font-semibold text-slate-900">ER por dimensión</h3>
+                    <h3 className="text-base font-semibold text-slate-900">Métrica por dimensión</h3>
                     <p className="text-xs text-slate-500">{CHART_QUESTION_BY_KEY.breakdown}</p>
                   </div>
                   <div className="flex items-center gap-2">
@@ -2433,6 +2750,13 @@ export const MonitorSocialOverviewPage = () => {
                       <option value="post_type">Tipo de post</option>
                       <option value="publish_frequency">Frecuencia (días entre posts)</option>
                       <option value="weekday">Día publicación</option>
+                    </select>
+                    <select value={breakdownMetric} onChange={(event) => setBreakdownMetric(event.target.value as BreakdownMetric)} className="rounded-md border border-slate-200 px-2 py-1 text-xs">
+                      {BREAKDOWN_METRICS.map((metric) => (
+                        <option key={metric} value={metric}>
+                          {METRIC_META[metric].label}
+                        </option>
+                      ))}
                     </select>
                     <span className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold ${breakdownScale === "log" ? "border-amber-300 bg-amber-50 text-amber-700" : "border-slate-200 text-slate-500"}`}>
                       Escala {breakdownScale === "log" ? "log (auto)" : "lineal"}
@@ -2446,14 +2770,14 @@ export const MonitorSocialOverviewPage = () => {
                 </div>
                 <div className="h-[320px] w-full min-w-0">
                   <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={breakdownData?.items ?? []} layout="vertical" margin={{ top: 6, right: 14, bottom: 8, left: 20 }}>
+                    <BarChart data={breakdownChartData} layout="vertical" margin={{ top: 6, right: 14, bottom: 8, left: 20 }}>
                       <CartesianGrid strokeDasharray="3 3" />
                       <XAxis
                         type="number"
                         scale={breakdownScale}
-                        domain={resolveAxisDomain(breakdownScale, (breakdownData?.items ?? []).map((item) => item.er_global))}
-                        tickFormatter={(value) => formatAxisPercentNoDecimals(Number(value))}
-                        label={{ value: "ER (%)", position: "insideBottom", offset: -6, fontSize: 11 }}
+                        domain={resolveAxisDomain(breakdownScale, breakdownChartData.map((item) => Number(item.metric_value)))}
+                        tickFormatter={(value) => formatChartAxisByMetrics([breakdownMetric], Number(value))}
+                        label={{ value: METRIC_META[breakdownMetric].label, position: "insideBottom", offset: -6, fontSize: 11 }}
                       />
                       <YAxis type="category" dataKey="label" width={180} tickFormatter={(value) => truncate(String(value), 24)} />
                       <Tooltip
@@ -2461,20 +2785,23 @@ export const MonitorSocialOverviewPage = () => {
                           if (!tooltip.active || !tooltip.payload || tooltip.payload.length === 0) return null;
                           const row = tooltip.payload[0]?.payload ?? {};
                           const label = String((row.label as string | undefined) ?? tooltip.label ?? "");
-                          const er = Number((row.er_global as number | undefined) ?? 0);
+                          const selectedMetric = Number((row.metric_value as number | undefined) ?? 0);
                           const postsCount = Number((row.posts as number | undefined) ?? 0);
                           const exposure = Number((row.exposure_total as number | undefined) ?? 0);
                           return (
                             <div className="min-w-[180px] rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs shadow-lg">
                               <p className="font-semibold text-slate-800">{label}</p>
-                              <p className="mt-1 flex items-center justify-between gap-2"><span>ER</span><strong>{formatAxisPercentNoDecimals(er)}</strong></p>
+                              <p className="mt-1 flex items-center justify-between gap-2">
+                                <span>{METRIC_META[breakdownMetric].label}</span>
+                                <strong>{formatChartMetricValue(breakdownMetric, selectedMetric)}</strong>
+                              </p>
                               <p className="mt-1 flex items-center justify-between gap-2"><span>Posts</span><strong>{formatCompactAxisNumber(postsCount)}</strong></p>
                               <p className="mt-1 flex items-center justify-between gap-2"><span>Exposición</span><strong>{formatCompactAxisNumber(exposure)}</strong></p>
                             </div>
                           );
                         }}
                       />
-                      <Bar dataKey="er_global" name="ER" fill="#7c3aed" />
+                      <Bar dataKey="metric_value" name={METRIC_META[breakdownMetric].label} fill="#7c3aed" />
                     </BarChart>
                   </ResponsiveContainer>
                 </div>

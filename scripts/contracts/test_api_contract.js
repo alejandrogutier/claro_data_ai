@@ -1168,6 +1168,23 @@ const ensureIncidentFlow = async (apiBase, viewerToken, analystToken) => {
 };
 
 const ensureMonitorSocialSurface = async (apiBase, viewerToken, analystToken) => {
+  const additiveMetricFields = [
+    "impressions_total",
+    "reach_total",
+    "clicks_total",
+    "likes_total",
+    "comments_total",
+    "shares_total",
+    "views_total",
+    "ctr",
+    "er_impressions",
+    "er_reach",
+    "view_rate",
+    "likes_share",
+    "comments_share",
+    "shares_share"
+  ];
+
   const accountsResponse = await request({
     method: "GET",
     url: `${apiBase}/v1/monitor/social/accounts?limit=20&sort=riesgo_desc&min_posts=1&min_exposure=1`,
@@ -1182,6 +1199,96 @@ const ensureMonitorSocialSurface = async (apiBase, viewerToken, analystToken) =>
   assertCondition(typeof accountsResponse.json?.sort_applied === "string", "monitor social accounts.sort_applied must be string");
   assertCondition(accountsResponse.json?.page_info && typeof accountsResponse.json.page_info === "object", "monitor social accounts.page_info must exist");
   assertCondition(typeof accountsResponse.json?.page_info?.has_next === "boolean", "monitor social accounts.page_info.has_next must be boolean");
+  const firstAccount = accountsResponse.json?.items?.[0];
+  if (firstAccount) {
+    for (const field of additiveMetricFields) {
+      assertCondition(typeof firstAccount[field] === "number", `monitor social accounts.items[].${field} must be number`);
+    }
+  }
+
+  const overviewResponse = await request({
+    method: "GET",
+    url: `${apiBase}/v1/monitor/social/overview`,
+    token: viewerToken
+  });
+  assertStatus(overviewResponse.status, 200, "GET /v1/monitor/social/overview");
+  assertCondition(overviewResponse.json?.kpis && typeof overviewResponse.json.kpis === "object", "monitor social overview.kpis must be object");
+  assertCondition(
+    overviewResponse.json?.previous_period && typeof overviewResponse.json.previous_period === "object",
+    "monitor social overview.previous_period must be object"
+  );
+  assertCondition(
+    overviewResponse.json?.delta_vs_previous && typeof overviewResponse.json.delta_vs_previous === "object",
+    "monitor social overview.delta_vs_previous must be object"
+  );
+  for (const field of additiveMetricFields) {
+    assertCondition(typeof overviewResponse.json?.kpis?.[field] === "number", `monitor social overview.kpis.${field} must be number`);
+    assertCondition(
+      typeof overviewResponse.json?.previous_period?.[field] === "number",
+      `monitor social overview.previous_period.${field} must be number`
+    );
+    assertCondition(
+      typeof overviewResponse.json?.delta_vs_previous?.[field] === "number",
+      `monitor social overview.delta_vs_previous.${field} must be number`
+    );
+  }
+  const firstTrend = overviewResponse.json?.trend_series?.[0];
+  if (firstTrend) {
+    for (const field of additiveMetricFields) {
+      assertCondition(typeof firstTrend[field] === "number", `monitor social overview.trend_series[].${field} must be number`);
+    }
+  }
+  const firstByChannel = overviewResponse.json?.by_channel?.[0];
+  if (firstByChannel) {
+    for (const field of additiveMetricFields) {
+      assertCondition(typeof firstByChannel[field] === "number", `monitor social overview.by_channel[].${field} must be number`);
+    }
+  }
+  const firstByAccount = overviewResponse.json?.by_account?.[0];
+  if (firstByAccount) {
+    for (const field of additiveMetricFields) {
+      assertCondition(typeof firstByAccount[field] === "number", `monitor social overview.by_account[].${field} must be number`);
+    }
+  }
+
+  const scatterResponse = await request({
+    method: "GET",
+    url: `${apiBase}/v1/monitor/social/charts/scatter?dimension=channel`,
+    token: viewerToken
+  });
+  assertStatus(scatterResponse.status, 200, "GET /v1/monitor/social/charts/scatter");
+  assertCondition(Array.isArray(scatterResponse.json?.items), "monitor social scatter.items must be array");
+  const firstScatter = scatterResponse.json?.items?.[0];
+  if (firstScatter) {
+    for (const field of additiveMetricFields) {
+      assertCondition(typeof firstScatter[field] === "number", `monitor social scatter.items[].${field} must be number`);
+    }
+  }
+
+  const breakdownResponse = await request({
+    method: "GET",
+    url: `${apiBase}/v1/monitor/social/charts/er-breakdown?dimension=post_type`,
+    token: viewerToken
+  });
+  assertStatus(breakdownResponse.status, 200, "GET /v1/monitor/social/charts/er-breakdown");
+  assertCondition(Array.isArray(breakdownResponse.json?.items), "monitor social er-breakdown.items must be array");
+  const firstBreakdown = breakdownResponse.json?.items?.[0];
+  if (firstBreakdown) {
+    for (const field of additiveMetricFields) {
+      assertCondition(typeof firstBreakdown[field] === "number", `monitor social er-breakdown.items[].${field} must be number`);
+    }
+  }
+
+  const newHeatmapMetrics = ["impressions", "reach", "clicks", "ctr", "er_impressions", "er_reach"];
+  for (const metric of newHeatmapMetrics) {
+    const heatmapResponse = await request({
+      method: "GET",
+      url: `${apiBase}/v1/monitor/social/charts/heatmap?metric=${encodeURIComponent(metric)}`,
+      token: viewerToken
+    });
+    assertStatus(heatmapResponse.status, 200, `GET /v1/monitor/social/charts/heatmap?metric=${metric}`);
+    assertCondition(heatmapResponse.json?.metric === metric, `monitor social heatmap metric mismatch for ${metric}`);
+  }
 
   const riskResponse = await request({
     method: "GET",

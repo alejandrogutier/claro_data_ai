@@ -112,7 +112,20 @@ export type CreateReportScheduleRequest = components["schemas"]["CreateReportSch
 export type UpdateReportScheduleRequest = components["schemas"]["UpdateReportScheduleRequest"];
 
 export type SocialComparisonMode = "weekday_aligned_week" | "exact_days" | "same_period_last_year";
-export type SocialHeatmapMetric = "er" | "engagement_total" | "likes" | "comments" | "shares" | "views" | "view_rate";
+export type SocialHeatmapMetric =
+  | "er"
+  | "engagement_total"
+  | "likes"
+  | "comments"
+  | "shares"
+  | "views"
+  | "view_rate"
+  | "impressions"
+  | "reach"
+  | "clicks"
+  | "ctr"
+  | "er_impressions"
+  | "er_reach";
 export type SocialScatterDimension = "post_type" | "channel" | "account" | "campaign" | "strategy" | "hashtag";
 export type SocialErBreakdownDimension = "hashtag" | "word" | "post_type" | "publish_frequency" | "weekday";
 
@@ -125,13 +138,53 @@ export type MonitorSocialHeatmapResponse = {
 export type MonitorSocialScatterResponse = {
   generated_at: string;
   dimension: SocialScatterDimension;
-  items: Array<{ label: string; exposure_total: number; engagement_total: number; er_global: number; posts: number }>;
+  items: Array<{
+    label: string;
+    exposure_total: number;
+    engagement_total: number;
+    impressions_total?: number;
+    reach_total?: number;
+    clicks_total?: number;
+    likes_total?: number;
+    comments_total?: number;
+    shares_total?: number;
+    views_total?: number;
+    er_global: number;
+    ctr?: number;
+    er_impressions?: number;
+    er_reach?: number;
+    view_rate?: number;
+    likes_share?: number;
+    comments_share?: number;
+    shares_share?: number;
+    posts: number;
+  }>;
 };
 
 export type MonitorSocialErBreakdownResponse = {
   generated_at: string;
   dimension: SocialErBreakdownDimension;
-  items: Array<{ label: string; posts: number; exposure_total: number; engagement_total: number; er_global: number }>;
+  items: Array<{
+    label: string;
+    posts: number;
+    exposure_total: number;
+    engagement_total: number;
+    impressions_total?: number;
+    reach_total?: number;
+    clicks_total?: number;
+    likes_total?: number;
+    comments_total?: number;
+    shares_total?: number;
+    views_total?: number;
+    er_global: number;
+    ctr?: number;
+    er_impressions?: number;
+    er_reach?: number;
+    view_rate?: number;
+    likes_share?: number;
+    comments_share?: number;
+    shares_share?: number;
+  }>;
 };
 
 export type MonitorSocialErTargetsResponse = {

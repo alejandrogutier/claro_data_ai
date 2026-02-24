@@ -294,9 +294,26 @@ type SocialMetricRow = {
   accountName: string;
   exposure: number;
   engagementTotal: number;
+  impressions: number;
+  reach: number;
+  clicks: number;
+  likes: number;
+  comments: number;
+  shares: number;
+  views: number;
   sourceScore: number;
   sentiment: SentimentBucket;
   publishedAt: Date;
+};
+
+type SocialDerivedMetrics = {
+  ctr: number;
+  erImpressions: number;
+  erReach: number;
+  viewRate: number;
+  likesShare: number;
+  commentsShare: number;
+  sharesShare: number;
 };
 
 type SocialTrendSeriesItem = {
@@ -306,7 +323,21 @@ type SocialTrendSeriesItem = {
   posts: number;
   exposureTotal: number;
   engagementTotal: number;
+  impressionsTotal: number;
+  reachTotal: number;
+  clicksTotal: number;
+  likesTotal: number;
+  commentsTotal: number;
+  sharesTotal: number;
+  viewsTotal: number;
   erGlobal: number;
+  ctr: number;
+  erImpressions: number;
+  erReach: number;
+  viewRate: number;
+  likesShare: number;
+  commentsShare: number;
+  sharesShare: number;
   sentimientoNeto: number;
   riesgoActivo: number;
   shs: number;
@@ -333,7 +364,21 @@ type SocialOverviewRecord = {
     posts: number;
     exposureTotal: number;
     engagementTotal: number;
+    impressionsTotal: number;
+    reachTotal: number;
+    clicksTotal: number;
+    likesTotal: number;
+    commentsTotal: number;
+    sharesTotal: number;
+    viewsTotal: number;
     erGlobal: number;
+    ctr: number;
+    erImpressions: number;
+    erReach: number;
+    viewRate: number;
+    likesShare: number;
+    commentsShare: number;
+    sharesShare: number;
     classifiedItems: number;
     positivos: number;
     negativos: number;
@@ -348,7 +393,21 @@ type SocialOverviewRecord = {
     posts: number;
     exposureTotal: number;
     engagementTotal: number;
+    impressionsTotal: number;
+    reachTotal: number;
+    clicksTotal: number;
+    likesTotal: number;
+    commentsTotal: number;
+    sharesTotal: number;
+    viewsTotal: number;
     erGlobal: number;
+    ctr: number;
+    erImpressions: number;
+    erReach: number;
+    viewRate: number;
+    likesShare: number;
+    commentsShare: number;
+    sharesShare: number;
     sentimientoNeto: number;
     riesgoActivo: number;
     shs: number;
@@ -358,7 +417,21 @@ type SocialOverviewRecord = {
     posts: number;
     exposureTotal: number;
     engagementTotal: number;
+    impressionsTotal: number;
+    reachTotal: number;
+    clicksTotal: number;
+    likesTotal: number;
+    commentsTotal: number;
+    sharesTotal: number;
+    viewsTotal: number;
     erGlobal: number;
+    ctr: number;
+    erImpressions: number;
+    erReach: number;
+    viewRate: number;
+    likesShare: number;
+    commentsShare: number;
+    sharesShare: number;
     sentimientoNeto: number;
     riesgoActivo: number;
     shs: number;
@@ -387,16 +460,44 @@ type SocialOverviewRecord = {
     posts: number;
     exposureTotal: number;
     engagementTotal: number;
+    impressionsTotal: number;
+    reachTotal: number;
+    clicksTotal: number;
+    likesTotal: number;
+    commentsTotal: number;
+    sharesTotal: number;
+    viewsTotal: number;
     erGlobal: number;
-      sentimientoNeto: number;
-      riesgoActivo: number;
-    }>;
+    ctr: number;
+    erImpressions: number;
+    erReach: number;
+    viewRate: number;
+    likesShare: number;
+    commentsShare: number;
+    sharesShare: number;
+    sentimientoNeto: number;
+    riesgoActivo: number;
+  }>;
   byChannel: Array<{
     channel: SocialChannel;
     posts: number;
     exposureTotal: number;
     engagementTotal: number;
+    impressionsTotal: number;
+    reachTotal: number;
+    clicksTotal: number;
+    likesTotal: number;
+    commentsTotal: number;
+    sharesTotal: number;
+    viewsTotal: number;
     erGlobal: number;
+    ctr: number;
+    erImpressions: number;
+    erReach: number;
+    viewRate: number;
+    likesShare: number;
+    commentsShare: number;
+    sharesShare: number;
     sentimientoNeto: number;
     riesgoActivo: number;
     sovInterno: number;
@@ -407,7 +508,21 @@ type SocialOverviewRecord = {
     posts: number;
     exposureTotal: number;
     engagementTotal: number;
+    impressionsTotal: number;
+    reachTotal: number;
+    clicksTotal: number;
+    likesTotal: number;
+    commentsTotal: number;
+    sharesTotal: number;
+    viewsTotal: number;
     erGlobal: number;
+    ctr: number;
+    erImpressions: number;
+    erReach: number;
+    viewRate: number;
+    likesShare: number;
+    commentsShare: number;
+    sharesShare: number;
     sentimientoNeto: number;
     riesgoActivo: number;
     sovInterno: number;
@@ -458,7 +573,20 @@ type SocialErTargetItem = {
   source: "auto" | "manual";
 };
 
-type SocialHeatmapMetric = "er" | "engagement_total" | "likes" | "comments" | "shares" | "views" | "view_rate";
+type SocialHeatmapMetric =
+  | "er"
+  | "engagement_total"
+  | "likes"
+  | "comments"
+  | "shares"
+  | "views"
+  | "view_rate"
+  | "impressions"
+  | "reach"
+  | "clicks"
+  | "ctr"
+  | "er_impressions"
+  | "er_reach";
 
 type SocialHeatmapRecord = {
   generatedAt: Date;
@@ -478,7 +606,21 @@ type SocialScatterRecord = {
     label: string;
     exposureTotal: number;
     engagementTotal: number;
+    impressionsTotal: number;
+    reachTotal: number;
+    clicksTotal: number;
+    likesTotal: number;
+    commentsTotal: number;
+    sharesTotal: number;
+    viewsTotal: number;
     erGlobal: number;
+    ctr: number;
+    erImpressions: number;
+    erReach: number;
+    viewRate: number;
+    likesShare: number;
+    commentsShare: number;
+    sharesShare: number;
     posts: number;
   }>;
 };
@@ -491,7 +633,21 @@ type SocialErBreakdownRecord = {
     posts: number;
     exposureTotal: number;
     engagementTotal: number;
+    impressionsTotal: number;
+    reachTotal: number;
+    clicksTotal: number;
+    likesTotal: number;
+    commentsTotal: number;
+    sharesTotal: number;
+    viewsTotal: number;
     erGlobal: number;
+    ctr: number;
+    erImpressions: number;
+    erReach: number;
+    viewRate: number;
+    likesShare: number;
+    commentsShare: number;
+    sharesShare: number;
   }>;
 };
 
@@ -574,7 +730,21 @@ type SocialAccountsRecord = {
     posts: number;
     exposureTotal: number;
     engagementTotal: number;
+    impressionsTotal: number;
+    reachTotal: number;
+    clicksTotal: number;
+    likesTotal: number;
+    commentsTotal: number;
+    sharesTotal: number;
+    viewsTotal: number;
     erPonderado: number;
+    ctr: number;
+    erImpressions: number;
+    erReach: number;
+    viewRate: number;
+    likesShare: number;
+    commentsShare: number;
+    sharesShare: number;
     sentimientoNeto: number;
     riesgoActivo: number;
     sovInterno: number;
@@ -967,6 +1137,43 @@ const calculateRiesgoActivo = (negativos: number, classifiedItems: number): numb
 
 const calculateErGlobal = (engagementTotal: number, exposureTotal: number): number =>
   (engagementTotal / Math.max(exposureTotal, 1)) * 100;
+
+const calculateDenomCtr = (input: { impressions: number; reach: number; exposure: number }): number => {
+  if (input.impressions > 0) return input.impressions;
+  if (input.reach > 0) return input.reach;
+  return input.exposure;
+};
+
+const calculateDenomReach = (input: { reach: number; exposure: number }): number => {
+  if (input.reach > 0) return input.reach;
+  return input.exposure;
+};
+
+const calculateDerivedMetrics = (input: {
+  exposure: number;
+  engagementTotal: number;
+  impressions: number;
+  reach: number;
+  clicks: number;
+  likes: number;
+  comments: number;
+  shares: number;
+  views: number;
+}): SocialDerivedMetrics => {
+  const denomCtr = calculateDenomCtr({ impressions: input.impressions, reach: input.reach, exposure: input.exposure });
+  const denomReach = calculateDenomReach({ reach: input.reach, exposure: input.exposure });
+  const interactionBase = input.likes + input.comments + input.shares;
+
+  return {
+    ctr: (input.clicks / Math.max(denomCtr, 1)) * 100,
+    erImpressions: (input.engagementTotal / Math.max(denomCtr, 1)) * 100,
+    erReach: (input.engagementTotal / Math.max(denomReach, 1)) * 100,
+    viewRate: (input.views / Math.max(input.exposure, 1)) * 100,
+    likesShare: (input.likes / Math.max(interactionBase, 1)) * 100,
+    commentsShare: (input.comments / Math.max(interactionBase, 1)) * 100,
+    sharesShare: (input.shares / Math.max(interactionBase, 1)) * 100
+  };
+};
 
 const calculateShs = (input: {
   sentimientoNeto: number;
@@ -1405,9 +1612,16 @@ const parseMetricRow = (row: SqlRow | undefined): SocialMetricRow | null => {
   const accountName = fieldString(row, 1);
   const exposure = parseDecimal(fieldString(row, 2), 0);
   const engagementTotal = parseDecimal(fieldString(row, 3), 0);
-  const sourceScore = parseDecimal(fieldString(row, 4), 0.5);
-  const sentimentRaw = fieldString(row, 5);
-  const publishedAt = fieldDate(row, 6);
+  const impressions = parseDecimal(fieldString(row, 4), 0);
+  const reach = parseDecimal(fieldString(row, 5), 0);
+  const clicks = parseDecimal(fieldString(row, 6), 0);
+  const likes = parseDecimal(fieldString(row, 7), 0);
+  const comments = parseDecimal(fieldString(row, 8), 0);
+  const shares = parseDecimal(fieldString(row, 9), 0);
+  const views = parseDecimal(fieldString(row, 10), 0);
+  const sourceScore = parseDecimal(fieldString(row, 11), 0.5);
+  const sentimentRaw = fieldString(row, 12);
+  const publishedAt = fieldDate(row, 13);
 
   if (!channel || !accountName || !publishedAt) return null;
 
@@ -1416,6 +1630,13 @@ const parseMetricRow = (row: SqlRow | undefined): SocialMetricRow | null => {
     accountName: canonicalizeAccountName(accountName),
     exposure,
     engagementTotal,
+    impressions,
+    reach,
+    clicks,
+    likes,
+    comments,
+    shares,
+    views,
     sourceScore,
     sentiment: normalizeSentiment(sentimentRaw),
     publishedAt
@@ -1465,6 +1686,13 @@ const metricRowsFromPosts = (posts: SocialPostRecord[]): SocialMetricRow[] =>
     accountName: item.accountName,
     exposure: item.exposure,
     engagementTotal: item.engagementTotal,
+    impressions: item.impressions,
+    reach: item.reach,
+    clicks: item.clicks,
+    likes: item.likes,
+    comments: item.comments,
+    shares: item.shares,
+    views: item.views,
     sourceScore: item.sourceScore,
     sentiment: item.sentiment,
     publishedAt: item.publishedAt ?? item.createdAt
@@ -1479,6 +1707,13 @@ const computeGroupedMetrics = <T extends string>(
     posts: number;
     exposureTotal: number;
     engagementTotal: number;
+    impressionsTotal: number;
+    reachTotal: number;
+    clicksTotal: number;
+    likesTotal: number;
+    commentsTotal: number;
+    sharesTotal: number;
+    viewsTotal: number;
     positivos: number;
     negativos: number;
     neutrales: number;
@@ -1491,6 +1726,13 @@ const computeGroupedMetrics = <T extends string>(
       posts: number;
       exposureTotal: number;
       engagementTotal: number;
+      impressionsTotal: number;
+      reachTotal: number;
+      clicksTotal: number;
+      likesTotal: number;
+      commentsTotal: number;
+      sharesTotal: number;
+      viewsTotal: number;
       positivos: number;
       negativos: number;
       neutrales: number;
@@ -1504,6 +1746,13 @@ const computeGroupedMetrics = <T extends string>(
       posts: 0,
       exposureTotal: 0,
       engagementTotal: 0,
+      impressionsTotal: 0,
+      reachTotal: 0,
+      clicksTotal: 0,
+      likesTotal: 0,
+      commentsTotal: 0,
+      sharesTotal: 0,
+      viewsTotal: 0,
       positivos: 0,
       negativos: 0,
       neutrales: 0,
@@ -1512,6 +1761,13 @@ const computeGroupedMetrics = <T extends string>(
     current.posts += 1;
     current.exposureTotal += row.exposure;
     current.engagementTotal += row.engagementTotal;
+    current.impressionsTotal += row.impressions;
+    current.reachTotal += row.reach;
+    current.clicksTotal += row.clicks;
+    current.likesTotal += row.likes;
+    current.commentsTotal += row.comments;
+    current.sharesTotal += row.shares;
+    current.viewsTotal += row.views;
 
     if (row.sentiment === "positive") current.positivos += 1;
     else if (row.sentiment === "negative") current.negativos += 1;
@@ -2364,6 +2620,13 @@ class SocialStore {
           spm."accountName",
           spm."exposure"::text,
           spm."engagementTotal"::text,
+          spm."impressions"::text,
+          spm."reach"::text,
+          spm."clicks"::text,
+          spm."likes"::text,
+          spm."comments"::text,
+          spm."shares"::text,
+          spm."views"::text,
           ci."sourceScore"::text,
           cls."sentimiento",
           COALESCE(spm."publishedAt", ci."publishedAt", ci."createdAt")
@@ -3806,8 +4069,44 @@ class SocialStore {
 
     const currentExposure = currentRows.reduce((acc, row) => acc + row.exposure, 0);
     const currentEngagement = currentRows.reduce((acc, row) => acc + row.engagementTotal, 0);
+    const currentImpressions = currentRows.reduce((acc, row) => acc + row.impressions, 0);
+    const currentReach = currentRows.reduce((acc, row) => acc + row.reach, 0);
+    const currentClicks = currentRows.reduce((acc, row) => acc + row.clicks, 0);
+    const currentLikes = currentRows.reduce((acc, row) => acc + row.likes, 0);
+    const currentComments = currentRows.reduce((acc, row) => acc + row.comments, 0);
+    const currentShares = currentRows.reduce((acc, row) => acc + row.shares, 0);
+    const currentViews = currentRows.reduce((acc, row) => acc + row.views, 0);
     const previousExposure = previousRows.reduce((acc, row) => acc + row.exposure, 0);
     const previousEngagement = previousRows.reduce((acc, row) => acc + row.engagementTotal, 0);
+    const previousImpressions = previousRows.reduce((acc, row) => acc + row.impressions, 0);
+    const previousReach = previousRows.reduce((acc, row) => acc + row.reach, 0);
+    const previousClicks = previousRows.reduce((acc, row) => acc + row.clicks, 0);
+    const previousLikes = previousRows.reduce((acc, row) => acc + row.likes, 0);
+    const previousComments = previousRows.reduce((acc, row) => acc + row.comments, 0);
+    const previousShares = previousRows.reduce((acc, row) => acc + row.shares, 0);
+    const previousViews = previousRows.reduce((acc, row) => acc + row.views, 0);
+    const currentDerived = calculateDerivedMetrics({
+      exposure: currentExposure,
+      engagementTotal: currentEngagement,
+      impressions: currentImpressions,
+      reach: currentReach,
+      clicks: currentClicks,
+      likes: currentLikes,
+      comments: currentComments,
+      shares: currentShares,
+      views: currentViews
+    });
+    const previousDerived = calculateDerivedMetrics({
+      exposure: previousExposure,
+      engagementTotal: previousEngagement,
+      impressions: previousImpressions,
+      reach: previousReach,
+      clicks: previousClicks,
+      likes: previousLikes,
+      comments: previousComments,
+      shares: previousShares,
+      views: previousViews
+    });
 
     const currentSentimientoNeto = calculateSentimientoNeto(currentSent.positivos, currentSent.negativos, currentSent.classified);
     const currentRiesgoActivo = calculateRiesgoActivo(currentSent.negativos, currentSent.classified);
@@ -3872,12 +4171,37 @@ class SocialStore {
     const byChannel = Array.from(byChannelStats.entries())
       .map(([channel, stats]) => {
         const classified = stats.positivos + stats.negativos + stats.neutrales;
+        const derived = calculateDerivedMetrics({
+          exposure: stats.exposureTotal,
+          engagementTotal: stats.engagementTotal,
+          impressions: stats.impressionsTotal,
+          reach: stats.reachTotal,
+          clicks: stats.clicksTotal,
+          likes: stats.likesTotal,
+          comments: stats.commentsTotal,
+          shares: stats.sharesTotal,
+          views: stats.viewsTotal
+        });
         return {
           channel,
           posts: stats.posts,
           exposureTotal: roundMetric(stats.exposureTotal),
           engagementTotal: roundMetric(stats.engagementTotal),
+          impressionsTotal: roundMetric(stats.impressionsTotal),
+          reachTotal: roundMetric(stats.reachTotal),
+          clicksTotal: roundMetric(stats.clicksTotal),
+          likesTotal: roundMetric(stats.likesTotal),
+          commentsTotal: roundMetric(stats.commentsTotal),
+          sharesTotal: roundMetric(stats.sharesTotal),
+          viewsTotal: roundMetric(stats.viewsTotal),
           erGlobal: roundMetric(calculateErGlobal(stats.engagementTotal, stats.exposureTotal)),
+          ctr: roundMetric(derived.ctr),
+          erImpressions: roundMetric(derived.erImpressions),
+          erReach: roundMetric(derived.erReach),
+          viewRate: roundMetric(derived.viewRate),
+          likesShare: roundMetric(derived.likesShare),
+          commentsShare: roundMetric(derived.commentsShare),
+          sharesShare: roundMetric(derived.sharesShare),
           sentimientoNeto: roundMetric(calculateSentimientoNeto(stats.positivos, stats.negativos, classified)),
           riesgoActivo: roundMetric(calculateRiesgoActivo(stats.negativos, classified)),
           sovInterno: roundMetric(((channelContrib.get(channel) ?? 0) / Math.max(totalContrib, 1)) * 100)
@@ -3888,13 +4212,38 @@ class SocialStore {
     const byAccount = Array.from(byAccountStats.entries())
       .map(([accountName, stats]) => {
         const classified = stats.positivos + stats.negativos + stats.neutrales;
+        const derived = calculateDerivedMetrics({
+          exposure: stats.exposureTotal,
+          engagementTotal: stats.engagementTotal,
+          impressions: stats.impressionsTotal,
+          reach: stats.reachTotal,
+          clicks: stats.clicksTotal,
+          likes: stats.likesTotal,
+          comments: stats.commentsTotal,
+          shares: stats.sharesTotal,
+          views: stats.viewsTotal
+        });
         return {
           accountName,
           channelMix: Array.from(accountChannels.get(accountName) ?? []),
           posts: stats.posts,
           exposureTotal: roundMetric(stats.exposureTotal),
           engagementTotal: roundMetric(stats.engagementTotal),
+          impressionsTotal: roundMetric(stats.impressionsTotal),
+          reachTotal: roundMetric(stats.reachTotal),
+          clicksTotal: roundMetric(stats.clicksTotal),
+          likesTotal: roundMetric(stats.likesTotal),
+          commentsTotal: roundMetric(stats.commentsTotal),
+          sharesTotal: roundMetric(stats.sharesTotal),
+          viewsTotal: roundMetric(stats.viewsTotal),
           erGlobal: roundMetric(calculateErGlobal(stats.engagementTotal, stats.exposureTotal)),
+          ctr: roundMetric(derived.ctr),
+          erImpressions: roundMetric(derived.erImpressions),
+          erReach: roundMetric(derived.erReach),
+          viewRate: roundMetric(derived.viewRate),
+          likesShare: roundMetric(derived.likesShare),
+          commentsShare: roundMetric(derived.commentsShare),
+          sharesShare: roundMetric(derived.sharesShare),
           sentimientoNeto: roundMetric(calculateSentimientoNeto(stats.positivos, stats.negativos, classified)),
           riesgoActivo: roundMetric(calculateRiesgoActivo(stats.negativos, classified)),
           sovInterno: roundMetric(((accountContrib.get(accountName) ?? 0) / Math.max(totalContrib, 1)) * 100)
@@ -3912,6 +4261,13 @@ class SocialStore {
         posts: number;
         exposureTotal: number;
         engagementTotal: number;
+        impressionsTotal: number;
+        reachTotal: number;
+        clicksTotal: number;
+        likesTotal: number;
+        commentsTotal: number;
+        sharesTotal: number;
+        viewsTotal: number;
         positivos: number;
         negativos: number;
         neutrales: number;
@@ -3926,6 +4282,13 @@ class SocialStore {
         posts: 0,
         exposureTotal: 0,
         engagementTotal: 0,
+        impressionsTotal: 0,
+        reachTotal: 0,
+        clicksTotal: 0,
+        likesTotal: 0,
+        commentsTotal: 0,
+        sharesTotal: 0,
+        viewsTotal: 0,
         positivos: 0,
         negativos: 0,
         neutrales: 0
@@ -3933,6 +4296,13 @@ class SocialStore {
       current.posts += 1;
       current.exposureTotal += row.exposure;
       current.engagementTotal += row.engagementTotal;
+      current.impressionsTotal += row.impressions;
+      current.reachTotal += row.reach;
+      current.clicksTotal += row.clicks;
+      current.likesTotal += row.likes;
+      current.commentsTotal += row.comments;
+      current.sharesTotal += row.shares;
+      current.viewsTotal += row.views;
       if (row.sentiment === "positive") current.positivos += 1;
       if (row.sentiment === "negative") current.negativos += 1;
       if (row.sentiment === "neutral") current.neutrales += 1;
@@ -3946,6 +4316,17 @@ class SocialStore {
         const previousExposureForShs = index > 0 ? source[index - 1].exposureTotal : stats.exposureTotal;
         const sentimientoNeto = calculateSentimientoNeto(stats.positivos, stats.negativos, classified);
         const riesgoActivo = calculateRiesgoActivo(stats.negativos, classified);
+        const derived = calculateDerivedMetrics({
+          exposure: stats.exposureTotal,
+          engagementTotal: stats.engagementTotal,
+          impressions: stats.impressionsTotal,
+          reach: stats.reachTotal,
+          clicks: stats.clicksTotal,
+          likes: stats.likesTotal,
+          comments: stats.commentsTotal,
+          shares: stats.sharesTotal,
+          views: stats.viewsTotal
+        });
         return {
           bucketStart: toBogotaBoundaryIso(stats.bucketStart),
           bucketEnd: toBogotaBoundaryIso(stats.bucketEnd),
@@ -3953,7 +4334,21 @@ class SocialStore {
           posts: stats.posts,
           exposureTotal: roundMetric(stats.exposureTotal),
           engagementTotal: roundMetric(stats.engagementTotal),
+          impressionsTotal: roundMetric(stats.impressionsTotal),
+          reachTotal: roundMetric(stats.reachTotal),
+          clicksTotal: roundMetric(stats.clicksTotal),
+          likesTotal: roundMetric(stats.likesTotal),
+          commentsTotal: roundMetric(stats.commentsTotal),
+          sharesTotal: roundMetric(stats.sharesTotal),
+          viewsTotal: roundMetric(stats.viewsTotal),
           erGlobal: roundMetric(calculateErGlobal(stats.engagementTotal, stats.exposureTotal)),
+          ctr: roundMetric(derived.ctr),
+          erImpressions: roundMetric(derived.erImpressions),
+          erReach: roundMetric(derived.erReach),
+          viewRate: roundMetric(derived.viewRate),
+          likesShare: roundMetric(derived.likesShare),
+          commentsShare: roundMetric(derived.commentsShare),
+          sharesShare: roundMetric(derived.sharesShare),
           sentimientoNeto: roundMetric(sentimientoNeto),
           riesgoActivo: roundMetric(riesgoActivo),
           shs: roundMetric(
@@ -3972,7 +4367,21 @@ class SocialStore {
       posts: item.posts,
       exposureTotal: item.exposureTotal,
       engagementTotal: item.engagementTotal,
+      impressionsTotal: item.impressionsTotal,
+      reachTotal: item.reachTotal,
+      clicksTotal: item.clicksTotal,
+      likesTotal: item.likesTotal,
+      commentsTotal: item.commentsTotal,
+      sharesTotal: item.sharesTotal,
+      viewsTotal: item.viewsTotal,
       erGlobal: item.erGlobal,
+      ctr: item.ctr,
+      erImpressions: item.erImpressions,
+      erReach: item.erReach,
+      viewRate: item.viewRate,
+      likesShare: item.likesShare,
+      commentsShare: item.commentsShare,
+      sharesShare: item.sharesShare,
       sentimientoNeto: item.sentimientoNeto,
       riesgoActivo: item.riesgoActivo
     }));
@@ -4004,7 +4413,21 @@ class SocialStore {
         posts: currentRows.length,
         exposureTotal: roundMetric(currentExposure),
         engagementTotal: roundMetric(currentEngagement),
+        impressionsTotal: roundMetric(currentImpressions),
+        reachTotal: roundMetric(currentReach),
+        clicksTotal: roundMetric(currentClicks),
+        likesTotal: roundMetric(currentLikes),
+        commentsTotal: roundMetric(currentComments),
+        sharesTotal: roundMetric(currentShares),
+        viewsTotal: roundMetric(currentViews),
         erGlobal: roundMetric(currentEr),
+        ctr: roundMetric(currentDerived.ctr),
+        erImpressions: roundMetric(currentDerived.erImpressions),
+        erReach: roundMetric(currentDerived.erReach),
+        viewRate: roundMetric(currentDerived.viewRate),
+        likesShare: roundMetric(currentDerived.likesShare),
+        commentsShare: roundMetric(currentDerived.commentsShare),
+        sharesShare: roundMetric(currentDerived.sharesShare),
         classifiedItems: currentSent.classified,
         positivos: currentSent.positivos,
         negativos: currentSent.negativos,
@@ -4019,7 +4442,21 @@ class SocialStore {
         posts: previousRows.length,
         exposureTotal: roundMetric(previousExposure),
         engagementTotal: roundMetric(previousEngagement),
+        impressionsTotal: roundMetric(previousImpressions),
+        reachTotal: roundMetric(previousReach),
+        clicksTotal: roundMetric(previousClicks),
+        likesTotal: roundMetric(previousLikes),
+        commentsTotal: roundMetric(previousComments),
+        sharesTotal: roundMetric(previousShares),
+        viewsTotal: roundMetric(previousViews),
         erGlobal: roundMetric(previousEr),
+        ctr: roundMetric(previousDerived.ctr),
+        erImpressions: roundMetric(previousDerived.erImpressions),
+        erReach: roundMetric(previousDerived.erReach),
+        viewRate: roundMetric(previousDerived.viewRate),
+        likesShare: roundMetric(previousDerived.likesShare),
+        commentsShare: roundMetric(previousDerived.commentsShare),
+        sharesShare: roundMetric(previousDerived.sharesShare),
         sentimientoNeto: roundMetric(previousSentimientoNeto),
         riesgoActivo: roundMetric(previousRiesgoActivo),
         shs: roundMetric(previousShs),
@@ -4029,7 +4466,21 @@ class SocialStore {
         posts: roundMetric(currentRows.length - previousRows.length),
         exposureTotal: roundMetric(currentExposure - previousExposure),
         engagementTotal: roundMetric(currentEngagement - previousEngagement),
+        impressionsTotal: roundMetric(currentImpressions - previousImpressions),
+        reachTotal: roundMetric(currentReach - previousReach),
+        clicksTotal: roundMetric(currentClicks - previousClicks),
+        likesTotal: roundMetric(currentLikes - previousLikes),
+        commentsTotal: roundMetric(currentComments - previousComments),
+        sharesTotal: roundMetric(currentShares - previousShares),
+        viewsTotal: roundMetric(currentViews - previousViews),
         erGlobal: roundMetric(currentEr - previousEr),
+        ctr: roundMetric(currentDerived.ctr - previousDerived.ctr),
+        erImpressions: roundMetric(currentDerived.erImpressions - previousDerived.erImpressions),
+        erReach: roundMetric(currentDerived.erReach - previousDerived.erReach),
+        viewRate: roundMetric(currentDerived.viewRate - previousDerived.viewRate),
+        likesShare: roundMetric(currentDerived.likesShare - previousDerived.likesShare),
+        commentsShare: roundMetric(currentDerived.commentsShare - previousDerived.commentsShare),
+        sharesShare: roundMetric(currentDerived.sharesShare - previousDerived.sharesShare),
         sentimientoNeto: roundMetric(currentSentimientoNeto - previousSentimientoNeto),
         riesgoActivo: roundMetric(currentRiesgoActivo - previousRiesgoActivo),
         shs: roundMetric(currentShs - previousShs),
@@ -4213,17 +4664,45 @@ class SocialStore {
 
   async getHeatmap(filters: SocialOverviewFilters, metric: SocialHeatmapMetric): Promise<SocialHeatmapRecord> {
     const posts = await this.listAllPosts(filters, "published_at_desc", 100000);
-    const cell = new Map<string, { posts: number; exposure: number; engagement: number; likes: number; comments: number; shares: number; views: number }>();
+    const cell = new Map<
+      string,
+      {
+        posts: number;
+        exposure: number;
+        engagement: number;
+        impressions: number;
+        reach: number;
+        clicks: number;
+        likes: number;
+        comments: number;
+        shares: number;
+        views: number;
+      }
+    >();
 
     for (const post of posts) {
       const refDate = post.publishedAt ?? post.createdAt;
       const month = toBogotaMonth(refDate);
       const weekday = toBogotaWeekday(refDate);
       const key = `${month}-${weekday}`;
-      const current = cell.get(key) ?? { posts: 0, exposure: 0, engagement: 0, likes: 0, comments: 0, shares: 0, views: 0 };
+      const current = cell.get(key) ?? {
+        posts: 0,
+        exposure: 0,
+        engagement: 0,
+        impressions: 0,
+        reach: 0,
+        clicks: 0,
+        likes: 0,
+        comments: 0,
+        shares: 0,
+        views: 0
+      };
       current.posts += 1;
       current.exposure += post.exposure;
       current.engagement += post.engagementTotal;
+      current.impressions += post.impressions;
+      current.reach += post.reach;
+      current.clicks += post.clicks;
       current.likes += post.likes;
       current.comments += post.comments;
       current.shares += post.shares;
@@ -4234,15 +4713,43 @@ class SocialStore {
     const items: SocialHeatmapRecord["items"] = [];
     for (let month = 1; month <= 12; month += 1) {
       for (let weekday = 1; weekday <= 7; weekday += 1) {
-        const current = cell.get(`${month}-${weekday}`) ?? { posts: 0, exposure: 0, engagement: 0, likes: 0, comments: 0, shares: 0, views: 0 };
+        const current = cell.get(`${month}-${weekday}`) ?? {
+          posts: 0,
+          exposure: 0,
+          engagement: 0,
+          impressions: 0,
+          reach: 0,
+          clicks: 0,
+          likes: 0,
+          comments: 0,
+          shares: 0,
+          views: 0
+        };
+        const derived = calculateDerivedMetrics({
+          exposure: current.exposure,
+          engagementTotal: current.engagement,
+          impressions: current.impressions,
+          reach: current.reach,
+          clicks: current.clicks,
+          likes: current.likes,
+          comments: current.comments,
+          shares: current.shares,
+          views: current.views
+        });
         let value = 0;
         if (metric === "er") value = calculateErGlobal(current.engagement, current.exposure);
+        else if (metric === "impressions") value = current.impressions;
+        else if (metric === "reach") value = current.reach;
+        else if (metric === "clicks") value = current.clicks;
         else if (metric === "engagement_total") value = current.engagement;
         else if (metric === "likes") value = current.likes;
         else if (metric === "comments") value = current.comments;
         else if (metric === "shares") value = current.shares;
         else if (metric === "views") value = current.views;
-        else value = (current.views / Math.max(current.exposure, 1)) * 100;
+        else if (metric === "ctr") value = derived.ctr;
+        else if (metric === "er_impressions") value = derived.erImpressions;
+        else if (metric === "er_reach") value = derived.erReach;
+        else value = derived.viewRate;
         items.push({ month, weekday, value: roundMetric(value), posts: current.posts });
       }
     }
@@ -4256,7 +4763,21 @@ class SocialStore {
 
   async getScatter(filters: SocialOverviewFilters, dimension: SocialScatterDimension): Promise<SocialScatterRecord> {
     const posts = await this.listAllPosts(filters, "published_at_desc", 100000);
-    const grouped = new Map<string, { posts: number; exposure: number; engagement: number }>();
+    const grouped = new Map<
+      string,
+      {
+        posts: number;
+        exposure: number;
+        engagement: number;
+        impressions: number;
+        reach: number;
+        clicks: number;
+        likes: number;
+        comments: number;
+        shares: number;
+        views: number;
+      }
+    >();
 
     for (const post of posts) {
       const dimensions =
@@ -4277,10 +4798,28 @@ class SocialStore {
                     : ["sin_hashtag"];
 
       for (const label of dimensions) {
-        const current = grouped.get(label) ?? { posts: 0, exposure: 0, engagement: 0 };
+        const current = grouped.get(label) ?? {
+          posts: 0,
+          exposure: 0,
+          engagement: 0,
+          impressions: 0,
+          reach: 0,
+          clicks: 0,
+          likes: 0,
+          comments: 0,
+          shares: 0,
+          views: 0
+        };
         current.posts += 1;
         current.exposure += post.exposure;
         current.engagement += post.engagementTotal;
+        current.impressions += post.impressions;
+        current.reach += post.reach;
+        current.clicks += post.clicks;
+        current.likes += post.likes;
+        current.comments += post.comments;
+        current.shares += post.shares;
+        current.views += post.views;
         grouped.set(label, current);
       }
     }
@@ -4289,13 +4828,40 @@ class SocialStore {
       generatedAt: new Date(),
       dimension,
       items: Array.from(grouped.entries())
-        .map(([label, stats]) => ({
-          label,
-          exposureTotal: roundMetric(stats.exposure),
-          engagementTotal: roundMetric(stats.engagement),
-          erGlobal: roundMetric(calculateErGlobal(stats.engagement, stats.exposure)),
-          posts: stats.posts
-        }))
+        .map(([label, stats]) => {
+          const derived = calculateDerivedMetrics({
+            exposure: stats.exposure,
+            engagementTotal: stats.engagement,
+            impressions: stats.impressions,
+            reach: stats.reach,
+            clicks: stats.clicks,
+            likes: stats.likes,
+            comments: stats.comments,
+            shares: stats.shares,
+            views: stats.views
+          });
+          return {
+            label,
+            exposureTotal: roundMetric(stats.exposure),
+            engagementTotal: roundMetric(stats.engagement),
+            impressionsTotal: roundMetric(stats.impressions),
+            reachTotal: roundMetric(stats.reach),
+            clicksTotal: roundMetric(stats.clicks),
+            likesTotal: roundMetric(stats.likes),
+            commentsTotal: roundMetric(stats.comments),
+            sharesTotal: roundMetric(stats.shares),
+            viewsTotal: roundMetric(stats.views),
+            erGlobal: roundMetric(calculateErGlobal(stats.engagement, stats.exposure)),
+            ctr: roundMetric(derived.ctr),
+            erImpressions: roundMetric(derived.erImpressions),
+            erReach: roundMetric(derived.erReach),
+            viewRate: roundMetric(derived.viewRate),
+            likesShare: roundMetric(derived.likesShare),
+            commentsShare: roundMetric(derived.commentsShare),
+            sharesShare: roundMetric(derived.sharesShare),
+            posts: stats.posts
+          };
+        })
         .sort((a, b) => b.exposureTotal - a.exposureTotal || b.posts - a.posts)
         .slice(0, 200)
     };
@@ -4303,7 +4869,21 @@ class SocialStore {
 
   async getErBreakdown(filters: SocialOverviewFilters, dimension: SocialErBreakdownDimension): Promise<SocialErBreakdownRecord> {
     const posts = await this.listAllPosts(filters, "published_at_desc", 100000);
-    const grouped = new Map<string, { posts: number; exposure: number; engagement: number }>();
+    const grouped = new Map<
+      string,
+      {
+        posts: number;
+        exposure: number;
+        engagement: number;
+        impressions: number;
+        reach: number;
+        clicks: number;
+        likes: number;
+        comments: number;
+        shares: number;
+        views: number;
+      }
+    >();
 
     const stopWords = new Set([
       "de",
@@ -4385,10 +4965,28 @@ class SocialStore {
       }
 
       for (const label of labels) {
-        const current = grouped.get(label) ?? { posts: 0, exposure: 0, engagement: 0 };
+        const current = grouped.get(label) ?? {
+          posts: 0,
+          exposure: 0,
+          engagement: 0,
+          impressions: 0,
+          reach: 0,
+          clicks: 0,
+          likes: 0,
+          comments: 0,
+          shares: 0,
+          views: 0
+        };
         current.posts += 1;
         current.exposure += post.exposure;
         current.engagement += post.engagementTotal;
+        current.impressions += post.impressions;
+        current.reach += post.reach;
+        current.clicks += post.clicks;
+        current.likes += post.likes;
+        current.comments += post.comments;
+        current.shares += post.shares;
+        current.views += post.views;
         grouped.set(label, current);
       }
     }
@@ -4397,13 +4995,40 @@ class SocialStore {
       generatedAt: new Date(),
       dimension,
       items: Array.from(grouped.entries())
-        .map(([label, stats]) => ({
-          label,
-          posts: stats.posts,
-          exposureTotal: roundMetric(stats.exposure),
-          engagementTotal: roundMetric(stats.engagement),
-          erGlobal: roundMetric(calculateErGlobal(stats.engagement, stats.exposure))
-        }))
+        .map(([label, stats]) => {
+          const derived = calculateDerivedMetrics({
+            exposure: stats.exposure,
+            engagementTotal: stats.engagement,
+            impressions: stats.impressions,
+            reach: stats.reach,
+            clicks: stats.clicks,
+            likes: stats.likes,
+            comments: stats.comments,
+            shares: stats.shares,
+            views: stats.views
+          });
+          return {
+            label,
+            posts: stats.posts,
+            exposureTotal: roundMetric(stats.exposure),
+            engagementTotal: roundMetric(stats.engagement),
+            impressionsTotal: roundMetric(stats.impressions),
+            reachTotal: roundMetric(stats.reach),
+            clicksTotal: roundMetric(stats.clicks),
+            likesTotal: roundMetric(stats.likes),
+            commentsTotal: roundMetric(stats.comments),
+            sharesTotal: roundMetric(stats.shares),
+            viewsTotal: roundMetric(stats.views),
+            erGlobal: roundMetric(calculateErGlobal(stats.engagement, stats.exposure)),
+            ctr: roundMetric(derived.ctr),
+            erImpressions: roundMetric(derived.erImpressions),
+            erReach: roundMetric(derived.erReach),
+            viewRate: roundMetric(derived.viewRate),
+            likesShare: roundMetric(derived.likesShare),
+            commentsShare: roundMetric(derived.commentsShare),
+            sharesShare: roundMetric(derived.sharesShare)
+          };
+        })
         .sort((a, b) => b.erGlobal - a.erGlobal || b.posts - a.posts)
         .slice(0, 100)
     };
@@ -4457,13 +5082,38 @@ class SocialStore {
         };
         const erPonderado = calculateErGlobal(stats.engagementTotal, stats.exposureTotal);
         const previousEr = calculateErGlobal(previous.engagementTotal ?? 0, previous.exposureTotal ?? 0);
+        const derived = calculateDerivedMetrics({
+          exposure: stats.exposureTotal,
+          engagementTotal: stats.engagementTotal,
+          impressions: stats.impressionsTotal,
+          reach: stats.reachTotal,
+          clicks: stats.clicksTotal,
+          likes: stats.likesTotal,
+          comments: stats.commentsTotal,
+          shares: stats.sharesTotal,
+          views: stats.viewsTotal
+        });
         return {
           accountName,
           channelMix: Array.from(channelMix.get(accountName) ?? []),
           posts: stats.posts,
           exposureTotal: roundMetric(stats.exposureTotal),
           engagementTotal: roundMetric(stats.engagementTotal),
+          impressionsTotal: roundMetric(stats.impressionsTotal),
+          reachTotal: roundMetric(stats.reachTotal),
+          clicksTotal: roundMetric(stats.clicksTotal),
+          likesTotal: roundMetric(stats.likesTotal),
+          commentsTotal: roundMetric(stats.commentsTotal),
+          sharesTotal: roundMetric(stats.sharesTotal),
+          viewsTotal: roundMetric(stats.viewsTotal),
           erPonderado: roundMetric(erPonderado),
+          ctr: roundMetric(derived.ctr),
+          erImpressions: roundMetric(derived.erImpressions),
+          erReach: roundMetric(derived.erReach),
+          viewRate: roundMetric(derived.viewRate),
+          likesShare: roundMetric(derived.likesShare),
+          commentsShare: roundMetric(derived.commentsShare),
+          sharesShare: roundMetric(derived.sharesShare),
           sentimientoNeto: roundMetric(calculateSentimientoNeto(stats.positivos, stats.negativos, classified)),
           riesgoActivo: roundMetric(calculateRiesgoActivo(stats.negativos, classified)),
           sovInterno: roundMetric(((accountContrib.get(accountName) ?? 0) / Math.max(totalContrib, 1)) * 100),

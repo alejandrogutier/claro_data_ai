@@ -4781,7 +4781,7 @@ components:
       enum: [weekday_aligned_week, exact_days, same_period_last_year]
     SocialHeatmapMetric:
       type: string
-      enum: [er, engagement_total, likes, comments, shares, views, view_rate]
+      enum: [er, engagement_total, likes, comments, shares, views, view_rate, impressions, reach, clicks, ctr, er_impressions, er_reach]
     SocialScatterDimension:
       type: string
       enum: [post_type, channel, account, campaign, strategy, hashtag]
@@ -4867,7 +4867,35 @@ components:
           type: number
         engagement_total:
           type: number
+        impressions_total:
+          type: number
+        reach_total:
+          type: number
+        clicks_total:
+          type: number
+        likes_total:
+          type: number
+        comments_total:
+          type: number
+        shares_total:
+          type: number
+        views_total:
+          type: number
         er_global:
+          type: number
+        ctr:
+          type: number
+        er_impressions:
+          type: number
+        er_reach:
+          type: number
+        view_rate:
+          type: number
+        likes_share:
+          type: number
+        comments_share:
+          type: number
+        shares_share:
           type: number
         classified_items:
           type: integer
@@ -4899,7 +4927,35 @@ components:
           type: number
         engagement_total:
           type: number
+        impressions_total:
+          type: number
+        reach_total:
+          type: number
+        clicks_total:
+          type: number
+        likes_total:
+          type: number
+        comments_total:
+          type: number
+        shares_total:
+          type: number
+        views_total:
+          type: number
         er_global:
+          type: number
+        ctr:
+          type: number
+        er_impressions:
+          type: number
+        er_reach:
+          type: number
+        view_rate:
+          type: number
+        likes_share:
+          type: number
+        comments_share:
+          type: number
+        shares_share:
           type: number
         sentimiento_neto:
           type: number
@@ -4939,7 +4995,35 @@ components:
           type: number
         engagement_total:
           type: number
+        impressions_total:
+          type: number
+        reach_total:
+          type: number
+        clicks_total:
+          type: number
+        likes_total:
+          type: number
+        comments_total:
+          type: number
+        shares_total:
+          type: number
+        views_total:
+          type: number
         er_global:
+          type: number
+        ctr:
+          type: number
+        er_impressions:
+          type: number
+        er_reach:
+          type: number
+        view_rate:
+          type: number
+        likes_share:
+          type: number
+        comments_share:
+          type: number
+        shares_share:
           type: number
         sentimiento_neto:
           type: number
@@ -5001,7 +5085,35 @@ components:
           type: number
         engagement_total:
           type: number
+        impressions_total:
+          type: number
+        reach_total:
+          type: number
+        clicks_total:
+          type: number
+        likes_total:
+          type: number
+        comments_total:
+          type: number
+        shares_total:
+          type: number
+        views_total:
+          type: number
         er_global:
+          type: number
+        ctr:
+          type: number
+        er_impressions:
+          type: number
+        er_reach:
+          type: number
+        view_rate:
+          type: number
+        likes_share:
+          type: number
+        comments_share:
+          type: number
+        shares_share:
           type: number
         sentimiento_neto:
           type: number
@@ -5025,7 +5137,35 @@ components:
           type: number
         engagement_total:
           type: number
+        impressions_total:
+          type: number
+        reach_total:
+          type: number
+        clicks_total:
+          type: number
+        likes_total:
+          type: number
+        comments_total:
+          type: number
+        shares_total:
+          type: number
+        views_total:
+          type: number
         er_global:
+          type: number
+        ctr:
+          type: number
+        er_impressions:
+          type: number
+        er_reach:
+          type: number
+        view_rate:
+          type: number
+        likes_share:
+          type: number
+        comments_share:
+          type: number
+        shares_share:
           type: number
         sentimiento_neto:
           type: number
@@ -5045,7 +5185,35 @@ components:
           type: number
         engagement_total:
           type: number
+        impressions_total:
+          type: number
+        reach_total:
+          type: number
+        clicks_total:
+          type: number
+        likes_total:
+          type: number
+        comments_total:
+          type: number
+        shares_total:
+          type: number
+        views_total:
+          type: number
         er_global:
+          type: number
+        ctr:
+          type: number
+        er_impressions:
+          type: number
+        er_reach:
+          type: number
+        view_rate:
+          type: number
+        likes_share:
+          type: number
+        comments_share:
+          type: number
+        shares_share:
           type: number
         sentimiento_neto:
           type: number
@@ -5070,7 +5238,35 @@ components:
           type: number
         engagement_total:
           type: number
+        impressions_total:
+          type: number
+        reach_total:
+          type: number
+        clicks_total:
+          type: number
+        likes_total:
+          type: number
+        comments_total:
+          type: number
+        shares_total:
+          type: number
+        views_total:
+          type: number
         er_global:
+          type: number
+        ctr:
+          type: number
+        er_impressions:
+          type: number
+        er_reach:
+          type: number
+        view_rate:
+          type: number
+        likes_share:
+          type: number
+        comments_share:
+          type: number
+        shares_share:
           type: number
         sentimiento_neto:
           type: number
@@ -5363,7 +5559,35 @@ components:
           type: number
         engagement_total:
           type: number
+        impressions_total:
+          type: number
+        reach_total:
+          type: number
+        clicks_total:
+          type: number
+        likes_total:
+          type: number
+        comments_total:
+          type: number
+        shares_total:
+          type: number
+        views_total:
+          type: number
         er_ponderado:
+          type: number
+        ctr:
+          type: number
+        er_impressions:
+          type: number
+        er_reach:
+          type: number
+        view_rate:
+          type: number
+        likes_share:
+          type: number
+        comments_share:
+          type: number
+        shares_share:
           type: number
         sentimiento_neto:
           type: number
@@ -5805,7 +6029,35 @@ components:
           type: number
         engagement_total:
           type: number
+        impressions_total:
+          type: number
+        reach_total:
+          type: number
+        clicks_total:
+          type: number
+        likes_total:
+          type: number
+        comments_total:
+          type: number
+        shares_total:
+          type: number
+        views_total:
+          type: number
         er_global:
+          type: number
+        ctr:
+          type: number
+        er_impressions:
+          type: number
+        er_reach:
+          type: number
+        view_rate:
+          type: number
+        likes_share:
+          type: number
+        comments_share:
+          type: number
+        shares_share:
           type: number
         posts:
           type: integer
@@ -5834,7 +6086,35 @@ components:
           type: number
         engagement_total:
           type: number
+        impressions_total:
+          type: number
+        reach_total:
+          type: number
+        clicks_total:
+          type: number
+        likes_total:
+          type: number
+        comments_total:
+          type: number
+        shares_total:
+          type: number
+        views_total:
+          type: number
         er_global:
+          type: number
+        ctr:
+          type: number
+        er_impressions:
+          type: number
+        er_reach:
+          type: number
+        view_rate:
+          type: number
+        likes_share:
+          type: number
+        comments_share:
+          type: number
+        shares_share:
           type: number
     MonitorSocialErBreakdownResponse:
       type: object
