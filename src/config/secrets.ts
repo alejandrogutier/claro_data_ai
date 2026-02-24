@@ -43,7 +43,9 @@ const fallbackFromEnv = (): RuntimeSecrets => ({
     NEWSDATA_API_KEY: process.env.NEWSDATA_API_KEY ?? "",
     WORLDNEWS_API_KEY: process.env.WORLDNEWS_API_KEY ?? "",
     GUARDIAN_API_KEY: process.env.GUARDIAN_API_KEY ?? "",
-    NYT_API_KEY: process.env.NYT_API_KEY ?? ""
+    NYT_API_KEY: process.env.NYT_API_KEY ?? "",
+    AWARIO_ACCESS_TOKEN: process.env.AWARIO_ACCESS_TOKEN ?? process.env.AWARIO_API_KEY ?? "",
+    AWARIO_API_KEY: process.env.AWARIO_API_KEY ?? process.env.AWARIO_ACCESS_TOKEN ?? ""
   },
   appConfig: {
     AWS_REGION: env.awsRegion,

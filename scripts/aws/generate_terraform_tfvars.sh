@@ -30,6 +30,7 @@ COST_CENTER="${COST_CENTER:-marketing-intelligence}"
 BUDGET_EMAIL="${BUDGET_EMAIL:-ops@example.com}"
 SES_SENDER_EMAIL="${SES_SENDER_EMAIL:-digest@example.com}"
 ALERT_EMAIL_RECIPIENTS="${ALERT_EMAIL_RECIPIENTS:-}"
+API_ADDITIONAL_ALLOWED_ORIGINS="${API_ADDITIONAL_ALLOWED_ORIGINS:-http://localhost:5173,https://main.d34ae2z3oew4p.amplifyapp.com}"
 PROVIDER_KEYS_SECRET_NAME="${PROVIDER_KEYS_SECRET_NAME:-claro-data-prod/provider-api-keys}"
 APP_CONFIG_SECRET_NAME="${APP_CONFIG_SECRET_NAME:-claro-data-prod/app-config}"
 AWS_CREDENTIALS_SECRET_NAME="${AWS_CREDENTIALS_SECRET_NAME:-claro-data-prod/aws-credentials}"
@@ -39,14 +40,33 @@ TFVARS_PATH="$ROOT_DIR/infra/terraform/terraform.tfvars"
 LAMBDA_PACKAGE_PATH="$ROOT_DIR/build/lambda-api.zip"
 
 if [[ -f "$TFVARS_PATH" ]]; then
-  EXISTING_DB_PASSWORD="$(grep -E '^db_master_password[[:space:]]*=' "$TFVARS_PATH" | head -n 1 | sed -E 's/.*\"([^\"]*)\".*/\\1/' || true)"
-  if [[ -n "$EXISTING_DB_PASSWORD" ]]; then
+  EXISTING_DB_PASSWORD="$(grep -E '^db_master_password[[:space:]]*=' "$TFVARS_PATH" | head -n 1 | sed -E 's/.*"([^"]*)".*/\1/' || true)"
+  if [[ -n "$EXISTING_DB_PASSWORD" && "$EXISTING_DB_PASSWORD" != "\\1" ]]; then
     DB_PASSWORD="$EXISTING_DB_PASSWORD"
   fi
 fi
 
 if [[ -n "${DB_MASTER_PASSWORD:-}" ]]; then
   DB_PASSWORD="$DB_MASTER_PASSWORD"
+fi
+
+API_ALLOWED_ORIGINS_HCL=""
+IFS=',' read -r -a API_ALLOWED_ORIGINS_ARRAY <<<"$API_ADDITIONAL_ALLOWED_ORIGINS"
+for raw_origin in "${API_ALLOWED_ORIGINS_ARRAY[@]}"; do
+  origin="$(echo "$raw_origin" | xargs)"
+  if [[ -z "$origin" ]]; then
+    continue
+  fi
+
+  escaped_origin="$(printf '%s' "$origin" | sed 's/\\/\\\\/g; s/\"/\\"/g')"
+  if [[ -n "$API_ALLOWED_ORIGINS_HCL" ]]; then
+    API_ALLOWED_ORIGINS_HCL+=", "
+  fi
+  API_ALLOWED_ORIGINS_HCL+="\"$escaped_origin\""
+done
+
+if [[ -z "$API_ALLOWED_ORIGINS_HCL" ]]; then
+  API_ALLOWED_ORIGINS_HCL="\"http://localhost:5173\""
 fi
 
 cat > "$TFVARS_PATH" <<VARS
@@ -63,6 +83,7 @@ provider_keys_secret_name = "$PROVIDER_KEYS_SECRET_NAME"
 app_config_secret_name    = "$APP_CONFIG_SECRET_NAME"
 aws_credentials_secret_name = "$AWS_CREDENTIALS_SECRET_NAME"
 database_secret_name      = "$DATABASE_SECRET_NAME"
+api_additional_allowed_origins = [$API_ALLOWED_ORIGINS_HCL]
 VARS
 
 echo "Generated: $TFVARS_PATH"

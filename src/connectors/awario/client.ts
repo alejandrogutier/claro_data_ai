@@ -1,4 +1,4 @@
-const DEFAULT_BASE_URL = "https://api.awario.com/v1";
+const DEFAULT_BASE_URL = "https://api.awario.com/v1.0";
 const DEFAULT_TIMEOUT_MS = 20_000;
 
 export type AwarioAlert = {
@@ -16,7 +16,7 @@ export type AwarioMentionsPage = {
 };
 
 type RequestOptions = {
-  nextUrl?: string | null;
+  nextCursor?: string | null;
   signal?: AbortSignal;
   query?: Record<string, string | number | undefined>;
 };
@@ -41,6 +41,12 @@ const asObject = (value: unknown): Record<string, unknown> | null => {
 const asArray = (value: unknown): Record<string, unknown>[] => {
   if (!Array.isArray(value)) return [];
   return value.filter((item) => !!item && typeof item === "object" && !Array.isArray(item)) as Record<string, unknown>[];
+};
+
+const asString = (value: unknown): string | null => {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
 };
 
 const parseNext = (payload: Record<string, unknown>): string | null => {
@@ -149,9 +155,19 @@ export class AwarioClient {
 
       try {
         await this.throttle();
-        const url = options.nextUrl
-          ? this.withToken(options.nextUrl)
-          : this.withToken(this.buildUrl(pathname, options.query ?? {}));
+        const query: Record<string, string | number | undefined> = {
+          ...(options.query ?? {})
+        };
+
+        let url: string;
+        if (options.nextCursor && /^https?:\/\//i.test(options.nextCursor)) {
+          url = this.withToken(options.nextCursor);
+        } else {
+          if (options.nextCursor) {
+            query.next = options.nextCursor;
+          }
+          url = this.withToken(this.buildUrl(pathname, query));
+        }
 
         const response = await fetch(url, {
           method: "GET",
@@ -202,11 +218,17 @@ export class AwarioClient {
     const alerts = parseAlerts(payload);
     return alerts
       .map((item) => {
-        const id = typeof item.id === "string" ? item.id : typeof item.alert_id === "string" ? item.alert_id : null;
+        const rawId = item.id ?? item.alert_id;
+        const id = rawId === null || rawId === undefined ? null : String(rawId).trim();
         if (!id) return null;
-        const name = typeof item.name === "string" ? item.name : null;
-        const rawStatus = typeof item.status === "string" ? item.status.toLowerCase() : "";
-        const isActive = rawStatus ? rawStatus !== "inactive" && rawStatus !== "disabled" : true;
+        const name = asString(item.name) ?? asString(item.alert_name) ?? null;
+        const rawStatus = asString(item.status)?.toLowerCase() ?? asString(item.state)?.toLowerCase() ?? "";
+        const rawIsActive = item.is_active;
+        const isActive = typeof rawIsActive === "boolean"
+          ? rawIsActive
+          : rawStatus
+            ? rawStatus !== "inactive" && rawStatus !== "disabled"
+            : true;
         return {
           id,
           name,
@@ -220,21 +242,21 @@ export class AwarioClient {
   async listMentionsPage(
     alertId: string,
     options: {
-      nextUrl?: string | null;
+      nextCursor?: string | null;
       since?: Date;
       until?: Date;
       limit?: number;
     } = {}
   ): Promise<AwarioMentionsPage> {
     const query: Record<string, string | number | undefined> = {};
-    if (!options.nextUrl) {
-      if (options.since) query.since = options.since.toISOString();
-      if (options.until) query.until = options.until.toISOString();
+    if (!options.nextCursor) {
+      if (options.since) query.date_from = Math.max(0, Math.floor(options.since.getTime()));
+      if (options.until) query.date_to = Math.max(0, Math.floor(options.until.getTime()));
       if (options.limit) query.limit = Math.max(1, Math.min(200, Math.floor(options.limit)));
     }
 
     const payload = await this.requestJson(`alerts/${encodeURIComponent(alertId)}/mentions`, {
-      nextUrl: options.nextUrl,
+      nextCursor: options.nextCursor,
       query
     });
 

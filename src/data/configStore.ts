@@ -2,7 +2,7 @@ import { randomUUID } from "crypto";
 import { AppStoreError } from "./appStore";
 import type { UserRole } from "../core/auth";
 import { env } from "../config/env";
-import { loadRuntimeSecrets } from "../config/secrets";
+import { clearRuntimeSecretsCache, loadRuntimeSecrets } from "../config/secrets";
 import { AwarioClient } from "../connectors/awario/client";
 import { runAwarioCommentsSync } from "../connectors/awario/sync";
 import { createSocialStore } from "./socialStore";
@@ -1212,7 +1212,7 @@ class ConfigStore {
     const directToken = this.getAwarioAccessTokenFromEnv();
     if (directToken) return directToken;
 
-    try {
+    const readFromSecrets = async (): Promise<string | null> => {
       const secrets = await loadRuntimeSecrets();
       const fromSecrets =
         secrets.providerKeys.AWARIO_ACCESS_TOKEN ??
@@ -1223,6 +1223,15 @@ class ConfigStore {
       if (!fromSecrets) return null;
       const trimmed = fromSecrets.trim();
       return trimmed.length > 0 ? trimmed : null;
+    };
+
+    try {
+      const cachedToken = await readFromSecrets();
+      if (cachedToken) return cachedToken;
+
+      // Reintento sin cache para capturar rotaciones recientes de secret.
+      clearRuntimeSecretsCache();
+      return await readFromSecrets();
     } catch {
       return null;
     }

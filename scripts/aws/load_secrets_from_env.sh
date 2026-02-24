@@ -31,6 +31,8 @@ provider_payload="$(jq -n \
   --arg worldnews_api_key "${WORLDNEWS_API_KEY:-}" \
   --arg guardian_api_key "${GUARDIAN_API_KEY:-}" \
   --arg nyt_api_key "${NYT_API_KEY:-}" \
+  --arg awario_access_token "${AWARIO_ACCESS_TOKEN:-${AWARIO_API_KEY:-}}" \
+  --arg awario_api_key "${AWARIO_API_KEY:-${AWARIO_ACCESS_TOKEN:-}}" \
   --arg gnews_api_url "${GNEWS_API_URL:-}" \
   --arg newsdata_api_url "${NEWSDATA_API_URL:-}" \
   --arg worldnews_api_url "${WORLDNEWS_API_URL:-}" \
@@ -43,6 +45,8 @@ provider_payload="$(jq -n \
     WORLDNEWS_API_KEY: $worldnews_api_key,
     GUARDIAN_API_KEY: $guardian_api_key,
     NYT_API_KEY: $nyt_api_key,
+    AWARIO_ACCESS_TOKEN: $awario_access_token,
+    AWARIO_API_KEY: $awario_api_key,
     GNEWS_API_URL: $gnews_api_url,
     NEWSDATA_API_URL: $newsdata_api_url,
     WORLDNEWS_API_URL: $worldnews_api_url,

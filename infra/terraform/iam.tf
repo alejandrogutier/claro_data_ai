@@ -194,12 +194,7 @@ resource "aws_iam_role_policy" "lambda_export_access" {
           "secretsmanager:GetSecretValue",
           "secretsmanager:DescribeSecret"
         ]
-        Resource = [
-          data.aws_secretsmanager_secret.database.arn,
-          data.aws_secretsmanager_secret.provider_keys.arn,
-          data.aws_secretsmanager_secret.app_config.arn,
-          data.aws_secretsmanager_secret.aws_credentials.arn
-        ]
+        Resource = [data.aws_secretsmanager_secret.database.arn]
       },
       {
         Effect = "Allow"
@@ -651,7 +646,12 @@ resource "aws_iam_role_policy" "lambda_awario_sync_worker_access" {
           "secretsmanager:GetSecretValue",
           "secretsmanager:DescribeSecret"
         ]
-        Resource = [data.aws_secretsmanager_secret.database.arn]
+        Resource = [
+          data.aws_secretsmanager_secret.database.arn,
+          data.aws_secretsmanager_secret.provider_keys.arn,
+          data.aws_secretsmanager_secret.app_config.arn,
+          data.aws_secretsmanager_secret.aws_credentials.arn
+        ]
       },
       {
         Effect = "Allow"

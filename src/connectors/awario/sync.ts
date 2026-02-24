@@ -293,7 +293,7 @@ export const syncAwarioBindingComments = async (input: SyncSingleAwarioBindingIn
   try {
     do {
       const page = await input.client.listMentionsPage(binding.awarioAlertId, {
-        nextUrl: next,
+        nextCursor: next,
         since: windowStart,
         until: windowEnd,
         limit: pageLimit

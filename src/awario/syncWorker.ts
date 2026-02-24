@@ -1,7 +1,7 @@
 import AWS from "aws-sdk";
 import type { SQSEvent } from "aws-lambda";
 import { env } from "../config/env";
-import { loadRuntimeSecrets } from "../config/secrets";
+import { clearRuntimeSecretsCache, loadRuntimeSecrets } from "../config/secrets";
 import { AwarioClient } from "../connectors/awario/client";
 import { syncAwarioBindingComments } from "../connectors/awario/sync";
 import { createConfigStore, type AwarioSyncMode } from "../data/configStore";
@@ -44,7 +44,7 @@ const resolveAwarioToken = async (): Promise<string> => {
     return normalized;
   }
 
-  try {
+  const readFromSecrets = async (): Promise<string> => {
     const secrets = await loadRuntimeSecrets();
     const fromSecrets =
       secrets.providerKeys.AWARIO_ACCESS_TOKEN ??
@@ -52,10 +52,24 @@ const resolveAwarioToken = async (): Promise<string> => {
       secrets.appConfig.AWARIO_ACCESS_TOKEN ??
       secrets.appConfig.AWARIO_API_KEY ??
       "";
-    const fromSecretsNormalized = fromSecrets.trim();
-    if (fromSecretsNormalized) return fromSecretsNormalized;
-  } catch {
-    // Si falla lectura de secrets, se reporta el error estándar de token ausente.
+    return fromSecrets.trim();
+  };
+
+  try {
+    const cachedToken = await readFromSecrets();
+    if (cachedToken) return cachedToken;
+
+    // Reintento sin cache para capturar rotaciones recientes de secret.
+    clearRuntimeSecretsCache();
+    const refreshedToken = await readFromSecrets();
+    if (refreshedToken) return refreshedToken;
+  } catch (error) {
+    console.error("awario_token_secret_resolve_failed", {
+      error: (error as Error).message,
+      provider_secret_name: env.providerKeysSecretName ? "set" : "missing",
+      app_config_secret_name: env.appConfigSecretName ? "set" : "missing",
+      aws_credentials_secret_name: env.awsCredentialsSecretName ? "set" : "missing"
+    });
   }
 
   throw new Error("AWARIO_ACCESS_TOKEN no configurado");

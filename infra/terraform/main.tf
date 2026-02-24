@@ -627,6 +627,7 @@ resource "aws_lambda_function" "api" {
       ANALYSIS_QUEUE_URL                      = aws_sqs_queue.analysis_generation.url
       CLASSIFICATION_QUEUE_URL                = aws_sqs_queue.classification_generation.url
       AWARIO_SYNC_QUEUE_URL                   = aws_sqs_queue.awario_sync.url
+      AWARIO_API_BASE_URL                     = "https://api.awario.com/v1.0"
       AWARIO_LINKING_V2                       = "true"
       AWARIO_BACKFILL_PAGES_PER_INVOCATION    = "20"
       AWARIO_BACKFILL_MAX_PAGES_TOTAL         = "5000"
@@ -903,6 +904,7 @@ resource "aws_lambda_function" "awario_sync_worker" {
       DB_RESOURCE_ARN                         = aws_rds_cluster.aurora.arn
       DB_SECRET_ARN                           = data.aws_secretsmanager_secret.database.arn
       DB_NAME                                 = var.db_name
+      AWARIO_API_BASE_URL                     = "https://api.awario.com/v1.0"
       AWARIO_SYNC_QUEUE_URL                   = aws_sqs_queue.awario_sync.url
       AWARIO_BACKFILL_PAGES_PER_INVOCATION    = "20"
       AWARIO_BACKFILL_MAX_PAGES_TOTAL         = "5000"
