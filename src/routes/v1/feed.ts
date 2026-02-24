@@ -1,11 +1,24 @@
 import type { APIGatewayProxyEventV2 } from "aws-lambda";
 import { AppStoreError, createAppStore, type ContentRecord } from "../../data/appStore";
 import { json } from "../../core/http";
+import {
+  deriveOriginFields,
+  isValidOrigin,
+  matchesOriginFilters,
+  parseTagFilterValues,
+  type OriginFilterInput,
+  type OriginType
+} from "../../core/origin";
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const NEWS_FEED_LIMIT = 2;
 
 const toApiContent = (item: ContentRecord) => ({
+  ...deriveOriginFields({
+    sourceType: item.sourceType,
+    provider: item.provider,
+    sourceName: item.sourceName
+  }),
   id: item.id,
   source_type: item.sourceType,
   term_id: item.termId,
@@ -61,7 +74,8 @@ export const getNewsFeed = async (event: APIGatewayProxyEventV2) => {
     });
   }
 
-  const termId = event.queryStringParameters?.term_id?.trim();
+  const query = event.queryStringParameters ?? {};
+  const termId = query.term_id?.trim();
   if (!termId || !UUID_REGEX.test(termId)) {
     return json(422, {
       error: "validation_error",
@@ -69,8 +83,46 @@ export const getNewsFeed = async (event: APIGatewayProxyEventV2) => {
     });
   }
 
+  const originRaw = query.origin?.trim().toLowerCase();
+  let originFilter: OriginType | undefined;
+  if (originRaw) {
+    if (!isValidOrigin(originRaw)) {
+      return json(422, {
+        error: "validation_error",
+        message: "origin must be one of news|awario"
+      });
+    }
+    originFilter = originRaw;
+  }
+
+  const originFilters: OriginFilterInput = {
+    origin: originFilter,
+    medium: query.medium?.trim() ? query.medium.trim() : undefined,
+    tags: parseTagFilterValues(query.tag, query.tags)
+  };
+
+  const hasOriginFiltering = Boolean(
+    originFilters.origin || originFilters.medium || (originFilters.tags?.length ?? 0) > 0
+  );
+
   try {
-    const items = await store.listNewsFeed(termId);
+    let items = await store.listNewsFeed(termId, hasOriginFiltering ? 200 : NEWS_FEED_LIMIT);
+
+    if (hasOriginFiltering) {
+      items = items
+        .filter((item) =>
+          matchesOriginFilters(
+            deriveOriginFields({
+              sourceType: item.sourceType,
+              provider: item.provider,
+              sourceName: item.sourceName
+            }),
+            originFilters
+          )
+        )
+        .slice(0, NEWS_FEED_LIMIT);
+    }
+
     return json(200, {
       term_id: termId,
       limit: NEWS_FEED_LIMIT,

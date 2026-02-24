@@ -11,6 +11,7 @@ export type SocialSentiment = components["schemas"]["SocialSentiment"];
 export type SocialDatePreset = components["schemas"]["SocialDatePreset"];
 export type SocialPostSort = components["schemas"]["SocialPostSort"];
 export type SocialAccountsSort = components["schemas"]["SocialAccountsSort"];
+export type OriginType = components["schemas"]["OriginType"];
 export type MonitorSocialOverviewResponse = components["schemas"]["MonitorSocialOverviewResponse"];
 export type MonitorSocialFacetsResponse = components["schemas"]["MonitorSocialFacetsResponse"];
 export type MonitorSocialAccountsResponse = components["schemas"]["MonitorSocialAccountsResponse"];
@@ -163,6 +164,9 @@ type MonitorSocialQuery = {
   campaign?: string;
   strategy?: string;
   hashtag?: string;
+  origin?: OriginType;
+  medium?: string;
+  tag?: string;
   sentiment?: SocialSentiment;
   trend_granularity?: "auto" | "day" | "week" | "month";
   comparison_mode?: SocialComparisonMode;
@@ -296,6 +300,9 @@ export type QueryPreviewResponse = {
   candidates_count: number;
   sample: Array<{
     content_item_id: string;
+    origin: OriginType;
+    medium: string | null;
+    tags: string[];
     provider: string;
     title: string;
     canonical_url: string;
@@ -325,8 +332,12 @@ export type QueryDryRunResponse = {
     raw_count: number;
     fetched_count: number;
     matched_count: number;
+    origin_breakdown: Record<string, number>;
   };
   sample: Array<{
+    origin: OriginType;
+    medium: string | null;
+    tags: string[];
     provider: string;
     title: string;
     canonical_url: string;
@@ -524,10 +535,18 @@ export class ApiClient {
     });
   }
 
-  listNewsFeed(termId: string): Promise<NewsFeedResponse> {
+  listNewsFeed(
+    termId: string,
+    query: {
+      origin?: OriginType;
+      medium?: string;
+      tag?: string;
+    } = {}
+  ): Promise<NewsFeedResponse> {
     return this.request<NewsFeedResponse>("/v1/feed/news", {
       query: {
-        term_id: termId
+        term_id: termId,
+        ...query
       }
     });
   }
@@ -556,6 +575,9 @@ export class ApiClient {
       sentiment?: SocialSentiment;
       is_spam?: boolean;
       related_to_post_text?: boolean;
+      origin?: OriginType;
+      medium?: string;
+      tag?: string;
     } = {}
   ): Promise<MonitorSocialPostCommentsResponse> {
     return this.request<MonitorSocialPostCommentsResponse>(`/v1/monitor/social/posts/${postId}/comments`, { query });

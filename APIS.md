@@ -850,3 +850,42 @@ curl -s -X POST "http://localhost:19100/analysis/run" \
 - FastAPI `/news/archive` supports full-text LIKE search over article text; serverless `/api/news/archive` currently filters exact `term`.
 - OpenAI default model differs by code path (`gpt-4o-mini` in libs vs `gpt-4.1` in some compose defaults).
 - Serverless `saveArticles` currently tags persisted provider as `newsapi` in endpoint calls, even when merged from multiple sources.
+
+---
+
+## Actualización 2026-02-20: Integración Awario Comments (V1)
+
+### Endpoints nuevos
+
+#### Monitor Social
+- `GET /v1/monitor/social/posts`
+  - Ahora incluye `awario_comments_count` por post.
+- `GET /v1/monitor/social/posts/{post_id}/comments`
+  - Paginación (`limit`, `cursor`) y filtros (`sentiment`, `is_spam`, `related_to_post_text`).
+- `PATCH /v1/monitor/social/comments/{comment_id}`
+  - Override manual de flags/sentimiento con auditoría.
+
+#### Configuración
+- `GET /v1/config/awario/profiles`
+- `POST /v1/config/awario/profiles`
+- `PATCH /v1/config/awario/profiles/{id}`
+- `GET /v1/config/awario/bindings`
+- `POST /v1/config/awario/bindings`
+- `PATCH /v1/config/awario/bindings/{id}`
+
+### Modelo de datos nuevo
+- `SocialPostComment`
+  - Comentario Awario ya vinculado a `SocialPostMetric`.
+  - Llave canónica de match: `channel + parentExternalPostId`.
+  - Dedupe por `awarioMentionId`.
+- `SocialPostCommentOverride`
+  - Auditoría de cambios manuales (before/after, actor, requestId, reason).
+- `AwarioQueryProfile`
+  - Definición interna de query en plataforma.
+- `AwarioAlertBinding`
+  - Mapeo interno profile -> `awario_alert_id` externo + estado de validación.
+
+### Consideraciones de operación
+- Alcance V1: solo persistir comentarios vinculables a posts existentes.
+- Comentarios no vinculables se contabilizan en métricas de corrida (`skipped_unlinked`).
+- La creación/edición de alertas sigue siendo manual en Awario; la plataforma gestiona profiles/bindings internos.

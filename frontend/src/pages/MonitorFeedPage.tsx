@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { type NewsFeedResponse, type Term, type TermScope } from "../api/client";
+import { type NewsFeedResponse, type OriginType, type Term, type TermScope } from "../api/client";
 import { useApiClient } from "../api/useApiClient";
 
 type MonitorFeedPageProps = {
@@ -17,6 +17,8 @@ export const MonitorFeedPage = ({ scope, title, subtitle }: MonitorFeedPageProps
   const [loadingTerms, setLoadingTerms] = useState(true);
   const [loadingFeed, setLoadingFeed] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [originFilter, setOriginFilter] = useState<OriginType | "all">("all");
+  const [tagFilter, setTagFilter] = useState("");
 
   const selectedTerm = useMemo(() => terms.find((term) => term.id === selectedTermId) ?? null, [terms, selectedTermId]);
 
@@ -52,7 +54,10 @@ export const MonitorFeedPage = ({ scope, title, subtitle }: MonitorFeedPageProps
       setLoadingFeed(true);
       setError(null);
       try {
-        const response = await client.listNewsFeed(selectedTermId);
+        const response = await client.listNewsFeed(selectedTermId, {
+          origin: originFilter === "all" ? undefined : originFilter,
+          tag: tagFilter.trim() || undefined
+        });
         setFeed(response);
       } catch (feedError) {
         setError((feedError as Error).message);
@@ -62,7 +67,7 @@ export const MonitorFeedPage = ({ scope, title, subtitle }: MonitorFeedPageProps
     };
 
     void loadFeed();
-  }, [selectedTermId]);
+  }, [selectedTermId, originFilter, tagFilter]);
 
   return (
     <section>
@@ -97,7 +102,10 @@ export const MonitorFeedPage = ({ scope, title, subtitle }: MonitorFeedPageProps
             if (!selectedTermId) return;
             setLoadingFeed(true);
             try {
-              const response = await client.listNewsFeed(selectedTermId);
+              const response = await client.listNewsFeed(selectedTermId, {
+                origin: originFilter === "all" ? undefined : originFilter,
+                tag: tagFilter.trim() || undefined
+              });
               setFeed(response);
               setError(null);
             } catch (refreshError) {
@@ -110,6 +118,24 @@ export const MonitorFeedPage = ({ scope, title, subtitle }: MonitorFeedPageProps
         >
           Refrescar
         </button>
+      </section>
+      <section className="panel feed-controls">
+        <label>
+          Origen
+          <select value={originFilter} onChange={(event) => setOriginFilter(event.target.value as OriginType | "all")}>
+            <option value="all">all</option>
+            <option value="news">news</option>
+            <option value="awario">awario</option>
+          </select>
+        </label>
+        <label>
+          Tag
+          <input
+            value={tagFilter}
+            onChange={(event) => setTagFilter(event.target.value)}
+            placeholder="origin:news o provider:newsapi"
+          />
+        </label>
       </section>
 
       {loadingFeed ? <p>Cargando feed...</p> : null}
@@ -124,6 +150,10 @@ export const MonitorFeedPage = ({ scope, title, subtitle }: MonitorFeedPageProps
         {(feed?.items ?? []).map((item) => (
           <article className="feed-card" key={item.id}>
             <p className="feed-provider">{item.provider}</p>
+            <div className="origin-chip-row">
+              <span className={`origin-chip origin-chip-${item.origin}`}>{item.origin}</span>
+              {item.medium ? <span className="origin-chip">medio:{item.medium}</span> : null}
+            </div>
             <h3>{item.title}</h3>
             <p className="feed-date">{item.published_at ?? item.created_at}</p>
             <p>{item.summary ?? "Sin resumen disponible."}</p>

@@ -4,6 +4,14 @@ import * as XLSX from "xlsx";
 import { env } from "../../config/env";
 import { getAuthPrincipal, getRole, hasRole } from "../../core/auth";
 import { getPathWithoutStage, getRequestId, json, parseBody } from "../../core/http";
+import {
+  deriveOriginFields,
+  isValidOrigin,
+  matchesOriginFilters,
+  parseTagFilterValues,
+  type OriginFilterInput,
+  type OriginType
+} from "../../core/origin";
 import { AppStoreError, createAppStore } from "../../data/appStore";
 import {
   createSocialStore,
@@ -169,6 +177,29 @@ const parseCsvValues = (value: string | undefined, maxItems = 100): string[] => 
     .filter((token) => token.length > 0);
   const deduped = Array.from(new Set(parsed));
   return deduped.slice(0, maxItems);
+};
+
+const parseOriginFilters = (query: Record<string, string | undefined>): { filters: OriginFilterInput; error?: ReturnType<typeof json> } => {
+  const originRaw = query.origin?.trim().toLowerCase();
+  let origin: OriginType | undefined;
+
+  if (originRaw) {
+    if (!isValidOrigin(originRaw)) {
+      return { filters: {}, error: json(422, { error: "validation_error", message: "origin must be one of news|awario" }) };
+    }
+    origin = originRaw;
+  }
+
+  const medium = query.medium?.trim() ? query.medium.trim() : undefined;
+  const tags = parseTagFilterValues(query.tag, query.tags);
+
+  return {
+    filters: {
+      origin,
+      medium,
+      tags
+    }
+  };
 };
 
 const normalizePostTypeToken = (value: string): string => {
@@ -1242,49 +1273,147 @@ export const listMonitorSocialPosts = async (event: APIGatewayProxyEventV2) => {
     });
   }
 
+  const originParsed = parseOriginFilters(parsed.query);
+  if (originParsed.error) return originParsed.error;
+  const hasOriginFiltering = Boolean(
+    originParsed.filters.origin ||
+      originParsed.filters.medium ||
+      (originParsed.filters.tags?.length ?? 0) > 0
+  );
+
+  const toApiPost = (item: {
+    id: string;
+    contentItemId: string;
+    channel: string;
+    accountName: string;
+    externalPostId: string;
+    postUrl: string;
+    postType: string | null;
+    publishedAt: Date | null;
+    title: string;
+    text: string | null;
+    sentiment: string;
+    sentimentRaw: string | null;
+    sentimentConfidence: number | null;
+    exposure: number;
+    engagementTotal: number;
+    impressions: number;
+    reach: number;
+    clicks: number;
+    likes: number;
+    comments: number;
+    awarioCommentsCount: number;
+    shares: number;
+    views: number;
+    sourceScore: number;
+    campaignKey: string | null;
+    strategyKeys: string[];
+    hashtags: string[];
+    createdAt: Date;
+    updatedAt: Date;
+  }) => ({
+    ...deriveOriginFields({
+      forcedOrigin: "awario",
+      channel: item.channel,
+      provider: item.channel
+    }),
+    id: item.id,
+    content_item_id: item.contentItemId,
+    channel: item.channel,
+    account_name: item.accountName,
+    external_post_id: item.externalPostId,
+    post_url: item.postUrl,
+    post_type: item.postType,
+    published_at: item.publishedAt?.toISOString() ?? null,
+    title: item.title,
+    text: item.text,
+    sentiment: item.sentiment,
+    sentiment_raw: item.sentimentRaw,
+    sentiment_confidence: item.sentimentConfidence,
+    exposure: item.exposure,
+    engagement_total: item.engagementTotal,
+    impressions: item.impressions,
+    reach: item.reach,
+    clicks: item.clicks,
+    likes: item.likes,
+    comments: item.comments,
+    awario_comments_count: item.awarioCommentsCount,
+    shares: item.shares,
+    views: item.views,
+    source_score: item.sourceScore,
+    campaign: item.campaignKey,
+    strategies: item.strategyKeys,
+    hashtags: item.hashtags,
+    created_at: item.createdAt.toISOString(),
+    updated_at: item.updatedAt.toISOString()
+  });
+
   try {
-    const page = await store.listPosts({
-      ...parsed.filters,
-      sort,
-      limit,
-      cursor: parsed.query.cursor ?? undefined
-    });
+    if (!hasOriginFiltering) {
+      const page = await store.listPosts({
+        ...parsed.filters,
+        sort,
+        limit,
+        cursor: parsed.query.cursor ?? undefined
+      });
+
+      return json(200, {
+        items: page.items.map(toApiPost),
+        page_info: {
+          next_cursor: page.nextCursor,
+          has_next: page.hasNext
+        }
+      });
+    }
+
+    const scanLimit = Math.min(200, Math.max(limit * 3, 60));
+    const filteredItems: ReturnType<typeof toApiPost>[] = [];
+    let scanCursor = parsed.query.cursor ?? undefined;
+    let scanHasNext = true;
+    let nextCursor: string | null = null;
+    let matchedBeyondLimit = false;
+    let guard = 0;
+
+    while (scanHasNext && guard < 20) {
+      guard += 1;
+      const page = await store.listPosts({
+        ...parsed.filters,
+        sort,
+        limit: scanLimit,
+        cursor: scanCursor
+      });
+
+      scanCursor = page.nextCursor ?? undefined;
+      scanHasNext = page.hasNext;
+      nextCursor = page.nextCursor;
+
+      for (const item of page.items) {
+        const originFields = deriveOriginFields({
+          forcedOrigin: "awario",
+          channel: item.channel,
+          provider: item.channel
+        });
+        if (!matchesOriginFilters(originFields, originParsed.filters)) continue;
+
+        if (filteredItems.length < limit) {
+          filteredItems.push(toApiPost(item));
+        } else {
+          matchedBeyondLimit = true;
+        }
+      }
+
+      if (filteredItems.length >= limit && (matchedBeyondLimit || scanHasNext)) {
+        break;
+      }
+    }
+
+    const hasNext = filteredItems.length >= limit && (matchedBeyondLimit || scanHasNext);
 
     return json(200, {
-      items: page.items.map((item) => ({
-        id: item.id,
-        content_item_id: item.contentItemId,
-        channel: item.channel,
-        account_name: item.accountName,
-        external_post_id: item.externalPostId,
-        post_url: item.postUrl,
-        post_type: item.postType,
-        published_at: item.publishedAt?.toISOString() ?? null,
-        title: item.title,
-        text: item.text,
-        sentiment: item.sentiment,
-        sentiment_raw: item.sentimentRaw,
-        sentiment_confidence: item.sentimentConfidence,
-        exposure: item.exposure,
-        engagement_total: item.engagementTotal,
-        impressions: item.impressions,
-        reach: item.reach,
-        clicks: item.clicks,
-        likes: item.likes,
-        comments: item.comments,
-        awario_comments_count: item.awarioCommentsCount,
-        shares: item.shares,
-        views: item.views,
-        source_score: item.sourceScore,
-        campaign: item.campaignKey,
-        strategies: item.strategyKeys,
-        hashtags: item.hashtags,
-        created_at: item.createdAt.toISOString(),
-        updated_at: item.updatedAt.toISOString()
-      })),
+      items: filteredItems,
       page_info: {
-        next_cursor: page.nextCursor,
-        has_next: page.hasNext
+        next_cursor: hasNext ? nextCursor : null,
+        has_next: hasNext
       }
     });
   } catch (error) {
@@ -1333,44 +1462,139 @@ export const listMonitorSocialPostComments = async (event: APIGatewayProxyEventV
     relatedToPostText = query.related_to_post_text === "true";
   }
 
+  const originParsed = parseOriginFilters(query);
+  if (originParsed.error) return originParsed.error;
+  const hasOriginFiltering = Boolean(
+    originParsed.filters.origin ||
+      originParsed.filters.medium ||
+      (originParsed.filters.tags?.length ?? 0) > 0
+  );
+
+  const toApiComment = (item: {
+    id: string;
+    socialPostMetricId: string;
+    awarioMentionId: string;
+    awarioAlertId: string;
+    channel: string;
+    parentExternalPostId: string;
+    externalCommentId: string | null;
+    externalReplyCommentId: string | null;
+    commentUrl: string | null;
+    authorName: string | null;
+    authorProfileUrl: string | null;
+    publishedAt: Date | null;
+    text: string | null;
+    sentiment: string;
+    sentimentSource: "awario" | "model" | "manual";
+    isSpam: boolean;
+    relatedToPostText: boolean;
+    needsReview: boolean;
+    confidence: number | null;
+    rawPayload: Record<string, unknown>;
+    createdAt: Date;
+    updatedAt: Date;
+  }) => ({
+    ...deriveOriginFields({
+      forcedOrigin: "awario",
+      channel: item.channel,
+      provider: item.channel,
+      awarioAlertId: item.awarioAlertId
+    }),
+    id: item.id,
+    social_post_metric_id: item.socialPostMetricId,
+    awario_mention_id: item.awarioMentionId,
+    awario_alert_id: item.awarioAlertId,
+    channel: item.channel,
+    parent_external_post_id: item.parentExternalPostId,
+    external_comment_id: item.externalCommentId,
+    external_reply_comment_id: item.externalReplyCommentId,
+    comment_url: item.commentUrl,
+    author_name: item.authorName,
+    author_profile_url: item.authorProfileUrl,
+    published_at: item.publishedAt?.toISOString() ?? null,
+    text: item.text,
+    sentiment: item.sentiment,
+    sentiment_source: item.sentimentSource,
+    is_spam: item.isSpam,
+    related_to_post_text: item.relatedToPostText,
+    needs_review: item.needsReview,
+    confidence: item.confidence,
+    raw_payload: item.rawPayload,
+    created_at: item.createdAt.toISOString(),
+    updated_at: item.updatedAt.toISOString()
+  });
+
   try {
-    const page = await store.listPostComments({
-      postId,
-      limit,
-      cursor: query.cursor ?? undefined,
-      sentiment: sentiment ?? undefined,
-      isSpam,
-      relatedToPostText
-    });
+    if (!hasOriginFiltering) {
+      const page = await store.listPostComments({
+        postId,
+        limit,
+        cursor: query.cursor ?? undefined,
+        sentiment: sentiment ?? undefined,
+        isSpam,
+        relatedToPostText
+      });
+
+      return json(200, {
+        items: page.items.map(toApiComment),
+        page_info: {
+          next_cursor: page.nextCursor,
+          has_next: page.hasNext
+        }
+      });
+    }
+
+    const scanLimit = Math.min(200, Math.max(limit * 3, 60));
+    const filteredItems: ReturnType<typeof toApiComment>[] = [];
+    let scanCursor = query.cursor ?? undefined;
+    let scanHasNext = true;
+    let nextCursor: string | null = null;
+    let matchedBeyondLimit = false;
+    let guard = 0;
+
+    while (scanHasNext && guard < 20) {
+      guard += 1;
+      const page = await store.listPostComments({
+        postId,
+        limit: scanLimit,
+        cursor: scanCursor,
+        sentiment: sentiment ?? undefined,
+        isSpam,
+        relatedToPostText
+      });
+
+      scanCursor = page.nextCursor ?? undefined;
+      scanHasNext = page.hasNext;
+      nextCursor = page.nextCursor;
+
+      for (const item of page.items) {
+        const originFields = deriveOriginFields({
+          forcedOrigin: "awario",
+          channel: item.channel,
+          provider: item.channel,
+          awarioAlertId: item.awarioAlertId
+        });
+        if (!matchesOriginFilters(originFields, originParsed.filters)) continue;
+
+        if (filteredItems.length < limit) {
+          filteredItems.push(toApiComment(item));
+        } else {
+          matchedBeyondLimit = true;
+        }
+      }
+
+      if (filteredItems.length >= limit && (matchedBeyondLimit || scanHasNext)) {
+        break;
+      }
+    }
+
+    const hasNext = filteredItems.length >= limit && (matchedBeyondLimit || scanHasNext);
 
     return json(200, {
-      items: page.items.map((item) => ({
-        id: item.id,
-        social_post_metric_id: item.socialPostMetricId,
-        awario_mention_id: item.awarioMentionId,
-        awario_alert_id: item.awarioAlertId,
-        channel: item.channel,
-        parent_external_post_id: item.parentExternalPostId,
-        external_comment_id: item.externalCommentId,
-        external_reply_comment_id: item.externalReplyCommentId,
-        comment_url: item.commentUrl,
-        author_name: item.authorName,
-        author_profile_url: item.authorProfileUrl,
-        published_at: item.publishedAt?.toISOString() ?? null,
-        text: item.text,
-        sentiment: item.sentiment,
-        sentiment_source: item.sentimentSource,
-        is_spam: item.isSpam,
-        related_to_post_text: item.relatedToPostText,
-        needs_review: item.needsReview,
-        confidence: item.confidence,
-        raw_payload: item.rawPayload,
-        created_at: item.createdAt.toISOString(),
-        updated_at: item.updatedAt.toISOString()
-      })),
+      items: filteredItems,
       page_info: {
-        next_cursor: page.nextCursor,
-        has_next: page.hasNext
+        next_cursor: hasNext ? nextCursor : null,
+        has_next: hasNext
       }
     });
   } catch (error) {
@@ -1461,6 +1685,12 @@ export const patchMonitorSocialComment = async (event: APIGatewayProxyEventV2) =
     });
 
     return json(200, {
+      ...deriveOriginFields({
+        forcedOrigin: "awario",
+        channel: updated.channel,
+        provider: updated.channel,
+        awarioAlertId: updated.awarioAlertId
+      }),
       id: updated.id,
       social_post_metric_id: updated.socialPostMetricId,
       awario_mention_id: updated.awarioMentionId,

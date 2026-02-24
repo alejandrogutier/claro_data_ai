@@ -1,5 +1,6 @@
 import { randomUUID } from "crypto";
 import { AppStoreError } from "./appStore";
+import { deriveOriginFields } from "../core/origin";
 import {
   type QueryDefinition,
   type QueryExecutionConfig,
@@ -247,6 +248,9 @@ export type QueryPreviewResult = {
   candidates_count: number;
   sample: Array<{
     content_item_id: string;
+    origin: "news" | "awario";
+    medium: string | null;
+    tags: string[];
     provider: string;
     title: string;
     canonical_url: string;
@@ -276,8 +280,12 @@ export type QueryDryRunResult = {
     raw_count: number;
     fetched_count: number;
     matched_count: number;
+    origin_breakdown: Record<string, number>;
   };
   sample: Array<{
+    origin: "news" | "awario";
+    medium: string | null;
+    tags: string[];
     provider: string;
     title: string;
     canonical_url: string;
@@ -963,6 +971,7 @@ class QueryConfigStore {
         SELECT
           ci."id"::text,
           ci."provider",
+          ci."sourceName",
           LEFT(COALESCE(ci."title", ''), 512),
           LEFT(COALESCE(ci."summary", ''), 1000),
           LEFT(COALESCE(ci."content", ''), 4000),
@@ -991,6 +1000,9 @@ class QueryConfigStore {
 
     const matched: Array<{
       content_item_id: string;
+      origin: "news" | "awario";
+      medium: string | null;
+      tags: string[];
       provider: string;
       title: string;
       canonical_url: string;
@@ -1002,13 +1014,14 @@ class QueryConfigStore {
     for (const row of response.records ?? []) {
       const contentItemId = fieldString(row, 0);
       const provider = fieldString(row, 1) ?? "unknown";
-      const title = fieldString(row, 2) ?? "";
-      const summary = fieldString(row, 3) ?? "";
-      const content = fieldString(row, 4) ?? "";
-      const canonicalUrl = fieldString(row, 5) ?? "";
-      const language = fieldString(row, 6) ?? "";
-      const metadata = parseJsonObject(fieldString(row, 7));
-      const publishedAt = fieldDate(row, 8) ?? fieldDate(row, 9);
+      const sourceName = fieldString(row, 2);
+      const title = fieldString(row, 3) ?? "";
+      const summary = fieldString(row, 4) ?? "";
+      const content = fieldString(row, 5) ?? "";
+      const canonicalUrl = fieldString(row, 6) ?? "";
+      const language = fieldString(row, 7) ?? "";
+      const metadata = parseJsonObject(fieldString(row, 8));
+      const publishedAt = fieldDate(row, 9) ?? fieldDate(row, 10);
 
       if (!contentItemId || !canonicalUrl) continue;
 
@@ -1027,8 +1040,16 @@ class QueryConfigStore {
 
       providerBreakdown.set(provider, (providerBreakdown.get(provider) ?? 0) + 1);
       if (matched.length < safeLimit) {
+        const originFields = deriveOriginFields({
+          forcedOrigin: "news",
+          provider,
+          sourceName
+        });
         matched.push({
           content_item_id: contentItemId,
+          origin: originFields.origin,
+          medium: originFields.medium,
+          tags: originFields.tags,
           provider,
           title,
           canonical_url: canonicalUrl,
@@ -1127,12 +1148,22 @@ class QueryConfigStore {
 
     const sample = dedupeByCanonicalUrl(matchedItems)
       .slice(0, 20)
-      .map((item) => ({
-        provider: item.provider,
-        title: item.title,
-        canonical_url: item.canonicalUrl,
-        published_at: item.publishedAt
-      }));
+      .map((item) => {
+        const originFields = deriveOriginFields({
+          forcedOrigin: "news",
+          provider: item.provider,
+          sourceName: item.sourceName
+        });
+        return {
+          origin: originFields.origin,
+          medium: originFields.medium,
+          tags: originFields.tags,
+          provider: item.provider,
+          title: item.title,
+          canonical_url: item.canonicalUrl,
+          published_at: item.publishedAt
+        };
+      });
 
     const result: QueryDryRunResult = {
       run_id: randomUUID(),
@@ -1145,7 +1176,10 @@ class QueryConfigStore {
       totals: {
         raw_count: rawCount,
         fetched_count: fetchedCount,
-        matched_count: matchedCount
+        matched_count: matchedCount,
+        origin_breakdown: {
+          news: matchedCount
+        }
       },
       sample
     };
@@ -1159,7 +1193,8 @@ class QueryConfigStore {
       after: {
         run_id: result.run_id,
         providers_used: providersUsed,
-        totals: result.totals
+        totals: result.totals,
+        origin_breakdown: result.totals.origin_breakdown
       }
     });
 

@@ -1094,7 +1094,7 @@ const ensureIncidentFlow = async (apiBase, viewerToken, analystToken) => {
 const ensureMonitorSocialSurface = async (apiBase, viewerToken, analystToken) => {
   const accountsResponse = await request({
     method: "GET",
-    url: `${apiBase}/v1/monitor/social/accounts?limit=20&sort=riesgo_desc&min_posts=1&min_exposure=0`,
+    url: `${apiBase}/v1/monitor/social/accounts?limit=20&sort=riesgo_desc&min_posts=1&min_exposure=1`,
     token: viewerToken
   });
   if (accountsResponse.status === 404) {

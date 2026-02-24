@@ -555,34 +555,34 @@ resource "aws_lambda_function" "api" {
 
   environment {
     variables = {
-      BEDROCK_MODEL_ID            = "us.anthropic.claude-haiku-4-5-20251001-v1:0"
-      APP_ENV                     = var.environment
-      PROVIDER_KEYS_SECRET_ARN    = data.aws_secretsmanager_secret.provider_keys.arn
-      APP_CONFIG_SECRET_ARN       = data.aws_secretsmanager_secret.app_config.arn
-      AWS_CREDENTIALS_SECRET_ARN  = data.aws_secretsmanager_secret.aws_credentials.arn
-      PROVIDER_KEYS_SECRET_NAME   = data.aws_secretsmanager_secret.provider_keys.name
-      APP_CONFIG_SECRET_NAME      = data.aws_secretsmanager_secret.app_config.name
-      AWS_CREDENTIALS_SECRET_NAME = data.aws_secretsmanager_secret.aws_credentials.name
-      DB_RESOURCE_ARN             = aws_rds_cluster.aurora.arn
-      DB_SECRET_ARN               = data.aws_secretsmanager_secret.database.arn
-      DB_NAME                     = var.db_name
-      INGESTION_STATE_MACHINE_ARN = aws_sfn_state_machine.ingestion.arn
-      RAW_BUCKET_NAME             = aws_s3_bucket.raw.bucket
-      SOCIAL_RAW_BUCKET_NAME      = var.social_raw_bucket_name
-      SOCIAL_RAW_PREFIX           = var.social_raw_prefix
+      BEDROCK_MODEL_ID             = "us.anthropic.claude-haiku-4-5-20251001-v1:0"
+      APP_ENV                      = var.environment
+      PROVIDER_KEYS_SECRET_ARN     = data.aws_secretsmanager_secret.provider_keys.arn
+      APP_CONFIG_SECRET_ARN        = data.aws_secretsmanager_secret.app_config.arn
+      AWS_CREDENTIALS_SECRET_ARN   = data.aws_secretsmanager_secret.aws_credentials.arn
+      PROVIDER_KEYS_SECRET_NAME    = data.aws_secretsmanager_secret.provider_keys.name
+      APP_CONFIG_SECRET_NAME       = data.aws_secretsmanager_secret.app_config.name
+      AWS_CREDENTIALS_SECRET_NAME  = data.aws_secretsmanager_secret.aws_credentials.name
+      DB_RESOURCE_ARN              = aws_rds_cluster.aurora.arn
+      DB_SECRET_ARN                = data.aws_secretsmanager_secret.database.arn
+      DB_NAME                      = var.db_name
+      INGESTION_STATE_MACHINE_ARN  = aws_sfn_state_machine.ingestion.arn
+      RAW_BUCKET_NAME              = aws_s3_bucket.raw.bucket
+      SOCIAL_RAW_BUCKET_NAME       = var.social_raw_bucket_name
+      SOCIAL_RAW_PREFIX            = var.social_raw_prefix
       SOCIAL_SCHEDULER_LAMBDA_NAME = aws_lambda_function.social_scheduler.function_name
-      EXPORT_BUCKET_NAME          = aws_s3_bucket.exports.bucket
-      EXPORT_QUEUE_URL            = aws_sqs_queue.export.url
-      INCIDENT_QUEUE_URL          = aws_sqs_queue.incident_evaluation.url
-      REPORT_QUEUE_URL            = aws_sqs_queue.report_generation.url
-      ANALYSIS_QUEUE_URL          = aws_sqs_queue.analysis_generation.url
-      CLASSIFICATION_QUEUE_URL    = aws_sqs_queue.classification_generation.url
-      REPORT_CONFIDENCE_THRESHOLD = tostring(var.report_confidence_threshold)
-      REPORT_DEFAULT_TIMEZONE     = var.report_default_timezone
-      REPORT_EMAIL_SENDER         = var.ses_sender_email
-      EXPORT_SIGNED_URL_SECONDS   = "900"
-      INGESTION_DEFAULT_TERMS     = var.ingestion_default_terms
-      SOCIAL_ANALYTICS_V2_ENABLED = "true"
+      EXPORT_BUCKET_NAME           = aws_s3_bucket.exports.bucket
+      EXPORT_QUEUE_URL             = aws_sqs_queue.export.url
+      INCIDENT_QUEUE_URL           = aws_sqs_queue.incident_evaluation.url
+      REPORT_QUEUE_URL             = aws_sqs_queue.report_generation.url
+      ANALYSIS_QUEUE_URL           = aws_sqs_queue.analysis_generation.url
+      CLASSIFICATION_QUEUE_URL     = aws_sqs_queue.classification_generation.url
+      REPORT_CONFIDENCE_THRESHOLD  = tostring(var.report_confidence_threshold)
+      REPORT_DEFAULT_TIMEZONE      = var.report_default_timezone
+      REPORT_EMAIL_SENDER          = var.ses_sender_email
+      EXPORT_SIGNED_URL_SECONDS    = "900"
+      INGESTION_DEFAULT_TERMS      = var.ingestion_default_terms
+      SOCIAL_ANALYTICS_V2_ENABLED  = "true"
     }
   }
 }
@@ -813,16 +813,16 @@ resource "aws_lambda_function" "social_scheduler" {
 
   environment {
     variables = {
-      APP_ENV                = var.environment
-      DB_RESOURCE_ARN        = aws_rds_cluster.aurora.arn
-      DB_SECRET_ARN          = data.aws_secretsmanager_secret.database.arn
-      DB_NAME                = var.db_name
-      RAW_BUCKET_NAME        = aws_s3_bucket.raw.bucket
-      SOCIAL_RAW_BUCKET_NAME = var.social_raw_bucket_name
-      SOCIAL_RAW_PREFIX      = var.social_raw_prefix
-      CLASSIFICATION_QUEUE_URL = aws_sqs_queue.classification_generation.url
+      APP_ENV                       = var.environment
+      DB_RESOURCE_ARN               = aws_rds_cluster.aurora.arn
+      DB_SECRET_ARN                 = data.aws_secretsmanager_secret.database.arn
+      DB_NAME                       = var.db_name
+      RAW_BUCKET_NAME               = aws_s3_bucket.raw.bucket
+      SOCIAL_RAW_BUCKET_NAME        = var.social_raw_bucket_name
+      SOCIAL_RAW_PREFIX             = var.social_raw_prefix
+      CLASSIFICATION_QUEUE_URL      = aws_sqs_queue.classification_generation.url
       CLASSIFICATION_PROMPT_VERSION = "social-sentiment-v1"
-      BEDROCK_MODEL_ID       = "us.anthropic.claude-haiku-4-5-20251001-v1:0"
+      BEDROCK_MODEL_ID              = "us.anthropic.claude-haiku-4-5-20251001-v1:0"
     }
   }
 }
@@ -956,8 +956,11 @@ resource "aws_apigatewayv2_route" "private_routes" {
     "GET /v1/feed/news",
     "GET /v1/monitor/overview",
     "GET /v1/monitor/social/overview",
+    "GET /v1/monitor/social/facets",
     "GET /v1/monitor/social/accounts",
     "GET /v1/monitor/social/posts",
+    "GET /v1/monitor/social/posts/{post_id}/comments",
+    "PATCH /v1/monitor/social/comments/{comment_id}",
     "GET /v1/monitor/social/risk",
     "GET /v1/monitor/social/charts/heatmap",
     "GET /v1/monitor/social/charts/scatter",
@@ -993,6 +996,12 @@ resource "aws_apigatewayv2_route" "private_routes" {
     "GET /v1/config/queries/{id}/revisions",
     "POST /v1/config/queries/{id}/rollback",
     "POST /v1/config/queries/{id}/dry-run",
+    "GET /v1/config/awario/profiles",
+    "POST /v1/config/awario/profiles",
+    "PATCH /v1/config/awario/profiles/{id}",
+    "GET /v1/config/awario/bindings",
+    "POST /v1/config/awario/bindings",
+    "PATCH /v1/config/awario/bindings/{id}",
     "GET /v1/config/competitors",
     "POST /v1/config/competitors",
     "PATCH /v1/config/competitors/{id}",

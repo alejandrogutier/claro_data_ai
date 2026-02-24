@@ -10,6 +10,14 @@ import {
 } from "../../data/appStore";
 import { getAuthPrincipal, getRole, hasRole } from "../../core/auth";
 import { getPathWithoutStage, getRequestId, json, parseBody } from "../../core/http";
+import {
+  deriveOriginFields,
+  isValidOrigin,
+  matchesOriginFilters,
+  parseTagFilterValues,
+  type OriginFilterInput,
+  type OriginType
+} from "../../core/origin";
 
 const VALID_STATES = new Set(["active", "archived", "hidden"]);
 const VALID_SOURCE_TYPES = new Set(["news", "social"]);
@@ -50,6 +58,11 @@ const parseDate = (value: string | undefined): Date | null => {
 };
 
 const toApiContent = (item: ContentRecord) => ({
+  ...deriveOriginFields({
+    sourceType: item.sourceType,
+    provider: item.provider,
+    sourceName: item.sourceName
+  }),
   id: item.id,
   source_type: item.sourceType,
   term_id: item.termId,
@@ -230,6 +243,21 @@ export const listContent = async (event: APIGatewayProxyEventV2) => {
   if (query.sentimiento) filters.sentimiento = query.sentimiento;
   if (query.q) filters.query = query.q;
 
+  const originRaw = query.origin?.trim().toLowerCase();
+  let originFilter: OriginType | undefined;
+  if (originRaw) {
+    if (!isValidOrigin(originRaw)) {
+      return json(422, {
+        error: "validation_error",
+        message: "origin must be one of news|awario"
+      });
+    }
+    originFilter = originRaw;
+  }
+
+  const mediumFilter = query.medium?.trim() ? query.medium.trim() : undefined;
+  const tagFilters = parseTagFilterValues(query.tag, query.tags);
+
   const fromDate = parseDate(query.from);
   if (query.from && !fromDate) {
     return json(422, {
@@ -257,12 +285,66 @@ export const listContent = async (event: APIGatewayProxyEventV2) => {
   }
 
   try {
-    const result = await store.listContent(limit, filters, query.cursor ?? undefined);
+    const originFilters: OriginFilterInput = {
+      origin: originFilter,
+      medium: mediumFilter,
+      tags: tagFilters
+    };
+    const hasOriginFiltering = Boolean(originFilters.origin || originFilters.medium || (originFilters.tags?.length ?? 0) > 0);
+
+    if (!hasOriginFiltering) {
+      const result = await store.listContent(limit, filters, query.cursor ?? undefined);
+      return json(200, {
+        items: result.items.map(toApiContent),
+        page_info: {
+          next_cursor: result.nextCursor,
+          has_next: result.hasNext
+        }
+      });
+    }
+
+    const scanLimit = Math.min(200, Math.max(limit * 3, 50));
+    const filteredItems: ContentRecord[] = [];
+    let scanCursor: string | undefined = query.cursor ?? undefined;
+    let scanHasNext = true;
+    let nextCursor: string | null = null;
+    let matchedBeyondLimit = false;
+    let guards = 0;
+
+    while (scanHasNext && guards < 20) {
+      guards += 1;
+      const page = await store.listContent(scanLimit, filters, scanCursor);
+      scanCursor = page.nextCursor ?? undefined;
+      scanHasNext = page.hasNext;
+      nextCursor = page.nextCursor;
+
+      for (const item of page.items) {
+        const originFields = deriveOriginFields({
+          sourceType: item.sourceType,
+          provider: item.provider,
+          sourceName: item.sourceName
+        });
+        if (!matchesOriginFilters(originFields, originFilters)) continue;
+
+        if (filteredItems.length < limit) {
+          filteredItems.push(item);
+        } else {
+          matchedBeyondLimit = true;
+        }
+      }
+
+      if (filteredItems.length >= limit && (matchedBeyondLimit || scanHasNext)) {
+        break;
+      }
+    }
+
+    const hasNext = filteredItems.length >= limit && (matchedBeyondLimit || scanHasNext);
+
     return json(200, {
-      items: result.items.map(toApiContent),
+      items: filteredItems.map(toApiContent),
       page_info: {
-        next_cursor: result.nextCursor,
-        has_next: result.hasNext
+        next_cursor: hasNext ? nextCursor : null,
+        has_next: hasNext
       }
     });
   } catch (error) {

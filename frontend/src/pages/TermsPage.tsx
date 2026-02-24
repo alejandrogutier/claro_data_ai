@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import {
   ApiError,
   type ConfigQuery,
+  type OriginType,
   type QueryDefinition,
   type QueryDryRunResponse,
   type QueryExecutionConfig,
@@ -280,6 +281,29 @@ const formatDateTime = (value: string | null | undefined): string => {
   return parsed.toLocaleString();
 };
 
+type OriginSampleItem = {
+  origin: OriginType;
+  medium: string | null;
+  tags: string[];
+};
+
+const normalizeTagToken = (value: string): string => value.trim().toLowerCase();
+
+const matchesSampleFilters = (
+  item: OriginSampleItem,
+  originFilter: OriginType | "all",
+  tagFilter: string
+): boolean => {
+  if (originFilter !== "all" && item.origin !== originFilter) {
+    return false;
+  }
+
+  const normalizedTag = normalizeTagToken(tagFilter);
+  if (!normalizedTag) return true;
+
+  return item.tags.some((tag) => normalizeTagToken(tag) === normalizedTag);
+};
+
 export const TermsPage = () => {
   const client = useApiClient();
   const { session } = useAuth();
@@ -316,10 +340,26 @@ export const TermsPage = () => {
   const [dryRunResult, setDryRunResult] = useState<QueryDryRunResponse | null>(null);
   const [isPreviewing, setIsPreviewing] = useState(false);
   const [isDryRunning, setIsDryRunning] = useState(false);
+  const [sampleOriginFilter, setSampleOriginFilter] = useState<OriginType | "all">("all");
+  const [sampleTagFilter, setSampleTagFilter] = useState("");
   const [isManualSyncing, setIsManualSyncing] = useState(false);
   const [manualSyncInfo, setManualSyncInfo] = useState<string | null>(null);
 
   const selectedQuery = useMemo(() => queries.find((item) => item.id === selectedId) ?? null, [queries, selectedId]);
+  const filteredPreviewSample = useMemo(
+    () =>
+      (previewResult?.sample ?? []).filter((item) =>
+        matchesSampleFilters(item, sampleOriginFilter, sampleTagFilter)
+      ),
+    [previewResult, sampleOriginFilter, sampleTagFilter]
+  );
+  const filteredDryRunSample = useMemo(
+    () =>
+      (dryRunResult?.sample ?? []).filter((item) =>
+        matchesSampleFilters(item, sampleOriginFilter, sampleTagFilter)
+      ),
+    [dryRunResult, sampleOriginFilter, sampleTagFilter]
+  );
 
   const hydrateDefinitionEditors = (definition: QueryDefinition, preferredMode?: QueryEditorMode) => {
     const quickDraft = extractQuickDraft(definition);
@@ -1138,19 +1178,52 @@ export const TermsPage = () => {
           </ul>
 
           <h4 style={{ marginTop: 12 }}>Muestra</h4>
+          <div className="form-grid" style={{ gridTemplateColumns: "220px minmax(0, 1fr)", marginTop: 8 }}>
+            <label>
+              Filtrar por origen
+              <select
+                value={sampleOriginFilter}
+                onChange={(event) => setSampleOriginFilter(event.target.value as OriginType | "all")}
+              >
+                <option value="all">all</option>
+                <option value="news">news</option>
+                <option value="awario">awario</option>
+              </select>
+            </label>
+            <label>
+              Filtrar por tag exacto
+              <input
+                value={sampleTagFilter}
+                onChange={(event) => setSampleTagFilter(event.target.value)}
+                placeholder="origin:news, provider:newsapi, medium:cnn"
+              />
+            </label>
+          </div>
+          <p className="term-meta" style={{ marginTop: 8 }}>
+            Mostrando {filteredPreviewSample.length} de {previewResult.sample.length} items de muestra.
+          </p>
           <ul className="simple-list simple-list--stacked" style={{ marginTop: 8 }}>
-            {previewResult.sample.map((item) => (
+            {filteredPreviewSample.map((item) => (
               <li key={item.content_item_id}>
                 <div style={{ display: "grid", gap: 4 }}>
                   <strong>{item.title || "(sin titulo)"}</strong>
                   <span className="term-meta">
                     {item.provider} | {formatDateTime(item.published_at)}
                   </span>
+                  <div className="origin-chip-row">
+                    <span className={`origin-chip origin-chip-${item.origin}`}>{item.origin}</span>
+                    {item.medium ? <span className="origin-chip">medio:{item.medium}</span> : null}
+                    {item.tags.map((tag) => (
+                      <span className="origin-chip" key={`${item.content_item_id}-${tag}`}>
+                        {tag}
+                      </span>
+                    ))}
+                  </div>
                   <span className="term-meta">{item.canonical_url || "(sin url)"}</span>
                 </div>
               </li>
             ))}
-            {previewResult.sample.length === 0 ? <li>No hubo coincidencias para la muestra.</li> : null}
+            {filteredPreviewSample.length === 0 ? <li>No hubo coincidencias para la muestra con estos filtros.</li> : null}
           </ul>
 
           <details style={{ marginTop: 12 }}>
@@ -1175,6 +1248,14 @@ export const TermsPage = () => {
             <article className="panel kpi-card" style={{ marginBottom: 0 }}>
               <span className="kpi-caption">Matched</span>
               <strong className="kpi-value">{dryRunResult.totals.matched_count}</strong>
+            </article>
+            <article className="panel kpi-card" style={{ marginBottom: 0 }}>
+              <span className="kpi-caption">Origin</span>
+              <strong className="kpi-value" style={{ fontSize: "1.2rem" }}>
+                {Object.entries(dryRunResult.totals.origin_breakdown)
+                  .map(([origin, count]) => `${origin}:${count}`)
+                  .join(" | ") || "-"}
+              </strong>
             </article>
           </div>
 
@@ -1204,6 +1285,34 @@ export const TermsPage = () => {
               </tbody>
             </table>
           </div>
+
+          <h4 style={{ marginTop: 12 }}>Muestra dry-run</h4>
+          <p className="term-meta" style={{ marginTop: 4 }}>
+            Mostrando {filteredDryRunSample.length} de {dryRunResult.sample.length} items de muestra.
+          </p>
+          <ul className="simple-list simple-list--stacked" style={{ marginTop: 8 }}>
+            {filteredDryRunSample.map((item) => (
+              <li key={`${item.provider}-${item.canonical_url}`}>
+                <div style={{ display: "grid", gap: 4 }}>
+                  <strong>{item.title || "(sin titulo)"}</strong>
+                  <span className="term-meta">
+                    {item.provider} | {formatDateTime(item.published_at)}
+                  </span>
+                  <div className="origin-chip-row">
+                    <span className={`origin-chip origin-chip-${item.origin}`}>{item.origin}</span>
+                    {item.medium ? <span className="origin-chip">medio:{item.medium}</span> : null}
+                    {item.tags.map((tag) => (
+                      <span className="origin-chip" key={`${item.provider}-${item.canonical_url}-${tag}`}>
+                        {tag}
+                      </span>
+                    ))}
+                  </div>
+                  <span className="term-meta">{item.canonical_url || "(sin url)"}</span>
+                </div>
+              </li>
+            ))}
+            {filteredDryRunSample.length === 0 ? <li>No hubo coincidencias para la muestra con estos filtros.</li> : null}
+          </ul>
 
           <details style={{ marginTop: 12 }}>
             <summary style={{ cursor: "pointer", fontWeight: 700 }}>Ver JSON</summary>

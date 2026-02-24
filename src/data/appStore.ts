@@ -857,10 +857,11 @@ class AppStore {
     };
   }
 
-  async listNewsFeed(termId: string): Promise<ContentRecord[]> {
+  async listNewsFeed(termId: string, limit = NEWS_FEED_LIMIT): Promise<ContentRecord[]> {
     if (!isUuid(termId)) {
       throw new AppStoreError("validation", "term_id must be a valid UUID");
     }
+    const safeLimit = Math.min(200, Math.max(1, Math.floor(limit)));
 
     const termResponse = await this.rds.execute(
       `
@@ -944,7 +945,7 @@ class AppStore {
           ci."id" DESC
         LIMIT :limit
       `,
-      [sqlUuid("term_id", termId), sqlLong("limit", NEWS_FEED_LIMIT)]
+      [sqlUuid("term_id", termId), sqlLong("limit", safeLimit)]
     );
 
     return (response.records ?? []).map(parseContentRow).filter((item): item is ContentRecord => item !== null);

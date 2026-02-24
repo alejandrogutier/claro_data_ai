@@ -452,6 +452,19 @@ paths:
           in: query
           schema:
             type: string
+        - name: origin
+          in: query
+          schema:
+            $ref: '#/components/schemas/OriginType'
+        - name: medium
+          in: query
+          schema:
+            type: string
+        - name: tag
+          in: query
+          schema:
+            type: string
+          description: Tag individual o lista CSV (`origin:news,provider:newsapi`)
       responses:
         '200':
           description: Lista paginada de contenido
@@ -476,6 +489,19 @@ paths:
           schema:
             type: string
             format: uuid
+        - name: origin
+          in: query
+          schema:
+            $ref: '#/components/schemas/OriginType'
+        - name: medium
+          in: query
+          schema:
+            type: string
+        - name: tag
+          in: query
+          schema:
+            type: string
+          description: Tag individual o lista CSV (`origin:news,provider:newsapi`)
       responses:
         '200':
           description: Feed de noticias mas recientes para la query
@@ -859,6 +885,19 @@ paths:
           in: query
           schema:
             $ref: '#/components/schemas/SocialPostSort'
+        - name: origin
+          in: query
+          schema:
+            $ref: '#/components/schemas/OriginType'
+        - name: medium
+          in: query
+          schema:
+            type: string
+        - name: tag
+          in: query
+          schema:
+            type: string
+          description: Tag individual o lista CSV (`origin:awario,channel:facebook`)
       responses:
         '200':
           description: Posts sociales
@@ -897,6 +936,19 @@ paths:
           in: query
           schema:
             type: boolean
+        - name: origin
+          in: query
+          schema:
+            $ref: '#/components/schemas/OriginType'
+        - name: medium
+          in: query
+          schema:
+            type: string
+        - name: tag
+          in: query
+          schema:
+            type: string
+          description: Tag individual o lista CSV (`origin:awario,alert:12345`)
       responses:
         '200':
           description: Comentarios Awario del post
@@ -3036,6 +3088,13 @@ components:
     SourceType:
       type: string
       enum: [news, social]
+    OriginType:
+      type: string
+      enum: [news, awario]
+    ContentTags:
+      type: array
+      items:
+        type: string
     ContentState:
       type: string
       enum: [active, archived, hidden]
@@ -3455,11 +3514,18 @@ components:
       additionalProperties: false
     ConfigQueryPreviewItem:
       type: object
-      required: [content_item_id, provider, title, canonical_url, published_at]
+      required: [content_item_id, origin, medium, tags, provider, title, canonical_url, published_at]
       properties:
         content_item_id:
           type: string
           format: uuid
+        origin:
+          $ref: '#/components/schemas/OriginType'
+        medium:
+          type: string
+          nullable: true
+        tags:
+          $ref: '#/components/schemas/ContentTags'
         provider:
           type: string
         title:
@@ -3535,7 +3601,7 @@ components:
           nullable: true
     ConfigQueryDryRunTotals:
       type: object
-      required: [raw_count, fetched_count, matched_count]
+      required: [raw_count, fetched_count, matched_count, origin_breakdown]
       properties:
         raw_count:
           type: integer
@@ -3546,10 +3612,22 @@ components:
         matched_count:
           type: integer
           minimum: 0
+        origin_breakdown:
+          type: object
+          additionalProperties:
+            type: integer
+            minimum: 0
     ConfigQueryDryRunSampleItem:
       type: object
-      required: [provider, title, canonical_url]
+      required: [origin, medium, tags, provider, title, canonical_url]
       properties:
+        origin:
+          $ref: '#/components/schemas/OriginType'
+        medium:
+          type: string
+          nullable: true
+        tags:
+          $ref: '#/components/schemas/ContentTags'
         provider:
           type: string
         title:
@@ -3604,13 +3682,20 @@ components:
             $ref: '#/components/schemas/ConfigQueryDryRunSampleItem'
     ContentItem:
       type: object
-      required: [id, source_type, state, title, canonical_url, created_at]
+      required: [id, source_type, origin, medium, tags, state, title, canonical_url, created_at]
       properties:
         id:
           type: string
           format: uuid
         source_type:
           $ref: '#/components/schemas/SourceType'
+        origin:
+          $ref: '#/components/schemas/OriginType'
+        medium:
+          type: string
+          nullable: true
+        tags:
+          $ref: '#/components/schemas/ContentTags'
         term_id:
           type: string
           format: uuid
@@ -5304,6 +5389,9 @@ components:
         [
           id,
           content_item_id,
+          origin,
+          medium,
+          tags,
           channel,
           account_name,
           external_post_id,
@@ -5339,6 +5427,13 @@ components:
         content_item_id:
           type: string
           format: uuid
+        origin:
+          $ref: '#/components/schemas/OriginType'
+        medium:
+          type: string
+          nullable: true
+        tags:
+          $ref: '#/components/schemas/ContentTags'
         channel:
           $ref: '#/components/schemas/SocialChannel'
         account_name:
@@ -5422,6 +5517,9 @@ components:
         [
           id,
           social_post_metric_id,
+          origin,
+          medium,
+          tags,
           awario_mention_id,
           awario_alert_id,
           channel,
@@ -5443,6 +5541,13 @@ components:
         social_post_metric_id:
           type: string
           format: uuid
+        origin:
+          $ref: '#/components/schemas/OriginType'
+        medium:
+          type: string
+          nullable: true
+        tags:
+          $ref: '#/components/schemas/ContentTags'
         awario_mention_id:
           type: string
         awario_alert_id:

@@ -600,6 +600,10 @@ export interface paths {
                     from?: string;
                     to?: string;
                     q?: string;
+                    origin?: components["schemas"]["OriginType"];
+                    medium?: string;
+                    /** @description Tag individual o lista CSV (`origin:news,provider:newsapi`) */
+                    tag?: string;
                 };
                 header?: never;
                 path?: never;
@@ -641,6 +645,10 @@ export interface paths {
             parameters: {
                 query: {
                     term_id: string;
+                    origin?: components["schemas"]["OriginType"];
+                    medium?: string;
+                    /** @description Tag individual o lista CSV (`origin:news,provider:newsapi`) */
+                    tag?: string;
                 };
                 header?: never;
                 path?: never;
@@ -936,6 +944,10 @@ export interface paths {
                     comparison_mode?: components["schemas"]["SocialComparisonMode"];
                     comparison_days?: number;
                     sort?: components["schemas"]["SocialPostSort"];
+                    origin?: components["schemas"]["OriginType"];
+                    medium?: string;
+                    /** @description Tag individual o lista CSV (`origin:awario,channel:facebook`) */
+                    tag?: string;
                 };
                 header?: never;
                 path?: never;
@@ -982,6 +994,10 @@ export interface paths {
                     sentiment?: components["schemas"]["SocialSentiment"];
                     is_spam?: boolean;
                     related_to_post_text?: boolean;
+                    origin?: components["schemas"]["OriginType"];
+                    medium?: string;
+                    /** @description Tag individual o lista CSV (`origin:awario,alert:12345`) */
+                    tag?: string;
                 };
                 header?: never;
                 path: {
@@ -3930,6 +3946,9 @@ export interface components {
         /** @enum {string} */
         SourceType: "news" | "social";
         /** @enum {string} */
+        OriginType: "news" | "awario";
+        ContentTags: string[];
+        /** @enum {string} */
         ContentState: "active" | "archived" | "hidden";
         /** @enum {string} */
         TermScope: "claro" | "competencia";
@@ -4111,6 +4130,9 @@ export interface components {
         ConfigQueryPreviewItem: {
             /** Format: uuid */
             content_item_id: string;
+            origin: components["schemas"]["OriginType"];
+            medium: string | null;
+            tags: components["schemas"]["ContentTags"];
             provider: string;
             title: string;
             /** Format: uri */
@@ -4145,8 +4167,14 @@ export interface components {
             raw_count: number;
             fetched_count: number;
             matched_count: number;
+            origin_breakdown: {
+                [key: string]: number;
+            };
         };
         ConfigQueryDryRunSampleItem: {
+            origin: components["schemas"]["OriginType"];
+            medium: string | null;
+            tags: components["schemas"]["ContentTags"];
             provider: string;
             title: string;
             /** Format: uri */
@@ -4171,6 +4199,9 @@ export interface components {
             /** Format: uuid */
             id: string;
             source_type: components["schemas"]["SourceType"];
+            origin: components["schemas"]["OriginType"];
+            medium: string | null;
+            tags: components["schemas"]["ContentTags"];
             /** Format: uuid */
             term_id?: string;
             provider?: string;
@@ -4978,6 +5009,9 @@ export interface components {
             id: string;
             /** Format: uuid */
             content_item_id: string;
+            origin: components["schemas"]["OriginType"];
+            medium: string | null;
+            tags: components["schemas"]["ContentTags"];
             channel: components["schemas"]["SocialChannel"];
             account_name: string;
             external_post_id: string;
@@ -5018,6 +5052,9 @@ export interface components {
             id: string;
             /** Format: uuid */
             social_post_metric_id: string;
+            origin: components["schemas"]["OriginType"];
+            medium: string | null;
+            tags: components["schemas"]["ContentTags"];
             awario_mention_id: string;
             awario_alert_id: string;
             channel: components["schemas"]["SocialChannel"];
