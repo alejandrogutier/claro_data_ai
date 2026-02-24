@@ -787,12 +787,21 @@ else
 fi
 
 DIGEST_FUNCTION_NAME="$(terraform -chdir=infra/terraform output -raw digest_worker_lambda_name)"
-aws lambda invoke \
-  --cli-binary-format raw-in-base64-out \
-  --region "$AWS_REGION" \
-  --function-name "$DIGEST_FUNCTION_NAME" \
-  --payload "{\"trigger_type\":\"manual\",\"recipient_scope\":\"$DIGEST_SCOPE\",\"request_id\":\"$DIGEST_REQ_ID\"}" \
-  /tmp/claro-digest-response.json >/tmp/claro-digest-meta.json
+AWS_CLI_VERSION="$(aws --version 2>&1 || true)"
+if [[ "$AWS_CLI_VERSION" == aws-cli/2* ]]; then
+  aws lambda invoke \
+    --cli-binary-format raw-in-base64-out \
+    --region "$AWS_REGION" \
+    --function-name "$DIGEST_FUNCTION_NAME" \
+    --payload "{\"trigger_type\":\"manual\",\"recipient_scope\":\"$DIGEST_SCOPE\",\"request_id\":\"$DIGEST_REQ_ID\"}" \
+    /tmp/claro-digest-response.json >/tmp/claro-digest-meta.json
+else
+  aws lambda invoke \
+    --region "$AWS_REGION" \
+    --function-name "$DIGEST_FUNCTION_NAME" \
+    --payload "{\"trigger_type\":\"manual\",\"recipient_scope\":\"$DIGEST_SCOPE\",\"request_id\":\"$DIGEST_REQ_ID\"}" \
+    /tmp/claro-digest-response.json >/tmp/claro-digest-meta.json
+fi
 
 DIGEST_STATUS="$(jq -r '.status // empty' /tmp/claro-digest-response.json)"
 if [[ "$DIGEST_STATUS" != "completed" && "$DIGEST_STATUS" != "skipped" ]]; then

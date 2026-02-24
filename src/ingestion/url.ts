@@ -15,6 +15,21 @@ export const canonicalizeUrl = (value: string): string | null => {
   }
 };
 
+export const buildUrlIdentityKey = (value: string): string | null => {
+  try {
+    const parsed = new URL(value);
+    let pathname = parsed.pathname || "/";
+    if (pathname.length > 1 && pathname.endsWith("/")) {
+      pathname = pathname.slice(0, -1);
+    }
+
+    const host = parsed.hostname.toLowerCase().replace(/^www\./i, "");
+    return `${host}${pathname}`.toLowerCase();
+  } catch {
+    return null;
+  }
+};
+
 export const toSlug = (value: string): string =>
   value
     .toLowerCase()

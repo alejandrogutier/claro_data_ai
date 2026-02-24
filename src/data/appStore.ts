@@ -1,7 +1,7 @@
 import { createHash, randomUUID } from "crypto";
 import type { AuthPrincipal, UserRole } from "../core/auth";
 import { env } from "../config/env";
-import { canonicalizeUrl } from "../ingestion/url";
+import { buildUrlIdentityKey, canonicalizeUrl } from "../ingestion/url";
 import {
   RdsDataClient,
   fieldBoolean,
@@ -1133,7 +1133,7 @@ class AppStore {
 
       const dedupedByUrl = new Map<string, FeedRecord>();
       for (const item of merged) {
-        const key = item.canonicalUrl;
+        const key = buildUrlIdentityKey(item.canonicalUrl) ?? item.canonicalUrl;
         const current = dedupedByUrl.get(key);
         if (!current) {
           dedupedByUrl.set(key, item);

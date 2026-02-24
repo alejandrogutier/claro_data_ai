@@ -37,11 +37,38 @@ export const normalizeAwarioUrl = (value: string | null | undefined): string | n
 export const mapAwarioSourceToChannel = (source: string | null | undefined): AwarioChannel => {
   if (!source) return "unknown";
   const normalized = source.trim().toLowerCase();
-  if (normalized.includes("facebook")) return "facebook";
-  if (normalized.includes("instagram")) return "instagram";
+  if (normalized.includes("facebook") || normalized === "fb") return "facebook";
+  if (normalized.includes("instagram") || normalized === "ig") return "instagram";
   if (normalized.includes("linkedin")) return "linkedin";
-  if (normalized.includes("tiktok")) return "tiktok";
+  if (normalized.includes("tiktok") || normalized.includes("tik tok")) return "tiktok";
   return "unknown";
+};
+
+const toMediumToken = (value: string): string | null => {
+  const token = value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+/g, "")
+    .replace(/-+$/g, "");
+  return token || null;
+};
+
+export const normalizeAwarioMedium = (source: string | null | undefined): string | null => {
+  if (!source) return null;
+  const normalized = source.trim().toLowerCase();
+  if (!normalized) return null;
+
+  if (normalized.includes("facebook") || normalized === "fb") return "facebook";
+  if (normalized.includes("instagram") || normalized === "ig") return "instagram";
+  if (normalized.includes("linkedin")) return "linkedin";
+  if (normalized.includes("tiktok") || normalized.includes("tik tok")) return "tiktok";
+  if (normalized.includes("twitter") || normalized === "x" || normalized.includes("x.com")) return "x";
+  if (normalized.includes("youtube") || normalized === "yt") return "youtube";
+  if (normalized.includes("news") && normalized.includes("blog")) return "news-blogs";
+  if (normalized.includes("web")) return "web";
+
+  return toMediumToken(normalized);
 };
 
 const looksLikeExternalId = (value: string): boolean => /^[a-zA-Z0-9_.-]{5,}$/.test(value);

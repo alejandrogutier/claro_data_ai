@@ -1,6 +1,7 @@
+import { createHash } from "crypto";
 import type { SocialChannel, SocialPostCommentUpsertInput } from "../../data/socialStore";
 import { AwarioClient, type AwarioMentionRecord } from "./client";
-import { extractAwarioCommentIdsFromUrl, mapAwarioSourceToChannel, normalizeAwarioUrl } from "./parser";
+import { extractAwarioCommentIdsFromUrl, mapAwarioSourceToChannel, normalizeAwarioMedium, normalizeAwarioUrl } from "./parser";
 import { canonicalizeUrl } from "../../ingestion/url";
 
 type SocialStoreLike = {
@@ -125,15 +126,37 @@ const clamp = (value: number, min: number, max: number): number => {
 };
 
 const asString = (value: unknown): string | null => {
-  if (typeof value !== "string") return null;
-  const trimmed = value.trim();
+  const raw =
+    typeof value === "string"
+      ? value
+      : typeof value === "number" || typeof value === "boolean"
+        ? String(value)
+        : null;
+  if (raw === null) return null;
+  const trimmed = raw.trim();
   return trimmed.length > 0 ? trimmed : null;
+};
+
+const parseEpochDate = (value: number): Date | null => {
+  if (!Number.isFinite(value) || value <= 0) return null;
+  const milliseconds = value >= 1_000_000_000_000 ? value : value >= 1_000_000_000 ? value * 1000 : NaN;
+  if (!Number.isFinite(milliseconds)) return null;
+  const parsed = new Date(milliseconds);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
 };
 
 const asDate = (value: unknown): Date | null => {
   if (value instanceof Date) return Number.isNaN(value.getTime()) ? null : value;
+  if (typeof value === "number") {
+    return parseEpochDate(value);
+  }
   if (typeof value !== "string") return null;
-  const parsed = new Date(value);
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  if (/^\d+(\.\d+)?$/.test(trimmed)) {
+    return parseEpochDate(Number.parseFloat(trimmed));
+  }
+  const parsed = new Date(trimmed);
   return Number.isNaN(parsed.getTime()) ? null : parsed;
 };
 
@@ -266,6 +289,38 @@ const getMentionUrl = (record: AwarioMentionRecord): string | null =>
 const getMentionId = (record: AwarioMentionRecord, fallback: string): string =>
   asString(record.id) ?? asString(record.mention_id) ?? asString(record.mentionId) ?? fallback;
 
+const buildDeterministicMentionFallbackId = (
+  binding: AwarioBindingSyncRecord,
+  mention: AwarioMentionRecord,
+  mentionUrl: string | null,
+  canonicalUrl: string | null,
+  publishedAt: Date | null,
+  text: string | null
+): string => {
+  const seed = [
+    asString(mention.source),
+    asString(mention.network),
+    asString(mention.platform),
+    asString(mention.author_name),
+    asString(mention.username),
+    asString(mention.title),
+    asString(mention.snippet)
+  ]
+    .filter((value): value is string => Boolean(value))
+    .join("|");
+  const stablePayload = [
+    binding.id,
+    binding.awarioAlertId,
+    canonicalUrl ?? "",
+    mentionUrl ?? "",
+    publishedAt?.toISOString() ?? "",
+    text ?? "",
+    seed
+  ].join("|");
+  const digest = createHash("sha256").update(stablePayload).digest("hex").slice(0, 24);
+  return `${binding.awarioAlertId}:fallback:${digest}`;
+};
+
 const createEmptyMetrics = (): AwarioSyncMetrics => ({
   fetched: 0,
   linked: 0,
@@ -337,15 +392,18 @@ export const syncAwarioBindingComments = async (input: SyncSingleAwarioBindingIn
           const channel = mapAwarioSourceToChannel(source) as SocialChannel | "unknown";
           const mentionUrl = getMentionUrl(mention);
           const canonicalUrl = canonicalizeUrl(mentionUrl ?? "");
-          const mentionIdFallback = `${binding.awarioAlertId}:mention:${metrics.fetched}`;
-          const awarioMentionId = getMentionId(mention, mentionIdFallback);
           const text = getMentionText(mention);
           const publishedAt = asDate(mention.published_at) ?? asDate(mention.date) ?? asDate(mention.created_at);
-          const normalizedMedium = channel !== "unknown"
-            ? channel
-            : source
-              ? source.trim().toLowerCase().slice(0, 64)
-              : null;
+          const mentionIdFallback = buildDeterministicMentionFallbackId(
+            binding,
+            mention,
+            mentionUrl,
+            canonicalUrl,
+            publishedAt,
+            text
+          );
+          const awarioMentionId = getMentionId(mention, mentionIdFallback);
+          const normalizedMedium = normalizeAwarioMedium(source);
 
           if (input.feedTarget?.termId && input.socialStore.upsertAwarioMentionFeedItem) {
             if (!canonicalUrl) {
