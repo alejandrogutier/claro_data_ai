@@ -127,6 +127,27 @@ export type SocialHeatmapMetric =
   | "er_impressions"
   | "er_reach";
 export type SocialScatterDimension = "post_type" | "channel" | "account" | "campaign" | "strategy" | "hashtag";
+export type SocialTrendByDimensionMetric =
+  | "posts"
+  | "exposure_total"
+  | "engagement_total"
+  | "impressions_total"
+  | "reach_total"
+  | "clicks_total"
+  | "likes_total"
+  | "comments_total"
+  | "shares_total"
+  | "views_total"
+  | "er_global"
+  | "ctr"
+  | "er_impressions"
+  | "er_reach"
+  | "view_rate"
+  | "likes_share"
+  | "comments_share"
+  | "shares_share"
+  | "riesgo_activo"
+  | "shs";
 export type SocialErBreakdownDimension = "hashtag" | "word" | "post_type" | "publish_frequency" | "weekday";
 
 export type MonitorSocialHeatmapResponse = {
@@ -158,6 +179,28 @@ export type MonitorSocialScatterResponse = {
     comments_share?: number;
     shares_share?: number;
     posts: number;
+  }>;
+};
+
+export type MonitorSocialTrendByDimensionResponse = {
+  generated_at: string;
+  window_start: string;
+  window_end: string;
+  trend_granularity_applied: "day" | "week" | "month";
+  dimension: SocialScatterDimension;
+  metric: SocialTrendByDimensionMetric;
+  series_limit_applied: number;
+  series: Array<{
+    label: string;
+    metric_total: number;
+    posts_total: number;
+    points: Array<{
+      bucket_start: string;
+      bucket_end: string;
+      bucket_label: string;
+      value: number;
+      posts: number;
+    }>;
   }>;
 };
 
@@ -701,6 +744,16 @@ export class ApiClient {
 
   getMonitorSocialScatter(query: MonitorSocialQuery & { dimension?: SocialScatterDimension } = {}): Promise<MonitorSocialScatterResponse> {
     return this.request<MonitorSocialScatterResponse>("/v1/monitor/social/charts/scatter", { query });
+  }
+
+  getMonitorSocialTrendByDimension(
+    query: MonitorSocialQuery & {
+      dimension?: SocialScatterDimension;
+      metric?: SocialTrendByDimensionMetric;
+      series_limit?: number;
+    } = {}
+  ): Promise<MonitorSocialTrendByDimensionResponse> {
+    return this.request<MonitorSocialTrendByDimensionResponse>("/v1/monitor/social/charts/trend-by-dimension", { query });
   }
 
   getMonitorSocialErBreakdown(

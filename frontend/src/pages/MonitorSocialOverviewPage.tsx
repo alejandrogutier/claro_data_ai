@@ -32,6 +32,7 @@ import type {
   MonitorSocialRiskResponse,
   MonitorSocialRunItem,
   MonitorSocialScatterResponse,
+  MonitorSocialTrendByDimensionResponse,
   SocialAccountsSort,
   SocialChannel,
   SocialComparisonMode,
@@ -39,7 +40,8 @@ import type {
   SocialErBreakdownDimension,
   SocialHeatmapMetric,
   SocialPostSort,
-  SocialScatterDimension
+  SocialScatterDimension,
+  SocialTrendByDimensionMetric
 } from "../api/client";
 import { ApiError } from "../api/client";
 import { useApiClient } from "../api/useApiClient";
@@ -68,6 +70,7 @@ type BaseMetricTotal =
   | "views_total";
 type DerivedMetricRate = "ctr" | "er_impressions" | "er_reach" | "view_rate" | "likes_share" | "comments_share" | "shares_share";
 type TrendMetric = "posts" | "exposure_total" | "engagement_total" | BaseMetricTotal | "er_global" | DerivedMetricRate | "riesgo_activo" | "shs";
+type TrendByDimensionMetric = SocialTrendByDimensionMetric;
 type MixMetric = "posts" | "exposure_total" | "engagement_total" | BaseMetricTotal | "er_global" | DerivedMetricRate | "riesgo_activo" | "sov_interno";
 type AccountMetric =
   | "posts"
@@ -485,6 +488,7 @@ const resolveAxisDomain = (scale: "linear" | "log", values: number[]): [number, 
 
 const CHART_QUESTION_BY_KEY: Record<string, string> = {
   trend: "¿Qué responde?: ¿Cómo evolucionan exposición, interacciones y ER en el período?",
+  trend_by_dimension: "¿Qué responde?: ¿Cómo evoluciona la métrica seleccionada por cada dimensión?",
   mix: "¿Qué responde?: ¿Qué canal aporta más y cómo se comporta su segunda métrica?",
   ranking: "¿Qué responde?: ¿Qué cuentas lideran según las métricas seleccionadas?",
   gap: "¿Qué responde?: ¿Qué tan lejos está cada canal de su meta ER?",
@@ -493,6 +497,15 @@ const CHART_QUESTION_BY_KEY: Record<string, string> = {
   breakdown: "¿Qué responde?: ¿Qué dimensión explica mejor la métrica seleccionada?",
   share: "¿Qué responde?: ¿Cómo se distribuye el SOV interno entre cuentas?"
 };
+
+const CHANNEL_SERIES_COLORS: Record<SocialChannel, string> = {
+  facebook: "#1d4ed8",
+  instagram: "#c026d3",
+  linkedin: "#0369a1",
+  tiktok: "#0f766e"
+};
+
+const DIMENSION_SERIES_COLORS = ["#e30613", "#1d4ed8", "#0f766e", "#f59e0b", "#7c3aed", "#0891b2", "#be123c", "#374151", "#059669", "#ea580c"];
 
 const toHeatmapMetricKey = (metric: SocialHeatmapMetric | undefined): string => {
   if (metric === "er") return "er_global";
@@ -836,13 +849,20 @@ export const MonitorSocialOverviewPage = () => {
 
   const [heatmapData, setHeatmapData] = useState<MonitorSocialHeatmapResponse | null>(null);
   const [scatterData, setScatterData] = useState<MonitorSocialScatterResponse | null>(null);
+  const [trendByDimensionData, setTrendByDimensionData] = useState<MonitorSocialTrendByDimensionResponse | null>(null);
   const [breakdownData, setBreakdownData] = useState<MonitorSocialErBreakdownResponse | null>(null);
   const [erTargets, setErTargets] = useState<MonitorSocialErTargetsResponse | null>(null);
+  const [loadingTrendByDimension, setLoadingTrendByDimension] = useState(false);
+  const [trendByDimensionError, setTrendByDimensionError] = useState<string | null>(null);
 
   const [heatmapMetric, setHeatmapMetric] = useState<SocialHeatmapMetric>("er");
   const [scatterDimension, setScatterDimension] = useState<SocialScatterDimension>("channel");
   const [scatterXMetric, setScatterXMetric] = useState<ScatterMetric>("exposure_total");
   const [scatterYMetric, setScatterYMetric] = useState<ScatterMetric>("er_global");
+  const [trendByDimensionDimension, setTrendByDimensionDimension] = useState<SocialScatterDimension>("channel");
+  const [trendByDimensionMetric, setTrendByDimensionMetric] = useState<TrendByDimensionMetric>("exposure_total");
+  const [trendByDimensionSeriesSearch, setTrendByDimensionSeriesSearch] = useState("");
+  const [visibleTrendByDimensionSeries, setVisibleTrendByDimensionSeries] = useState<string[]>([]);
   const [breakdownDimension, setBreakdownDimension] = useState<SocialErBreakdownDimension>("post_type");
   const [breakdownMetric, setBreakdownMetric] = useState<BreakdownMetric>("er_global");
 
@@ -1065,6 +1085,26 @@ export const MonitorSocialOverviewPage = () => {
     }
   };
 
+  const loadTrendByDimension = async () => {
+    setLoadingTrendByDimension(true);
+    setTrendByDimensionError(null);
+    try {
+      const response = await client.getMonitorSocialTrendByDimension({
+        ...commonQuery,
+        dimension: trendByDimensionDimension,
+        metric: trendByDimensionMetric,
+        series_limit: 30
+      });
+      setTrendByDimensionData(response);
+    } catch (requestError) {
+      applyRequestError(requestError);
+      setTrendByDimensionError((requestError as Error)?.message ?? "No fue posible cargar la tendencia por dimensión");
+      setTrendByDimensionData(null);
+    } finally {
+      setLoadingTrendByDimension(false);
+    }
+  };
+
   const loadBreakdown = async () => {
     try {
       const response = await client.getMonitorSocialErBreakdown({ ...commonQuery, dimension: breakdownDimension });
@@ -1102,6 +1142,10 @@ export const MonitorSocialOverviewPage = () => {
   useEffect(() => {
     void loadScatter();
   }, [client, commonQuery, scatterDimension, reloadVersion]);
+
+  useEffect(() => {
+    void loadTrendByDimension();
+  }, [client, commonQuery, trendByDimensionDimension, trendByDimensionMetric, reloadVersion]);
 
   useEffect(() => {
     void loadBreakdown();
@@ -1392,6 +1436,16 @@ export const MonitorSocialOverviewPage = () => {
     });
   };
 
+  const toggleTrendByDimensionSeries = (label: string) => {
+    setVisibleTrendByDimensionSeries((current) => {
+      const exists = current.includes(label);
+      if (exists) return current.filter((item) => item !== label);
+      const ordered = trendByDimensionSeries.map((item) => item.label);
+      const next = [...current, label];
+      return ordered.filter((item) => next.includes(item));
+    });
+  };
+
   const normalizedOverview = (overview ?? {}) as unknown as {
     kpis?: Record<string, number | string | null>;
     previous_period?: Record<string, number>;
@@ -1619,6 +1673,68 @@ export const MonitorSocialOverviewPage = () => {
 
   const trendLeftMetrics = useMemo(() => [trendLeftMetric], [trendLeftMetric]);
   const trendRightMetrics = useMemo(() => [trendRightMetric], [trendRightMetric]);
+
+  const trendByDimensionSeries = useMemo(() => {
+    return (trendByDimensionData?.series ?? []).map((series, index) => {
+      const normalized = series.label.trim().toLowerCase();
+      const channelColor =
+        trendByDimensionDimension === "channel" && CHANNEL_OPTIONS.includes(normalized as SocialChannel)
+          ? CHANNEL_SERIES_COLORS[normalized as SocialChannel]
+          : null;
+      return {
+        ...series,
+        key: `trend-dimension-${index}`,
+        color: channelColor ?? DIMENSION_SERIES_COLORS[index % DIMENSION_SERIES_COLORS.length]
+      };
+    });
+  }, [trendByDimensionData, trendByDimensionDimension]);
+
+  useEffect(() => {
+    if (trendByDimensionSeries.length === 0) {
+      setVisibleTrendByDimensionSeries([]);
+      return;
+    }
+    if (trendByDimensionDimension === "channel") {
+      setVisibleTrendByDimensionSeries(trendByDimensionSeries.map((item) => item.label));
+      return;
+    }
+    setVisibleTrendByDimensionSeries(trendByDimensionSeries.slice(0, 8).map((item) => item.label));
+  }, [trendByDimensionSeries, trendByDimensionDimension, trendByDimensionMetric]);
+
+  const filteredTrendByDimensionSeries = useMemo(() => {
+    const options = trendByDimensionSeries.map((item) => item.label);
+    return filterBySearch(options, trendByDimensionSeriesSearch);
+  }, [trendByDimensionSeries, trendByDimensionSeriesSearch]);
+
+  const trendByDimensionVisibleSeries = useMemo(
+    () => trendByDimensionSeries.filter((item) => visibleTrendByDimensionSeries.includes(item.label)),
+    [trendByDimensionSeries, visibleTrendByDimensionSeries]
+  );
+
+  const trendByDimensionSeriesByKey = useMemo(() => {
+    return new Map(trendByDimensionSeries.map((item) => [item.key, item]));
+  }, [trendByDimensionSeries]);
+
+  const trendByDimensionChartData = useMemo(() => {
+    if (trendByDimensionSeries.length === 0) return [];
+    const maxPoints = trendByDimensionSeries.reduce((acc, series) => Math.max(acc, series.points.length), 0);
+    return Array.from({ length: maxPoints }, (_, index) => {
+      const reference = trendByDimensionSeries[0]?.points?.[index];
+      const row: Record<string, string | number> = {
+        bucket_label: reference?.bucket_label ?? `Bucket ${index + 1}`
+      };
+      for (const series of trendByDimensionSeries) {
+        row[series.key] = Number(series.points[index]?.value ?? 0);
+      }
+      return row;
+    });
+  }, [trendByDimensionSeries]);
+
+  const trendByDimensionAxisValues = useMemo(
+    () => trendByDimensionVisibleSeries.flatMap((series) => series.points.map((point) => Number(point.value ?? 0))),
+    [trendByDimensionVisibleSeries]
+  );
+  const trendByDimensionScale = useMemo(() => resolveScale("auto", trendByDimensionAxisValues), [trendByDimensionAxisValues]);
 
   const erGapByChannel = useMemo(
     () =>
@@ -2401,6 +2517,187 @@ export const MonitorSocialOverviewPage = () => {
                     </BarChart>
                   </ResponsiveContainer>
                 </div>
+              </article>
+            </div>
+
+            <div className="grid grid-cols-1 gap-3 xl:grid-cols-3">
+              <article className="min-w-0 rounded-2xl border border-slate-200 bg-white p-4 shadow-panel xl:col-span-3">
+                <div className="mb-2 flex flex-wrap items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <h3 className="text-base font-semibold text-slate-900">Tendencia por dimensión</h3>
+                    <p className="text-xs text-slate-500">{CHART_QUESTION_BY_KEY.trend_by_dimension}</p>
+                  </div>
+                  <div className="flex flex-wrap items-start gap-2">
+                    <label className="text-xs font-semibold text-slate-600">
+                      Dimensión
+                      <select
+                        value={trendByDimensionDimension}
+                        onChange={(event) => setTrendByDimensionDimension(event.target.value as SocialScatterDimension)}
+                        className="ml-2 rounded-md border border-slate-200 px-2 py-1 text-xs"
+                      >
+                        <option value="channel">Canal</option>
+                        <option value="account">Cuenta</option>
+                        <option value="post_type">Tipo de post</option>
+                        <option value="campaign">Campaña</option>
+                        <option value="strategy">Estrategia</option>
+                        <option value="hashtag">Hashtag</option>
+                      </select>
+                    </label>
+                    <label className="text-xs font-semibold text-slate-600">
+                      Métrica
+                      <select
+                        value={trendByDimensionMetric}
+                        onChange={(event) => setTrendByDimensionMetric(event.target.value as TrendByDimensionMetric)}
+                        className="ml-2 rounded-md border border-slate-200 px-2 py-1 text-xs"
+                      >
+                        {TREND_METRICS.map((metric) => (
+                          <option key={metric} value={metric}>
+                            {METRIC_META[metric].label}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <details className="group relative">
+                      <summary className="list-none cursor-pointer rounded-md border border-slate-200 px-2 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50">
+                        Series: {visibleTrendByDimensionSeries.length}/{trendByDimensionSeries.length}
+                      </summary>
+                      <div className="absolute right-0 z-20 mt-2 w-72 rounded-xl border border-slate-200 bg-white p-3 shadow-2xl">
+                        <input
+                          value={trendByDimensionSeriesSearch}
+                          onChange={(event) => setTrendByDimensionSeriesSearch(event.target.value)}
+                          placeholder="Buscar serie..."
+                          className="w-full rounded-lg border border-slate-200 px-2 py-1.5 text-xs"
+                        />
+                        <div className="mt-2 flex flex-wrap gap-1">
+                          <button
+                            type="button"
+                            className="rounded border border-slate-200 px-2 py-1 text-[11px] font-semibold text-slate-600 hover:bg-slate-50"
+                            onClick={() =>
+                              setVisibleTrendByDimensionSeries(
+                                trendByDimensionDimension === "channel"
+                                  ? trendByDimensionSeries.map((item) => item.label)
+                                  : trendByDimensionSeries.slice(0, 8).map((item) => item.label)
+                              )
+                            }
+                          >
+                            Top 8
+                          </button>
+                          <button
+                            type="button"
+                            className="rounded border border-slate-200 px-2 py-1 text-[11px] font-semibold text-slate-600 hover:bg-slate-50"
+                            onClick={() => setVisibleTrendByDimensionSeries(trendByDimensionSeries.map((item) => item.label))}
+                          >
+                            Todas
+                          </button>
+                          <button
+                            type="button"
+                            className="rounded border border-slate-200 px-2 py-1 text-[11px] font-semibold text-slate-600 hover:bg-slate-50"
+                            onClick={() => setVisibleTrendByDimensionSeries([])}
+                          >
+                            Ninguna
+                          </button>
+                        </div>
+                        <div className="mt-2 max-h-60 overflow-auto rounded-lg border border-slate-100 p-1">
+                          {filteredTrendByDimensionSeries.length === 0 ? <p className="p-2 text-xs text-slate-500">Sin resultados</p> : null}
+                          {filteredTrendByDimensionSeries.map((label) => {
+                            const checked = visibleTrendByDimensionSeries.includes(label);
+                            const series = trendByDimensionSeries.find((item) => item.label === label);
+                            return (
+                              <button
+                                key={label}
+                                type="button"
+                                className={`flex w-full items-center justify-between rounded-md px-2 py-1.5 text-left text-xs ${
+                                  checked ? "bg-red-50 text-red-700" : "text-slate-700 hover:bg-slate-50"
+                                }`}
+                                onClick={() => toggleTrendByDimensionSeries(label)}
+                              >
+                                <span className="inline-flex items-center gap-2">
+                                  <span className="inline-block h-2.5 w-2.5 rounded-full" style={{ background: series?.color ?? "#64748b" }} />
+                                  <span>{label}</span>
+                                </span>
+                                <span>{checked ? "✓" : "+"}</span>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    </details>
+                  </div>
+                </div>
+
+                {trendByDimensionError ? <div className="mb-2 rounded-lg border border-amber-200 bg-amber-50 px-2 py-1 text-xs text-amber-800">{trendByDimensionError}</div> : null}
+                {loadingTrendByDimension ? <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-10 text-center text-sm text-slate-500">Cargando tendencia por dimensión...</div> : null}
+                {!loadingTrendByDimension && trendByDimensionSeries.length === 0 ? (
+                  <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-10 text-center text-sm text-slate-500">
+                    Sin datos para {toScatterDimensionLabel(trendByDimensionDimension)} con los filtros activos.
+                  </div>
+                ) : null}
+                {!loadingTrendByDimension && trendByDimensionSeries.length > 0 && trendByDimensionVisibleSeries.length === 0 ? (
+                  <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-10 text-center text-sm text-slate-500">
+                    Selecciona al menos una serie para visualizar el gráfico.
+                  </div>
+                ) : null}
+                {!loadingTrendByDimension && trendByDimensionVisibleSeries.length > 0 ? (
+                  <div className="h-[340px] w-full min-w-0">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <LineChart data={trendByDimensionChartData} margin={{ top: 8, right: 14, left: 4, bottom: 8 }}>
+                        <CartesianGrid strokeDasharray="3 3" />
+                        <XAxis dataKey="bucket_label" minTickGap={16} />
+                        <YAxis
+                          yAxisId="left"
+                          width={80}
+                          scale={trendByDimensionScale}
+                          domain={resolveAxisDomain(trendByDimensionScale, trendByDimensionAxisValues)}
+                          tickFormatter={(value) => formatChartAxisByMetrics([trendByDimensionMetric], Number(value))}
+                          label={{ value: METRIC_META[trendByDimensionMetric].label, angle: -90, position: "insideLeft", offset: 4, fontSize: 11 }}
+                        />
+                        <Tooltip
+                          content={(tooltip: ChartTooltipProps) => {
+                            if (!tooltip.active || !tooltip.payload || tooltip.payload.length === 0) return null;
+                            const rows = tooltip.payload
+                              .filter((item) => item.dataKey !== undefined)
+                              .map((item) => {
+                                const key = String(item.dataKey);
+                                const series = trendByDimensionSeriesByKey.get(key);
+                                return {
+                                  key,
+                                  label: series?.label ?? key,
+                                  value: formatChartMetricValue(trendByDimensionMetric, Number(item.value ?? 0)),
+                                  color: series?.color ?? item.color ?? "#334155"
+                                };
+                              });
+
+                            return (
+                              <div className="min-w-[220px] rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs shadow-lg">
+                                <p className="font-semibold text-slate-800">{tooltip.label ?? ""}</p>
+                                {rows.map((row) => (
+                                  <p key={row.key} style={{ color: row.color }} className="mt-1 flex items-center justify-between gap-2">
+                                    <span>{row.label}</span>
+                                    <strong>{row.value}</strong>
+                                  </p>
+                                ))}
+                              </div>
+                            );
+                          }}
+                        />
+                        <Legend />
+                        {trendByDimensionVisibleSeries.map((series) => (
+                          <Line
+                            key={series.key}
+                            yAxisId="left"
+                            type="monotone"
+                            dataKey={series.key}
+                            name={series.label}
+                            stroke={series.color}
+                            strokeWidth={2.4}
+                            dot={false}
+                            activeDot={{ r: 4 }}
+                          />
+                        ))}
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </div>
+                ) : null}
               </article>
             </div>
 

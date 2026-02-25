@@ -47,6 +47,7 @@ import {
   getMonitorSocialOverview,
   getMonitorSocialRisk,
   getMonitorSocialScatter,
+  getMonitorSocialTrendByDimension,
   getMonitorSocialSettings,
   listMonitorSocialPosts,
   listMonitorSocialPostComments,
@@ -144,6 +145,7 @@ const roleRules: RoleRule[] = [
   { pattern: /^GET \/v1\/monitor\/social\/risk$/, requiredRole: "SocialOverviewViewer" },
   { pattern: /^GET \/v1\/monitor\/social\/charts\/heatmap$/, requiredRole: "SocialOverviewViewer" },
   { pattern: /^GET \/v1\/monitor\/social\/charts\/scatter$/, requiredRole: "SocialOverviewViewer" },
+  { pattern: /^GET \/v1\/monitor\/social\/charts\/trend-by-dimension$/, requiredRole: "SocialOverviewViewer" },
   { pattern: /^GET \/v1\/monitor\/social\/charts\/er-breakdown$/, requiredRole: "SocialOverviewViewer" },
   { pattern: /^GET \/v1\/monitor\/social\/targets\/er$/, requiredRole: "SocialOverviewViewer" },
   { pattern: /^PATCH \/v1\/monitor\/social\/targets\/er$/, requiredRole: "Admin" },
@@ -287,6 +289,7 @@ export const main = async (event: APIGatewayProxyEventV2) => {
   if (key === "GET /v1/monitor/social/risk") return getMonitorSocialRisk(event);
   if (key === "GET /v1/monitor/social/charts/heatmap") return getMonitorSocialHeatmap(event);
   if (key === "GET /v1/monitor/social/charts/scatter") return getMonitorSocialScatter(event);
+  if (key === "GET /v1/monitor/social/charts/trend-by-dimension") return getMonitorSocialTrendByDimension(event);
   if (key === "GET /v1/monitor/social/charts/er-breakdown") return getMonitorSocialErBreakdown(event);
   if (key === "GET /v1/monitor/social/targets/er") return getMonitorSocialErTargets(event);
   if (key === "PATCH /v1/monitor/social/targets/er") return patchMonitorSocialErTargets(event);

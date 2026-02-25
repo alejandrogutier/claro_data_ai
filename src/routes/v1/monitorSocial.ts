@@ -23,6 +23,7 @@ import {
   type SocialErBreakdownDimension,
   type SocialHeatmapMetric,
   type SocialScatterDimension,
+  type SocialTrendByDimensionMetric,
   type SocialTrendGranularity,
   type SortMode
 } from "../../data/socialStore";
@@ -82,6 +83,28 @@ const HEATMAP_METRICS: SocialHeatmapMetric[] = [
 ];
 const SCATTER_DIMENSIONS: SocialScatterDimension[] = ["post_type", "channel", "account", "campaign", "strategy", "hashtag"];
 const ER_BREAKDOWN_DIMENSIONS: SocialErBreakdownDimension[] = ["hashtag", "word", "post_type", "publish_frequency", "weekday"];
+const TREND_BY_DIMENSION_METRICS: SocialTrendByDimensionMetric[] = [
+  "posts",
+  "exposure_total",
+  "engagement_total",
+  "impressions_total",
+  "reach_total",
+  "clicks_total",
+  "likes_total",
+  "comments_total",
+  "shares_total",
+  "views_total",
+  "er_global",
+  "ctr",
+  "er_impressions",
+  "er_reach",
+  "view_rate",
+  "likes_share",
+  "comments_share",
+  "shares_share",
+  "riesgo_activo",
+  "shs"
+];
 
 const parseLimit = (value: string | undefined, fallback: number, max: number): number | null => {
   if (!value) return fallback;
@@ -181,6 +204,12 @@ const parseErBreakdownDimension = (value: string | undefined): SocialErBreakdown
   if (!value) return "post_type";
   const normalized = value.trim().toLowerCase() as SocialErBreakdownDimension;
   return ER_BREAKDOWN_DIMENSIONS.includes(normalized) ? normalized : null;
+};
+
+const parseTrendByDimensionMetric = (value: string | undefined): SocialTrendByDimensionMetric | null => {
+  if (!value) return "exposure_total";
+  const normalized = value.trim().toLowerCase() as SocialTrendByDimensionMetric;
+  return TREND_BY_DIMENSION_METRICS.includes(normalized) ? normalized : null;
 };
 
 const parseCsvValues = (value: string | undefined, maxItems = 100): string[] => {
@@ -937,6 +966,71 @@ export const getMonitorSocialScatter = async (event: APIGatewayProxyEventV2) => 
         comments_share: item.commentsShare,
         shares_share: item.sharesShare,
         posts: item.posts
+      }))
+    });
+  } catch (error) {
+    return mapStoreError(error);
+  }
+};
+
+export const getMonitorSocialTrendByDimension = async (event: APIGatewayProxyEventV2) => {
+  const featureError = ensureFeatureEnabled();
+  if (featureError) return featureError;
+
+  const store = createSocialStore();
+  if (!store) {
+    return json(500, { error: "misconfigured", message: "Database runtime is not configured" });
+  }
+
+  const parsed = parseCommonFilters(event);
+  if ("error" in parsed) return parsed.error;
+
+  const dimension = parseScatterDimension(parsed.query.dimension);
+  if (!dimension) {
+    return json(422, {
+      error: "validation_error",
+      message: "dimension must be post_type|channel|account|campaign|strategy|hashtag"
+    });
+  }
+
+  const metric = parseTrendByDimensionMetric(parsed.query.metric);
+  if (!metric) {
+    return json(422, {
+      error: "validation_error",
+      message:
+        "metric must be posts|exposure_total|engagement_total|impressions_total|reach_total|clicks_total|likes_total|comments_total|shares_total|views_total|er_global|ctr|er_impressions|er_reach|view_rate|likes_share|comments_share|shares_share|riesgo_activo|shs"
+    });
+  }
+
+  const seriesLimit = parseLimit(parsed.query.series_limit, 30, 50);
+  if (seriesLimit === null) {
+    return json(422, {
+      error: "validation_error",
+      message: "series_limit must be an integer between 1 and 50"
+    });
+  }
+
+  try {
+    const payload = await store.getTrendByDimension(parsed.filters, dimension, metric, seriesLimit);
+    return json(200, {
+      generated_at: payload.generatedAt.toISOString(),
+      window_start: payload.windowStart,
+      window_end: payload.windowEnd,
+      trend_granularity_applied: payload.trendGranularityApplied,
+      dimension: payload.dimension,
+      metric: payload.metric,
+      series_limit_applied: payload.seriesLimitApplied,
+      series: payload.series.map((item) => ({
+        label: item.label,
+        metric_total: item.metricTotal,
+        posts_total: item.postsTotal,
+        points: item.points.map((point) => ({
+          bucket_start: point.bucketStart,
+          bucket_end: point.bucketEnd,
+          bucket_label: point.bucketLabel,
+          value: point.value,
+          posts: point.posts
+        }))
       }))
     });
   } catch (error) {

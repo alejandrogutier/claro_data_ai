@@ -1265,6 +1265,40 @@ const ensureMonitorSocialSurface = async (apiBase, viewerToken, analystToken) =>
     }
   }
 
+  const trendByDimensionResponse = await request({
+    method: "GET",
+    url: `${apiBase}/v1/monitor/social/charts/trend-by-dimension?dimension=channel&metric=exposure_total`,
+    token: viewerToken
+  });
+  assertStatus(trendByDimensionResponse.status, 200, "GET /v1/monitor/social/charts/trend-by-dimension");
+  assertCondition(Array.isArray(trendByDimensionResponse.json?.series), "monitor social trend-by-dimension.series must be array");
+  const trendSeriesLabels = new Set((trendByDimensionResponse.json?.series ?? []).map((item) => String(item?.label ?? "")));
+  for (const channel of ["facebook", "instagram", "linkedin", "tiktok"]) {
+    assertCondition(trendSeriesLabels.has(channel), `monitor social trend-by-dimension must include channel ${channel}`);
+  }
+  const firstTrendSeries = trendByDimensionResponse.json?.series?.[0];
+  if (firstTrendSeries) {
+    assertCondition(typeof firstTrendSeries.metric_total === "number", "monitor social trend-by-dimension.series[].metric_total must be number");
+    assertCondition(typeof firstTrendSeries.posts_total === "number", "monitor social trend-by-dimension.series[].posts_total must be number");
+    assertCondition(Array.isArray(firstTrendSeries.points), "monitor social trend-by-dimension.series[].points must be array");
+    const firstPoint = firstTrendSeries.points?.[0];
+    if (firstPoint) {
+      assertCondition(typeof firstPoint.value === "number", "monitor social trend-by-dimension.series[].points[].value must be number");
+      assertCondition(typeof firstPoint.posts === "number", "monitor social trend-by-dimension.series[].points[].posts must be number");
+    }
+  }
+
+  const trendByDimensionInvalidMetric = await request({
+    method: "GET",
+    url: `${apiBase}/v1/monitor/social/charts/trend-by-dimension?metric=invalid_metric`,
+    token: viewerToken
+  });
+  assertStatus(
+    trendByDimensionInvalidMetric.status,
+    422,
+    "GET /v1/monitor/social/charts/trend-by-dimension invalid metric"
+  );
+
   const breakdownResponse = await request({
     method: "GET",
     url: `${apiBase}/v1/monitor/social/charts/er-breakdown?dimension=post_type`,

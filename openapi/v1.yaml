@@ -1247,6 +1247,105 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '422':
           $ref: '#/components/responses/ValidationError'
+  /v1/monitor/social/charts/trend-by-dimension:
+    get:
+      tags: [Monitor]
+      summary: Serie temporal por dimensión para una métrica seleccionada
+      parameters:
+        - name: preset
+          in: query
+          schema:
+            $ref: '#/components/schemas/SocialDatePreset'
+        - name: window_days
+          in: query
+          schema:
+            type: integer
+            enum: [7, 30, 90]
+        - name: from
+          in: query
+          schema:
+            type: string
+            format: date-time
+        - name: to
+          in: query
+          schema:
+            type: string
+            format: date-time
+        - name: channel
+          in: query
+          schema:
+            type: string
+          description: Canal o lista CSV de canales (`facebook,instagram,...`)
+        - name: account
+          in: query
+          schema:
+            type: string
+          description: Cuenta o lista CSV de cuentas
+        - name: post_type
+          in: query
+          schema:
+            type: string
+          description: Tipo de post o lista CSV de tipos (`unknown` para vacios)
+        - name: campaign
+          in: query
+          schema:
+            type: string
+          description: Campaña o lista CSV de campañas
+        - name: strategy
+          in: query
+          schema:
+            type: string
+          description: Estrategia o lista CSV de estrategias
+        - name: hashtag
+          in: query
+          schema:
+            type: string
+          description: Hashtag o lista CSV de hashtags (con o sin #)
+        - name: sentiment
+          in: query
+          schema:
+            $ref: '#/components/schemas/SocialSentiment'
+        - name: trend_granularity
+          in: query
+          schema:
+            $ref: '#/components/schemas/SocialTrendGranularity'
+        - name: comparison_mode
+          in: query
+          schema:
+            $ref: '#/components/schemas/SocialComparisonMode'
+        - name: comparison_days
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 366
+        - name: dimension
+          in: query
+          schema:
+            $ref: '#/components/schemas/SocialScatterDimension'
+        - name: metric
+          in: query
+          schema:
+            $ref: '#/components/schemas/SocialTrendByDimensionMetric'
+        - name: series_limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 50
+      responses:
+        '200':
+          description: Dataset de tendencia por dimensión
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MonitorSocialTrendByDimensionResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/ValidationError'
   /v1/monitor/social/charts/er-breakdown:
     get:
       tags: [Monitor]
@@ -4785,6 +4884,31 @@ components:
     SocialScatterDimension:
       type: string
       enum: [post_type, channel, account, campaign, strategy, hashtag]
+    SocialTrendByDimensionMetric:
+      type: string
+      enum:
+        [
+          posts,
+          exposure_total,
+          engagement_total,
+          impressions_total,
+          reach_total,
+          clicks_total,
+          likes_total,
+          comments_total,
+          shares_total,
+          views_total,
+          er_global,
+          ctr,
+          er_impressions,
+          er_reach,
+          view_rate,
+          likes_share,
+          comments_share,
+          shares_share,
+          riesgo_activo,
+          shs
+        ]
     SocialErBreakdownDimension:
       type: string
       enum: [hashtag, word, post_type, publish_frequency, weekday]
@@ -5432,7 +5556,8 @@ components:
         comparison:
           $ref: '#/components/schemas/MonitorSocialComparison'
         trend_granularity_applied:
-          $ref: '#/components/schemas/SocialTrendGranularity'
+          type: string
+          enum: [day, week, month]
         kpis:
           $ref: '#/components/schemas/MonitorSocialKpis'
         previous_period:
@@ -6074,6 +6199,72 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/MonitorSocialScatterItem'
+    MonitorSocialTrendByDimensionPoint:
+      type: object
+      required: [bucket_start, bucket_end, bucket_label, value, posts]
+      properties:
+        bucket_start:
+          type: string
+          format: date-time
+        bucket_end:
+          type: string
+          format: date-time
+        bucket_label:
+          type: string
+        value:
+          type: number
+        posts:
+          type: integer
+    MonitorSocialTrendByDimensionSeriesItem:
+      type: object
+      required: [label, metric_total, posts_total, points]
+      properties:
+        label:
+          type: string
+        metric_total:
+          type: number
+        posts_total:
+          type: integer
+        points:
+          type: array
+          items:
+            $ref: '#/components/schemas/MonitorSocialTrendByDimensionPoint'
+    MonitorSocialTrendByDimensionResponse:
+      type: object
+      required:
+        [
+          generated_at,
+          window_start,
+          window_end,
+          trend_granularity_applied,
+          dimension,
+          metric,
+          series_limit_applied,
+          series
+        ]
+      properties:
+        generated_at:
+          type: string
+          format: date-time
+        window_start:
+          type: string
+          format: date-time
+        window_end:
+          type: string
+          format: date-time
+        trend_granularity_applied:
+          type: string
+          enum: [day, week, month]
+        dimension:
+          $ref: '#/components/schemas/SocialScatterDimension'
+        metric:
+          $ref: '#/components/schemas/SocialTrendByDimensionMetric'
+        series_limit_applied:
+          type: integer
+        series:
+          type: array
+          items:
+            $ref: '#/components/schemas/MonitorSocialTrendByDimensionSeriesItem'
     MonitorSocialErBreakdownItem:
       type: object
       required: [label, posts, exposure_total, engagement_total, er_global]

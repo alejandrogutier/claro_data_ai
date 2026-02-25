@@ -1256,6 +1256,69 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/monitor/social/charts/trend-by-dimension": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Serie temporal por dimensión para una métrica seleccionada */
+        get: {
+            parameters: {
+                query?: {
+                    preset?: components["schemas"]["SocialDatePreset"];
+                    window_days?: 7 | 30 | 90;
+                    from?: string;
+                    to?: string;
+                    /** @description Canal o lista CSV de canales (`facebook,instagram,...`) */
+                    channel?: string;
+                    /** @description Cuenta o lista CSV de cuentas */
+                    account?: string;
+                    /** @description Tipo de post o lista CSV de tipos (`unknown` para vacios) */
+                    post_type?: string;
+                    /** @description Campaña o lista CSV de campañas */
+                    campaign?: string;
+                    /** @description Estrategia o lista CSV de estrategias */
+                    strategy?: string;
+                    /** @description Hashtag o lista CSV de hashtags (con o sin */
+                    hashtag?: string;
+                    sentiment?: components["schemas"]["SocialSentiment"];
+                    trend_granularity?: components["schemas"]["SocialTrendGranularity"];
+                    comparison_mode?: components["schemas"]["SocialComparisonMode"];
+                    comparison_days?: number;
+                    dimension?: components["schemas"]["SocialScatterDimension"];
+                    metric?: components["schemas"]["SocialTrendByDimensionMetric"];
+                    series_limit?: number;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Dataset de tendencia por dimensión */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["MonitorSocialTrendByDimensionResponse"];
+                    };
+                };
+                401: components["responses"]["Unauthorized"];
+                403: components["responses"]["Forbidden"];
+                422: components["responses"]["ValidationError"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/monitor/social/charts/er-breakdown": {
         parameters: {
             query?: never;
@@ -4835,6 +4898,8 @@ export interface components {
         /** @enum {string} */
         SocialScatterDimension: "post_type" | "channel" | "account" | "campaign" | "strategy" | "hashtag";
         /** @enum {string} */
+        SocialTrendByDimensionMetric: "posts" | "exposure_total" | "engagement_total" | "impressions_total" | "reach_total" | "clicks_total" | "likes_total" | "comments_total" | "shares_total" | "views_total" | "er_global" | "ctr" | "er_impressions" | "er_reach" | "view_rate" | "likes_share" | "comments_share" | "shares_share" | "riesgo_activo" | "shs";
+        /** @enum {string} */
         SocialErBreakdownDimension: "hashtag" | "word" | "post_type" | "publish_frequency" | "weekday";
         /** @enum {string} */
         SocialTrendGranularity: "auto" | "day" | "week" | "month";
@@ -5126,7 +5191,8 @@ export interface components {
             /** Format: date-time */
             window_end: string;
             comparison: components["schemas"]["MonitorSocialComparison"];
-            trend_granularity_applied: components["schemas"]["SocialTrendGranularity"];
+            /** @enum {string} */
+            trend_granularity_applied: "day" | "week" | "month";
             kpis: components["schemas"]["MonitorSocialKpis"];
             previous_period: components["schemas"]["MonitorSocialPreviousPeriod"];
             delta_vs_previous: components["schemas"]["MonitorSocialDelta"];
@@ -5394,6 +5460,35 @@ export interface components {
             generated_at: string;
             dimension: components["schemas"]["SocialScatterDimension"];
             items: components["schemas"]["MonitorSocialScatterItem"][];
+        };
+        MonitorSocialTrendByDimensionPoint: {
+            /** Format: date-time */
+            bucket_start: string;
+            /** Format: date-time */
+            bucket_end: string;
+            bucket_label: string;
+            value: number;
+            posts: number;
+        };
+        MonitorSocialTrendByDimensionSeriesItem: {
+            label: string;
+            metric_total: number;
+            posts_total: number;
+            points: components["schemas"]["MonitorSocialTrendByDimensionPoint"][];
+        };
+        MonitorSocialTrendByDimensionResponse: {
+            /** Format: date-time */
+            generated_at: string;
+            /** Format: date-time */
+            window_start: string;
+            /** Format: date-time */
+            window_end: string;
+            /** @enum {string} */
+            trend_granularity_applied: "day" | "week" | "month";
+            dimension: components["schemas"]["SocialScatterDimension"];
+            metric: components["schemas"]["SocialTrendByDimensionMetric"];
+            series_limit_applied: number;
+            series: components["schemas"]["MonitorSocialTrendByDimensionSeriesItem"][];
         };
         MonitorSocialErBreakdownItem: {
             label: string;

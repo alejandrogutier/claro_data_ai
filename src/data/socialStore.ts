@@ -1,4 +1,5 @@
 import { randomUUID } from "crypto";
+import { env } from "../config/env";
 import { AppStoreError } from "./appStore";
 import {
   RdsDataClient,
@@ -588,6 +589,28 @@ type SocialHeatmapMetric =
   | "er_impressions"
   | "er_reach";
 
+type SocialTrendByDimensionMetric =
+  | "posts"
+  | "exposure_total"
+  | "engagement_total"
+  | "impressions_total"
+  | "reach_total"
+  | "clicks_total"
+  | "likes_total"
+  | "comments_total"
+  | "shares_total"
+  | "views_total"
+  | "er_global"
+  | "ctr"
+  | "er_impressions"
+  | "er_reach"
+  | "view_rate"
+  | "likes_share"
+  | "comments_share"
+  | "shares_share"
+  | "riesgo_activo"
+  | "shs";
+
 type SocialHeatmapRecord = {
   generatedAt: Date;
   metric: SocialHeatmapMetric;
@@ -622,6 +645,30 @@ type SocialScatterRecord = {
     commentsShare: number;
     sharesShare: number;
     posts: number;
+  }>;
+};
+
+type SocialTrendByDimensionPoint = {
+  bucketStart: string;
+  bucketEnd: string;
+  bucketLabel: string;
+  value: number;
+  posts: number;
+};
+
+type SocialTrendByDimensionRecord = {
+  generatedAt: Date;
+  windowStart: string;
+  windowEnd: string;
+  trendGranularityApplied: Exclude<SocialTrendGranularity, "auto">;
+  dimension: SocialScatterDimension;
+  metric: SocialTrendByDimensionMetric;
+  seriesLimitApplied: number;
+  series: Array<{
+    label: string;
+    metricTotal: number;
+    postsTotal: number;
+    points: SocialTrendByDimensionPoint[];
   }>;
 };
 
@@ -938,10 +985,6 @@ type FacetBuilderResult = {
   strategy: FacetCountMap;
   hashtag: FacetCountMap;
   sentiment: Map<SentimentBucket, number>;
-};
-
-type RiskFreshnessConfig = {
-  staleAfterMinutes: number;
 };
 
 type AccountsPagination = {
@@ -1887,6 +1930,192 @@ const resolveTrendBucket = (publishedAt: Date, granularity: Exclude<SocialTrendG
   };
 };
 
+type TrendBucketTemplate = {
+  key: string;
+  bucketStart: string;
+  bucketEnd: string;
+  bucketLabel: string;
+};
+
+type TrendMetricAccumulator = {
+  posts: number;
+  exposure: number;
+  engagement: number;
+  impressions: number;
+  reach: number;
+  clicks: number;
+  likes: number;
+  comments: number;
+  shares: number;
+  views: number;
+  positivos: number;
+  negativos: number;
+  neutrales: number;
+};
+
+const createEmptyTrendMetricAccumulator = (): TrendMetricAccumulator => ({
+  posts: 0,
+  exposure: 0,
+  engagement: 0,
+  impressions: 0,
+  reach: 0,
+  clicks: 0,
+  likes: 0,
+  comments: 0,
+  shares: 0,
+  views: 0,
+  positivos: 0,
+  negativos: 0,
+  neutrales: 0
+});
+
+const addPostToTrendAccumulator = (target: TrendMetricAccumulator, post: SocialPostRecord): void => {
+  target.posts += 1;
+  target.exposure += post.exposure;
+  target.engagement += post.engagementTotal;
+  target.impressions += post.impressions;
+  target.reach += post.reach;
+  target.clicks += post.clicks;
+  target.likes += post.likes;
+  target.comments += post.comments;
+  target.shares += post.shares;
+  target.views += post.views;
+  if (post.sentiment === "positive") target.positivos += 1;
+  if (post.sentiment === "negative") target.negativos += 1;
+  if (post.sentiment === "neutral") target.neutrales += 1;
+};
+
+const mergeTrendAccumulator = (target: TrendMetricAccumulator, source: TrendMetricAccumulator): void => {
+  target.posts += source.posts;
+  target.exposure += source.exposure;
+  target.engagement += source.engagement;
+  target.impressions += source.impressions;
+  target.reach += source.reach;
+  target.clicks += source.clicks;
+  target.likes += source.likes;
+  target.comments += source.comments;
+  target.shares += source.shares;
+  target.views += source.views;
+  target.positivos += source.positivos;
+  target.negativos += source.negativos;
+  target.neutrales += source.neutrales;
+};
+
+const computeTrendMetricValue = (
+  metric: SocialTrendByDimensionMetric,
+  stats: TrendMetricAccumulator,
+  exposurePreviousForShs?: number
+): number => {
+  const classified = stats.positivos + stats.negativos + stats.neutrales;
+  const sentimientoNeto = calculateSentimientoNeto(stats.positivos, stats.negativos, classified);
+  const riesgoActivo = calculateRiesgoActivo(stats.negativos, classified);
+  const derived = calculateDerivedMetrics({
+    exposure: stats.exposure,
+    engagementTotal: stats.engagement,
+    impressions: stats.impressions,
+    reach: stats.reach,
+    clicks: stats.clicks,
+    likes: stats.likes,
+    comments: stats.comments,
+    shares: stats.shares,
+    views: stats.views
+  });
+
+  if (metric === "posts") return stats.posts;
+  if (metric === "exposure_total") return stats.exposure;
+  if (metric === "engagement_total") return stats.engagement;
+  if (metric === "impressions_total") return stats.impressions;
+  if (metric === "reach_total") return stats.reach;
+  if (metric === "clicks_total") return stats.clicks;
+  if (metric === "likes_total") return stats.likes;
+  if (metric === "comments_total") return stats.comments;
+  if (metric === "shares_total") return stats.shares;
+  if (metric === "views_total") return stats.views;
+  if (metric === "er_global") return calculateErGlobal(stats.engagement, stats.exposure);
+  if (metric === "ctr") return derived.ctr;
+  if (metric === "er_impressions") return derived.erImpressions;
+  if (metric === "er_reach") return derived.erReach;
+  if (metric === "view_rate") return derived.viewRate;
+  if (metric === "likes_share") return derived.likesShare;
+  if (metric === "comments_share") return derived.commentsShare;
+  if (metric === "shares_share") return derived.sharesShare;
+  if (metric === "riesgo_activo") return riesgoActivo;
+  if (stats.posts === 0) return 0;
+
+  return calculateShs({
+    sentimientoNeto,
+    riesgoActivo,
+    exposureActual: stats.exposure,
+    exposurePrevious: exposurePreviousForShs ?? stats.exposure
+  });
+};
+
+const resolveTrendLabelsForPost = (post: SocialPostRecord, dimension: SocialScatterDimension): string[] => {
+  if (dimension === "post_type") return [post.postType ?? "unknown"];
+  if (dimension === "channel") return [post.channel];
+  if (dimension === "account") return [post.accountName];
+  if (dimension === "campaign") return [post.campaignKey ?? "sin_campana"];
+  if (dimension === "strategy") return post.strategyKeys.length > 0 ? post.strategyKeys : ["sin_estrategia"];
+  return post.hashtags.length > 0 ? post.hashtags : ["sin_hashtag"];
+};
+
+const buildTrendBucketTimeline = (
+  windowStart: Date,
+  windowEnd: Date,
+  granularity: Exclude<SocialTrendGranularity, "auto">
+): TrendBucketTemplate[] => {
+  const startDateOnly = getBogotaDateOnly(windowStart);
+  const endExclusiveDateOnly = getBogotaDateOnly(windowEnd);
+  const lastIncludedDateOnly = addDaysDateOnly(endExclusiveDateOnly, -1);
+
+  if (granularity === "day") {
+    const buckets: TrendBucketTemplate[] = [];
+    let cursor = startDateOnly;
+    while (cursor < endExclusiveDateOnly) {
+      buckets.push({
+        key: cursor,
+        bucketStart: cursor,
+        bucketEnd: addDaysDateOnly(cursor, 1),
+        bucketLabel: cursor
+      });
+      cursor = addDaysDateOnly(cursor, 1);
+    }
+    return buckets;
+  }
+
+  if (granularity === "week") {
+    const buckets: TrendBucketTemplate[] = [];
+    const finalWeekStart = getWeekStartDateOnly(lastIncludedDateOnly);
+    let cursor = getWeekStartDateOnly(startDateOnly);
+    while (cursor <= finalWeekStart) {
+      buckets.push({
+        key: cursor,
+        bucketStart: cursor,
+        bucketEnd: addDaysDateOnly(cursor, 7),
+        bucketLabel: toIsoWeekLabel(cursor)
+      });
+      cursor = addDaysDateOnly(cursor, 7);
+    }
+    return buckets;
+  }
+
+  const buckets: TrendBucketTemplate[] = [];
+  const finalMonthStart = `${lastIncludedDateOnly.slice(0, 7)}-01`;
+  let cursor = `${startDateOnly.slice(0, 7)}-01`;
+  while (cursor <= finalMonthStart) {
+    const nextMonth = toDateOnlyUtc(cursor);
+    nextMonth.setUTCMonth(nextMonth.getUTCMonth() + 1);
+    buckets.push({
+      key: cursor,
+      bucketStart: cursor,
+      bucketEnd: formatDateOnlyUtc(nextMonth),
+      bucketLabel: cursor.slice(0, 7)
+    });
+    cursor = formatDateOnlyUtc(nextMonth);
+  }
+  return buckets;
+};
+
 const toDailyKey = (value: Date): string => getBogotaDateOnly(value);
 
 const toBogotaMonth = (value: Date): number => {
@@ -1947,10 +2176,6 @@ const resolveComparisonWindow = (
     previousWindowEnd: shiftYearsUtc(currentWindowEnd, -1),
     label: "Mismo periodo ano pasado"
   };
-};
-
-const DEFAULT_RISK_FRESHNESS_CONFIG: RiskFreshnessConfig = {
-  staleAfterMinutes: 30
 };
 
 const resolveAccountsSortSpec = (sort: SocialAccountsSortMode | undefined): AccountsSortSpec => {
@@ -4867,6 +5092,99 @@ class SocialStore {
     };
   }
 
+  async getTrendByDimension(
+    filters: SocialOverviewFilters,
+    dimension: SocialScatterDimension,
+    metric: SocialTrendByDimensionMetric,
+    seriesLimit = 30
+  ): Promise<SocialTrendByDimensionRecord> {
+    const { windowStart, windowEnd, windowDays } = this.normalizeOverviewWindow(filters);
+    const trendGranularityApplied = resolveTrendGranularity(filters.trendGranularity, windowDays);
+    const seriesLimitApplied = Math.max(1, Math.min(50, Math.floor(seriesLimit)));
+    const posts = await this.listAllPosts(filters, "published_at_desc", 100000);
+    const timeline = buildTrendBucketTimeline(windowStart, windowEnd, trendGranularityApplied);
+    const timelineByKey = new Map(timeline.map((bucket) => [bucket.key, true]));
+
+    const grouped = new Map<string, Map<string, TrendMetricAccumulator>>();
+
+    for (const post of posts) {
+      const bucket = resolveTrendBucket(post.publishedAt ?? post.createdAt, trendGranularityApplied);
+      if (!timelineByKey.has(bucket.key)) continue;
+
+      const labels = resolveTrendLabelsForPost(post, dimension);
+      for (const label of labels) {
+        const byBucket = grouped.get(label) ?? new Map<string, TrendMetricAccumulator>();
+        const stats = byBucket.get(bucket.key) ?? createEmptyTrendMetricAccumulator();
+        addPostToTrendAccumulator(stats, post);
+        byBucket.set(bucket.key, stats);
+        grouped.set(label, byBucket);
+      }
+    }
+
+    if (dimension === "channel") {
+      for (const channel of SOCIAL_CHANNELS) {
+        if (!grouped.has(channel)) grouped.set(channel, new Map<string, TrendMetricAccumulator>());
+      }
+    }
+
+    const allSeries = Array.from(grouped.entries()).map(([label, byBucket]) => {
+      const aggregate = createEmptyTrendMetricAccumulator();
+      let shsWeightedNumerator = 0;
+      let shsWeightedDenominator = 0;
+
+      const points = timeline.map((bucket, index) => {
+        const stats = byBucket.get(bucket.key) ?? createEmptyTrendMetricAccumulator();
+        mergeTrendAccumulator(aggregate, stats);
+
+        const previousExposure = index > 0 ? (byBucket.get(timeline[index - 1].key)?.exposure ?? stats.exposure) : stats.exposure;
+        const valueRaw = computeTrendMetricValue(metric, stats, previousExposure);
+
+        if (metric === "shs" && stats.posts > 0) {
+          shsWeightedNumerator += valueRaw * stats.posts;
+          shsWeightedDenominator += stats.posts;
+        }
+
+        return {
+          bucketStart: toBogotaBoundaryIso(bucket.bucketStart),
+          bucketEnd: toBogotaBoundaryIso(bucket.bucketEnd),
+          bucketLabel: bucket.bucketLabel,
+          value: roundMetric(valueRaw),
+          posts: stats.posts
+        };
+      });
+
+      const metricTotal =
+        metric === "shs"
+          ? roundMetric(shsWeightedNumerator / Math.max(shsWeightedDenominator, 1))
+          : roundMetric(computeTrendMetricValue(metric, aggregate, aggregate.exposure));
+
+      return {
+        label,
+        metricTotal,
+        postsTotal: aggregate.posts,
+        points
+      };
+    });
+
+    const series =
+      dimension === "channel"
+        ? [...allSeries].sort((a, b) => SOCIAL_CHANNELS.indexOf(a.label as SocialChannel) - SOCIAL_CHANNELS.indexOf(b.label as SocialChannel))
+        : [...allSeries]
+            .sort((a, b) => b.metricTotal - a.metricTotal || b.postsTotal - a.postsTotal || a.label.localeCompare(b.label))
+            .slice(0, seriesLimitApplied);
+
+    return {
+      generatedAt: new Date(),
+      windowStart: windowStart.toISOString(),
+      windowEnd: windowEnd.toISOString(),
+      trendGranularityApplied,
+      dimension,
+      metric,
+      seriesLimitApplied,
+      series
+    };
+  }
+
   async getErBreakdown(filters: SocialOverviewFilters, dimension: SocialErBreakdownDimension): Promise<SocialErBreakdownRecord> {
     const posts = await this.listAllPosts(filters, "published_at_desc", 100000);
     const grouped = new Map<
@@ -5250,7 +5568,7 @@ class SocialStore {
     }).filter((item): item is NonNullable<typeof item> => item !== null && Boolean(item.id));
 
     const lastEtlAt = latestRun?.finishedAt ?? latestRun?.createdAt ?? null;
-    const staleAfterMinutes = DEFAULT_RISK_FRESHNESS_CONFIG.staleAfterMinutes;
+    const staleAfterMinutes = clamp(env.socialRiskStaleAfterMinutes, 1, 10_080);
     const staleData =
       !lastEtlAt || Date.now() - lastEtlAt.getTime() > staleAfterMinutes * 60_000;
 
@@ -5617,6 +5935,7 @@ export type {
   SocialScatterDimension,
   SocialErBreakdownDimension,
   SocialHeatmapMetric,
+  SocialTrendByDimensionMetric,
   SocialAccountsSortMode,
   SocialTrendGranularity,
   SocialDashboardSettingRecord,
@@ -5625,6 +5944,7 @@ export type {
   SocialFacetsRecord,
   SocialHeatmapRecord,
   SocialScatterRecord,
+  SocialTrendByDimensionRecord,
   SocialErBreakdownRecord,
   SocialIncidentResult,
   SocialPhase,
