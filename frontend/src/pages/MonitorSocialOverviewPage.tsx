@@ -1717,14 +1717,35 @@ export const MonitorSocialOverviewPage = () => {
 
   const trendByDimensionChartData = useMemo(() => {
     if (trendByDimensionSeries.length === 0) return [];
-    const maxPoints = trendByDimensionSeries.reduce((acc, series) => Math.max(acc, series.points.length), 0);
-    return Array.from({ length: maxPoints }, (_, index) => {
-      const reference = trendByDimensionSeries[0]?.points?.[index];
-      const row: Record<string, string | number> = {
-        bucket_label: reference?.bucket_label ?? `Bucket ${index + 1}`
+    const buckets = new Map<
+      string,
+      {
+        bucketLabel: string;
+        values: Record<string, number>;
+      }
+    >();
+
+    for (const series of trendByDimensionSeries) {
+      for (const point of series.points) {
+        const bucketKey = point.bucket_start;
+        const current = buckets.get(bucketKey) ?? {
+          bucketLabel: point.bucket_label,
+          values: {}
+        };
+        current.bucketLabel = current.bucketLabel || point.bucket_label;
+        current.values[series.key] = Number(point.value ?? 0);
+        buckets.set(bucketKey, current);
+      }
+    }
+
+    const orderedBucketKeys = Array.from(buckets.keys()).sort();
+    return orderedBucketKeys.map((bucketKey, index) => {
+      const current = buckets.get(bucketKey);
+      const row: Record<string, string | number | null> = {
+        bucket_label: current?.bucketLabel ?? `Bucket ${index + 1}`
       };
       for (const series of trendByDimensionSeries) {
-        row[series.key] = Number(series.points[index]?.value ?? 0);
+        row[series.key] = current && Object.prototype.hasOwnProperty.call(current.values, series.key) ? current.values[series.key] : null;
       }
       return row;
     });
@@ -2690,7 +2711,7 @@ export const MonitorSocialOverviewPage = () => {
                             name={series.label}
                             stroke={series.color}
                             strokeWidth={2.4}
-                            connectNulls
+                            isAnimationActive={false}
                             dot={(dotProps: { cx?: number; cy?: number; payload?: Record<string, unknown> }) => {
                               const raw = Number(dotProps.payload?.[series.key] ?? 0);
                               const hasValue = Number.isFinite(raw) && Math.abs(raw) >= 1e-9;
