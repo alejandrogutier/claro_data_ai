@@ -1683,7 +1683,7 @@ export const MonitorSocialOverviewPage = () => {
           : null;
       return {
         ...series,
-        key: `trend-dimension-${index}`,
+        key: `series_${index}`,
         color: channelColor ?? DIMENSION_SERIES_COLORS[index % DIMENSION_SERIES_COLORS.length]
       };
     });
