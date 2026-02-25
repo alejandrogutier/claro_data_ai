@@ -1755,7 +1755,14 @@ export const MonitorSocialOverviewPage = () => {
     () => trendByDimensionVisibleSeries.flatMap((series) => series.points.map((point) => Number(point.value ?? 0))),
     [trendByDimensionVisibleSeries]
   );
-  const trendByDimensionScale = useMemo(() => resolveScale("auto", trendByDimensionAxisValues), [trendByDimensionAxisValues]);
+  const trendByDimensionHasNonPositiveValues = useMemo(
+    () => trendByDimensionAxisValues.some((value) => !Number.isFinite(value) || value <= 0),
+    [trendByDimensionAxisValues]
+  );
+  const trendByDimensionScale = useMemo(
+    () => (trendByDimensionHasNonPositiveValues ? "linear" : resolveScale("auto", trendByDimensionAxisValues)),
+    [trendByDimensionAxisValues, trendByDimensionHasNonPositiveValues]
+  );
 
   const erGapByChannel = useMemo(
     () =>
