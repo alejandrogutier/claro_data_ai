@@ -10,14 +10,22 @@ set +a
 
 : "${AWS_REGION:=us-east-1}"
 
-SECRET_NAME="${DATABASE_SECRET_NAME:-claro-data-prod/database}"
+PROJECT_NAME="${PROJECT_NAME:-claro-data}"
+ENVIRONMENT="${ENVIRONMENT:-prod}"
+SECRET_PREFIX="${SECRET_PREFIX:-${PROJECT_NAME}-${ENVIRONMENT}}"
+SECRET_NAME="${DATABASE_SECRET_NAME:-${SECRET_PREFIX}/database}"
+TFVARS_PATH_DEFAULT="$ROOT_DIR/infra/terraform/terraform.tfvars"
+if [[ "$ENVIRONMENT" != "prod" ]]; then
+  TFVARS_PATH_DEFAULT="$ROOT_DIR/infra/terraform/terraform.${ENVIRONMENT}.tfvars"
+fi
+TFVARS_PATH="${TFVARS_PATH:-$TFVARS_PATH_DEFAULT}"
 DB_ENDPOINT="$(terraform -chdir=infra/terraform output -raw aurora_endpoint)"
 
 extract_tfvar() {
   local key="$1"
   local fallback="$2"
   local value
-  value="$(awk -F'=' -v k="$key" '$1 ~ "^"k"[[:space:]]*$" {gsub(/^[[:space:]]+|[[:space:]]+$/, "", $2); gsub(/"/, "", $2); print $2}' infra/terraform/terraform.tfvars | tail -n 1)"
+  value="$(awk -F'=' -v k="$key" '$1 ~ "^"k"[[:space:]]*$" {gsub(/^[[:space:]]+|[[:space:]]+$/, "", $2); gsub(/"/, "", $2); print $2}' "$TFVARS_PATH" | tail -n 1)"
   if [[ -z "$value" ]]; then
     echo "$fallback"
   else
@@ -30,7 +38,7 @@ DB_USER="$(extract_tfvar db_master_username claroadmin)"
 DB_PASSWORD="$(extract_tfvar db_master_password '')"
 
 if [[ -z "$DB_PASSWORD" ]]; then
-  echo "db_master_password missing in infra/terraform/terraform.tfvars"
+  echo "db_master_password missing in $TFVARS_PATH"
   exit 1
 fi
 
@@ -68,7 +76,7 @@ aws secretsmanager tag-resource \
   --tags \
     Key=claro,Value=true \
     Key=app,Value="${APP_TAG:-claro-data}" \
-    Key=env,Value="${ENV_TAG:-prod}" \
+    Key=env,Value="${ENV_TAG:-$ENVIRONMENT}" \
     Key=owner,Value="${OWNER_TAG:-claro-data-team}" \
     Key=cost-center,Value="${COST_CENTER_TAG:-marketing-intelligence}" \
     Key=managed-by,Value=terraform >/dev/null

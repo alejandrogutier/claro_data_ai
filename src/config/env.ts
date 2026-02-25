@@ -13,6 +13,8 @@ export type AppEnv = {
   socialRawBucketName?: string;
   socialRawPrefix?: string;
   socialSchedulerLambdaName?: string;
+  socialTopicSchedulerLambdaName?: string;
+  socialRiskStaleAfterMinutes: number;
   socialAnalyticsV2Enabled: boolean;
   awarioAccessToken?: string;
   awarioCommentsEnabled: boolean;
@@ -39,6 +41,12 @@ export type AppEnv = {
   classificationPromptVersion?: string;
   classificationWindowDays?: number;
   classificationSchedulerLimit?: number;
+  socialTopicQueueUrl?: string;
+  socialTopicPromptVersion: string;
+  socialTopicTaxonomyVersion: string;
+  socialTopicBackfillBatchSize: number;
+  socialTopicConfidenceMin: number;
+  socialTopicReviewThreshold: number;
   reportConfidenceThreshold?: number;
   reportDefaultTimezone?: string;
   reportEmailSender?: string;
@@ -63,6 +71,11 @@ export const env: AppEnv = {
   socialRawBucketName: process.env.SOCIAL_RAW_BUCKET_NAME,
   socialRawPrefix: process.env.SOCIAL_RAW_PREFIX,
   socialSchedulerLambdaName: process.env.SOCIAL_SCHEDULER_LAMBDA_NAME,
+  socialTopicSchedulerLambdaName: process.env.SOCIAL_TOPIC_SCHEDULER_LAMBDA_NAME,
+  socialRiskStaleAfterMinutes: (() => {
+    const parsed = Number.parseInt(process.env.SOCIAL_RISK_STALE_AFTER_MINUTES ?? "", 10);
+    return Number.isFinite(parsed) ? parsed : 30;
+  })(),
   socialAnalyticsV2Enabled: ["1", "true", "yes", "on"].includes((process.env.SOCIAL_ANALYTICS_V2_ENABLED ?? "true").toLowerCase()),
   awarioAccessToken: process.env.AWARIO_ACCESS_TOKEN ?? process.env.AWARIO_API_KEY,
   awarioCommentsEnabled: ["1", "true", "yes", "on"].includes((process.env.AWARIO_COMMENTS_ENABLED ?? "false").toLowerCase()),
@@ -115,6 +128,21 @@ export const env: AppEnv = {
   classificationSchedulerLimit: process.env.CLASSIFICATION_SCHEDULER_LIMIT
     ? Number.parseInt(process.env.CLASSIFICATION_SCHEDULER_LIMIT, 10)
     : 120,
+  socialTopicQueueUrl: process.env.SOCIAL_TOPIC_QUEUE_URL,
+  socialTopicPromptVersion: process.env.SOCIAL_TOPIC_PROMPT_VERSION ?? "social-topics-v1",
+  socialTopicTaxonomyVersion: process.env.SOCIAL_TOPIC_TAXONOMY_VERSION ?? "social-topics-v1",
+  socialTopicBackfillBatchSize: (() => {
+    const parsed = Number.parseInt(process.env.SOCIAL_TOPIC_BACKFILL_BATCH_SIZE ?? "", 10);
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : 500;
+  })(),
+  socialTopicConfidenceMin: (() => {
+    const parsed = Number.parseFloat(process.env.SOCIAL_TOPIC_CONFIDENCE_MIN ?? "");
+    return Number.isFinite(parsed) ? parsed : 0.55;
+  })(),
+  socialTopicReviewThreshold: (() => {
+    const parsed = Number.parseFloat(process.env.SOCIAL_TOPIC_REVIEW_THRESHOLD ?? "");
+    return Number.isFinite(parsed) ? parsed : 0.65;
+  })(),
   reportConfidenceThreshold: process.env.REPORT_CONFIDENCE_THRESHOLD
     ? Number.parseFloat(process.env.REPORT_CONFIDENCE_THRESHOLD)
     : 0.65,

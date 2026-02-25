@@ -27,7 +27,12 @@ import {
   type SocialTrendGranularity,
   type SortMode
 } from "../../data/socialStore";
+import { createSocialTopicStore } from "../../data/socialTopicStore";
 import { runSocialSync } from "../../social/runner";
+import {
+  main as runSocialTopicsBackfillScheduler,
+  type SocialTopicSchedulerResponse
+} from "../../socialTopics/scheduler";
 
 type PatchSettingsBody = {
   focus_account?: unknown;
@@ -44,6 +49,13 @@ type TriggerRunBody = {
   force?: unknown;
   bucket?: unknown;
   prefix?: unknown;
+};
+
+type SocialTopicsBackfillBody = {
+  from?: unknown;
+  to?: unknown;
+  limit?: unknown;
+  dry_run?: unknown;
 };
 
 type PatchErTargetsBody = {
@@ -288,6 +300,25 @@ const parseMetadata = (value: unknown): Record<string, unknown> | undefined => {
   return value as Record<string, unknown>;
 };
 
+const decodeLambdaPayload = <T>(payload: AWS.Lambda.InvocationResponse["Payload"]): T | null => {
+  if (!payload) return null;
+  if (typeof payload === "string") {
+    try {
+      return JSON.parse(payload) as T;
+    } catch {
+      return null;
+    }
+  }
+  if (Buffer.isBuffer(payload) || payload instanceof Uint8Array) {
+    try {
+      return JSON.parse(Buffer.from(payload).toString("utf8")) as T;
+    } catch {
+      return null;
+    }
+  }
+  return null;
+};
+
 const getIdFromPath = (event: APIGatewayProxyEventV2, pattern: RegExp): string | null => {
   const match = getPathWithoutStage(event).match(pattern);
   return match?.[1] ?? null;
@@ -408,6 +439,17 @@ const parseCommonFilters = (event: APIGatewayProxyEventV2) => {
   const campaigns = parseCsvValues(query.campaign, 100).map((value) => value.trim().toLowerCase()).filter(Boolean);
   const strategies = parseCsvValues(query.strategy, 100).map((value) => value.trim().toLowerCase()).filter(Boolean);
   const hashtags = parseCsvValues(query.hashtag, 200).map((value) => value.trim().toLowerCase().replace(/^#+/, "")).filter(Boolean);
+  const topics = Array.from(
+    new Set(
+      parseCsvValues(query.topic, 100)
+        .map((value) => value.trim().toLowerCase())
+        .filter(Boolean)
+    )
+  );
+  const validTopicKey = /^[a-z0-9_]+$/;
+  if (topics.some((item) => !validTopicKey.test(item))) {
+    return { error: json(422, { error: "validation_error", message: "topic must use taxonomy keys (csv allowed)" }) };
+  }
 
   return {
     filters: {
@@ -423,6 +465,7 @@ const parseCommonFilters = (event: APIGatewayProxyEventV2) => {
       campaigns: campaigns.length > 0 ? campaigns : undefined,
       strategies: strategies.length > 0 ? strategies : undefined,
       hashtags: hashtags.length > 0 ? hashtags : undefined,
+      topics: topics.length > 0 ? topics : undefined,
       sentiment: sentiment ?? undefined,
       trendGranularity: trendGranularity ?? undefined,
       comparisonMode: comparisonMode ?? "same_period_last_year",
@@ -1201,6 +1244,133 @@ export const patchMonitorSocialErTargets = async (event: APIGatewayProxyEventV2)
   }
 };
 
+export const postMonitorSocialTopicsBackfill = async (event: APIGatewayProxyEventV2) => {
+  const featureError = ensureFeatureEnabled();
+  if (featureError) return featureError;
+
+  const role = getRole(event);
+  if (!hasRole(role, "Admin")) {
+    return json(403, { error: "forbidden", message: "Se requiere rol Admin" });
+  }
+
+  const body = parseBody<SocialTopicsBackfillBody>(event) ?? {};
+
+  const fromRaw = typeof body.from === "string" && body.from.trim() ? body.from.trim() : "2024-01-01T00:00:00Z";
+  const toRaw = typeof body.to === "string" && body.to.trim() ? body.to.trim() : undefined;
+  const from = parseDate(fromRaw);
+  if (!from) {
+    return json(422, { error: "validation_error", message: "from must be a valid ISO datetime" });
+  }
+
+  const to = toRaw ? parseDate(toRaw) : null;
+  if (toRaw && !to) {
+    return json(422, { error: "validation_error", message: "to must be a valid ISO datetime" });
+  }
+  if (to && to.getTime() <= from.getTime()) {
+    return json(422, { error: "validation_error", message: "to must be after from" });
+  }
+
+  const limit = typeof body.limit === "number" && Number.isFinite(body.limit) ? Math.floor(body.limit) : 500;
+  if (limit < 1 || limit > 5000) {
+    return json(422, { error: "validation_error", message: "limit must be an integer between 1 and 5000" });
+  }
+
+  const dryRun = body.dry_run === true;
+  const requestId = getRequestId(event);
+
+  try {
+    const schedulerPayload = {
+      trigger_type: "manual",
+      request_id: requestId,
+      requested_at: new Date().toISOString(),
+      from: from.toISOString(),
+      to: to ? to.toISOString() : null,
+      limit,
+      dry_run: dryRun
+    };
+
+    const schedulerLambdaName = env.socialTopicSchedulerLambdaName;
+    const response: SocialTopicSchedulerResponse = schedulerLambdaName
+      ? await (async () => {
+          const invocation = await lambda
+            .invoke({
+              FunctionName: schedulerLambdaName,
+              InvocationType: "RequestResponse",
+              Payload: JSON.stringify(schedulerPayload)
+            })
+            .promise();
+          const parsed = decodeLambdaPayload<SocialTopicSchedulerResponse>(invocation.Payload);
+          if (!parsed) throw new Error("Invalid social topic scheduler response payload");
+          return parsed;
+        })()
+      : await runSocialTopicsBackfillScheduler(schedulerPayload);
+
+    if (response.status !== "completed") {
+      return json(500, {
+        error: "social_topics_backfill_failed",
+        message: response.error_message ?? "social topics scheduler failed",
+        run_id: response.run_id
+      });
+    }
+
+    return json(202, {
+      status: "accepted",
+      run_id: response.run_id,
+      selected_count: response.selected_count,
+      enqueued_count: response.enqueued_count
+    });
+  } catch (error) {
+    return mapStoreError(error);
+  }
+};
+
+export const getMonitorSocialTopicsStatus = async (event: APIGatewayProxyEventV2) => {
+  const featureError = ensureFeatureEnabled();
+  if (featureError) return featureError;
+
+  const store = createSocialTopicStore();
+  if (!store) {
+    return json(500, { error: "misconfigured", message: "Database runtime is not configured" });
+  }
+
+  const query = event.queryStringParameters ?? {};
+  const from = query.from ? parseDate(query.from) : new Date("2024-01-01T00:00:00Z");
+  if (!from) {
+    return json(422, { error: "validation_error", message: "from must be a valid ISO datetime" });
+  }
+  const to = query.to ? parseDate(query.to) : null;
+  if (query.to && !to) {
+    return json(422, { error: "validation_error", message: "to must be a valid ISO datetime" });
+  }
+  if (to && to.getTime() <= from.getTime()) {
+    return json(422, { error: "validation_error", message: "to must be after from" });
+  }
+
+  try {
+    const status = await store.getCoverageStatus({
+      from,
+      to,
+      taxonomyVersion: env.socialTopicTaxonomyVersion,
+      promptVersion: env.socialTopicPromptVersion
+    });
+
+    return json(200, {
+      generated_at: new Date().toISOString(),
+      window_start: from.toISOString(),
+      window_end: to ? to.toISOString() : null,
+      taxonomy_version: env.socialTopicTaxonomyVersion,
+      prompt_version: env.socialTopicPromptVersion,
+      total_posts: status.totalPosts,
+      classified: status.classified,
+      pending: status.pending,
+      in_review: status.inReview,
+      last_run: status.lastRun
+    });
+  } catch (error) {
+    return mapStoreError(error);
+  }
+};
+
 export const postMonitorSocialHashtagBackfill = async (event: APIGatewayProxyEventV2) => {
   const featureError = ensureFeatureEnabled();
   if (featureError) return featureError;
@@ -1558,6 +1728,9 @@ export const listMonitorSocialPosts = async (event: APIGatewayProxyEventV2) => {
     campaignKey: string | null;
     strategyKeys: string[];
     hashtags: string[];
+    topics: Array<{ key: string; label: string; confidence: number; rank: number }>;
+    topicsVersion: string | null;
+    topicsNeedsReview: boolean;
     createdAt: Date;
     updatedAt: Date;
   }) => ({
@@ -1593,6 +1766,14 @@ export const listMonitorSocialPosts = async (event: APIGatewayProxyEventV2) => {
     campaign: item.campaignKey,
     strategies: item.strategyKeys,
     hashtags: item.hashtags,
+    topics: item.topics.map((topic) => ({
+      key: topic.key,
+      label: topic.label,
+      confidence: topic.confidence,
+      rank: topic.rank
+    })),
+    topics_version: item.topicsVersion,
+    topics_needs_review: item.topicsNeedsReview,
     created_at: item.createdAt.toISOString(),
     updated_at: item.updatedAt.toISOString()
   });

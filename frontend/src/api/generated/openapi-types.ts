@@ -759,6 +759,8 @@ export interface paths {
                     strategy?: string;
                     /** @description Hashtag o lista CSV de hashtags (con o sin */
                     hashtag?: string;
+                    /** @description Topic de taxonomia social_topic o lista CSV de topics */
+                    topic?: string;
                     comparison_mode?: components["schemas"]["SocialComparisonMode"];
                     comparison_days?: number;
                 };
@@ -820,6 +822,8 @@ export interface paths {
                     strategy?: string;
                     /** @description Hashtag o lista CSV de hashtags (con o sin */
                     hashtag?: string;
+                    /** @description Topic de taxonomia social_topic o lista CSV de topics */
+                    topic?: string;
                     comparison_mode?: components["schemas"]["SocialComparisonMode"];
                     comparison_days?: number;
                     min_posts?: number;
@@ -945,6 +949,8 @@ export interface paths {
                     strategy?: string;
                     /** @description Hashtag o lista CSV de hashtags (con o sin */
                     hashtag?: string;
+                    /** @description Topic de taxonomia social_topic o lista CSV de topics */
+                    topic?: string;
                     comparison_mode?: components["schemas"]["SocialComparisonMode"];
                     comparison_days?: number;
                     sort?: components["schemas"]["SocialPostSort"];
@@ -1444,6 +1450,91 @@ export interface paths {
                 422: components["responses"]["ValidationError"];
             };
         };
+        trace?: never;
+    };
+    "/v1/monitor/social/topics/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Estado de cobertura de clasificacion tematica social */
+        get: {
+            parameters: {
+                query?: {
+                    from?: string;
+                    to?: string;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Cobertura de clasificacion de topics */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["MonitorSocialTopicsStatusResponse"];
+                    };
+                };
+                401: components["responses"]["Unauthorized"];
+                403: components["responses"]["Forbidden"];
+                422: components["responses"]["ValidationError"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/monitor/social/topics/backfill": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Disparar backfill de clasificacion tematica social (Admin) */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["MonitorSocialTopicsBackfillRequest"];
+                };
+            };
+            responses: {
+                /** @description Backfill de topics aceptado */
+                202: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["MonitorSocialTopicsBackfillResponse"];
+                    };
+                };
+                401: components["responses"]["Unauthorized"];
+                403: components["responses"]["Forbidden"];
+                422: components["responses"]["ValidationError"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/v1/monitor/social/hashtags/backfill": {
@@ -5368,10 +5459,19 @@ export interface components {
             campaign: string | null;
             strategies: string[];
             hashtags: string[];
+            topics: components["schemas"]["MonitorSocialTopicItem"][];
+            topics_version: string | null;
+            topics_needs_review: boolean;
             /** Format: date-time */
             created_at: string;
             /** Format: date-time */
             updated_at: string;
+        };
+        MonitorSocialTopicItem: {
+            key: string;
+            label: string;
+            confidence: number;
+            rank: number;
         };
         MonitorSocialPostsResponse: {
             items: components["schemas"]["MonitorSocialPostItem"][];
@@ -5535,6 +5635,61 @@ export interface components {
         PatchMonitorSocialErTargetsRequest: {
             year?: number;
             targets: components["schemas"]["PatchMonitorSocialErTargetItem"][];
+        };
+        MonitorSocialTopicsBackfillRequest: {
+            /**
+             * Format: date-time
+             * @default 2024-01-01T00:00:00Z
+             */
+            from: string;
+            /** Format: date-time */
+            to?: string | null;
+            /** @default 500 */
+            limit: number;
+            /** @default false */
+            dry_run: boolean;
+        };
+        MonitorSocialTopicsBackfillResponse: {
+            /** @enum {string} */
+            status: "accepted";
+            run_id: string;
+            selected_count: number;
+            enqueued_count: number;
+        };
+        MonitorSocialTopicsLastRun: {
+            runId?: string | null;
+            /** @enum {string|null} */
+            status?: "completed" | "failed" | null;
+            /** @enum {string|null} */
+            triggerType?: "manual" | "scheduled" | null;
+            /** Format: date-time */
+            requestedAt?: string | null;
+            /** Format: date-time */
+            from?: string | null;
+            /** Format: date-time */
+            to?: string | null;
+            limit?: number | null;
+            dryRun?: boolean | null;
+            selectedCount?: number | null;
+            enqueuedCount?: number | null;
+            errorMessage?: string | null;
+            /** Format: date-time */
+            createdAt: string;
+        };
+        MonitorSocialTopicsStatusResponse: {
+            /** Format: date-time */
+            generated_at: string;
+            /** Format: date-time */
+            window_start: string;
+            /** Format: date-time */
+            window_end: string | null;
+            taxonomy_version: string;
+            prompt_version: string;
+            total_posts: number;
+            classified: number;
+            pending: number;
+            in_review: number;
+            last_run: components["schemas"]["MonitorSocialTopicsLastRun"] | null;
         };
         MonitorSocialHashtagBackfillResponse: {
             /** @enum {string} */

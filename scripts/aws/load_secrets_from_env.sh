@@ -20,9 +20,12 @@ if ! command -v jq >/dev/null 2>&1; then
   exit 1
 fi
 
-PROVIDER_SECRET_NAME="${PROVIDER_KEYS_SECRET_NAME:-${PROVIDER_SECRET_NAME:-claro-data-prod/provider-api-keys}}"
-APP_CONFIG_SECRET_NAME="${APP_CONFIG_SECRET_NAME:-claro-data-prod/app-config}"
-AWS_CREDENTIALS_SECRET_NAME="${AWS_CREDENTIALS_SECRET_NAME:-claro-data-prod/aws-credentials}"
+PROJECT_NAME="${PROJECT_NAME:-claro-data}"
+ENVIRONMENT="${ENVIRONMENT:-prod}"
+SECRET_PREFIX="${SECRET_PREFIX:-${PROJECT_NAME}-${ENVIRONMENT}}"
+PROVIDER_SECRET_NAME="${PROVIDER_KEYS_SECRET_NAME:-${PROVIDER_SECRET_NAME:-${SECRET_PREFIX}/provider-api-keys}}"
+APP_CONFIG_SECRET_NAME="${APP_CONFIG_SECRET_NAME:-${SECRET_PREFIX}/app-config}"
+AWS_CREDENTIALS_SECRET_NAME="${AWS_CREDENTIALS_SECRET_NAME:-${SECRET_PREFIX}/aws-credentials}"
 
 provider_payload="$(jq -n \
   --arg news_api_key "${NEWS_API_KEY:-}" \
@@ -96,7 +99,7 @@ upsert_secret() {
     --tags \
       Key=claro,Value=true \
       Key=app,Value="${APP_TAG:-claro-data}" \
-      Key=env,Value="${ENV_TAG:-prod}" \
+      Key=env,Value="${ENV_TAG:-$ENVIRONMENT}" \
       Key=owner,Value="${OWNER_TAG:-claro-data-team}" \
       Key=cost-center,Value="${COST_CENTER_TAG:-marketing-intelligence}" \
       Key=managed-by,Value=terraform >/dev/null

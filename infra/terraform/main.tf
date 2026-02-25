@@ -492,6 +492,55 @@ resource "aws_iam_role_policy_attachment" "lambda_classification_scheduler_basic
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
 }
 
+resource "aws_iam_role" "lambda_social_topic_worker" {
+  name = "${local.name_prefix}-lambda-social-topic-worker-role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Action = "sts:AssumeRole"
+        Effect = "Allow"
+        Principal = {
+          Service = "lambda.amazonaws.com"
+        }
+      }
+    ]
+  })
+}
+
+resource "aws_iam_role_policy_attachment" "lambda_social_topic_worker_basic" {
+  role       = aws_iam_role.lambda_social_topic_worker.name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+}
+
+resource "aws_iam_role_policy_attachment" "lambda_social_topic_worker_sqs" {
+  role       = aws_iam_role.lambda_social_topic_worker.name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaSQSQueueExecutionRole"
+}
+
+resource "aws_iam_role" "lambda_social_topic_scheduler" {
+  name = "${local.name_prefix}-lambda-social-topic-scheduler-role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Action = "sts:AssumeRole"
+        Effect = "Allow"
+        Principal = {
+          Service = "lambda.amazonaws.com"
+        }
+      }
+    ]
+  })
+}
+
+resource "aws_iam_role_policy_attachment" "lambda_social_topic_scheduler_basic" {
+  role       = aws_iam_role.lambda_social_topic_scheduler.name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+}
+
 resource "aws_iam_role" "lambda_social_scheduler" {
   name = "${local.name_prefix}-lambda-social-scheduler-role"
 
@@ -620,12 +669,20 @@ resource "aws_lambda_function" "api" {
       SOCIAL_RAW_BUCKET_NAME                  = var.social_raw_bucket_name
       SOCIAL_RAW_PREFIX                       = var.social_raw_prefix
       SOCIAL_SCHEDULER_LAMBDA_NAME            = aws_lambda_function.social_scheduler.function_name
+      SOCIAL_TOPIC_SCHEDULER_LAMBDA_NAME      = aws_lambda_function.social_topic_scheduler.function_name
+      SOCIAL_RISK_STALE_AFTER_MINUTES         = tostring(var.social_risk_stale_after_minutes)
       EXPORT_BUCKET_NAME                      = aws_s3_bucket.exports.bucket
       EXPORT_QUEUE_URL                        = aws_sqs_queue.export.url
       INCIDENT_QUEUE_URL                      = aws_sqs_queue.incident_evaluation.url
       REPORT_QUEUE_URL                        = aws_sqs_queue.report_generation.url
       ANALYSIS_QUEUE_URL                      = aws_sqs_queue.analysis_generation.url
       CLASSIFICATION_QUEUE_URL                = aws_sqs_queue.classification_generation.url
+      SOCIAL_TOPIC_QUEUE_URL                  = aws_sqs_queue.social_topic_generation.url
+      SOCIAL_TOPIC_PROMPT_VERSION             = "social-topics-v1"
+      SOCIAL_TOPIC_TAXONOMY_VERSION           = "social-topics-v1"
+      SOCIAL_TOPIC_BACKFILL_BATCH_SIZE        = "500"
+      SOCIAL_TOPIC_CONFIDENCE_MIN             = "0.55"
+      SOCIAL_TOPIC_REVIEW_THRESHOLD           = "0.65"
       AWARIO_SYNC_QUEUE_URL                   = aws_sqs_queue.awario_sync.url
       AWARIO_API_BASE_URL                     = "https://api.awario.com/v1.0"
       AWARIO_LINKING_V2                       = "true"
@@ -855,6 +912,65 @@ resource "aws_lambda_function" "classification_scheduler" {
   }
 }
 
+resource "aws_lambda_function" "social_topic_worker" {
+  function_name = "${local.name_prefix}-social-topic-worker"
+  role          = aws_iam_role.lambda_social_topic_worker.arn
+  runtime       = "nodejs22.x"
+  handler       = "socialTopics/worker.main"
+
+  filename         = var.lambda_package_path
+  source_code_hash = filebase64sha256(var.lambda_package_path)
+
+  timeout                        = 300
+  memory_size                    = 1024
+  reserved_concurrent_executions = 2
+
+  environment {
+    variables = {
+      APP_ENV                         = var.environment
+      DB_RESOURCE_ARN                 = aws_rds_cluster.aurora.arn
+      DB_SECRET_ARN                   = data.aws_secretsmanager_secret.database.arn
+      DB_NAME                         = var.db_name
+      BEDROCK_MODEL_ID                = "us.anthropic.claude-haiku-4-5-20251001-v1:0"
+      SOCIAL_TOPIC_PROMPT_VERSION     = "social-topics-v1"
+      SOCIAL_TOPIC_TAXONOMY_VERSION   = "social-topics-v1"
+      SOCIAL_TOPIC_CONFIDENCE_MIN     = "0.55"
+      SOCIAL_TOPIC_REVIEW_THRESHOLD   = "0.65"
+      SOCIAL_TOPIC_BACKFILL_BATCH_SIZE = "500"
+    }
+  }
+}
+
+resource "aws_lambda_function" "social_topic_scheduler" {
+  function_name = "${local.name_prefix}-social-topic-scheduler"
+  role          = aws_iam_role.lambda_social_topic_scheduler.arn
+  runtime       = "nodejs22.x"
+  handler       = "socialTopics/scheduler.main"
+
+  filename         = var.lambda_package_path
+  source_code_hash = filebase64sha256(var.lambda_package_path)
+
+  timeout                        = 120
+  memory_size                    = 512
+  reserved_concurrent_executions = 1
+
+  environment {
+    variables = {
+      APP_ENV                         = var.environment
+      DB_RESOURCE_ARN                 = aws_rds_cluster.aurora.arn
+      DB_SECRET_ARN                   = data.aws_secretsmanager_secret.database.arn
+      DB_NAME                         = var.db_name
+      BEDROCK_MODEL_ID                = "us.anthropic.claude-haiku-4-5-20251001-v1:0"
+      SOCIAL_TOPIC_QUEUE_URL          = aws_sqs_queue.social_topic_generation.url
+      SOCIAL_TOPIC_PROMPT_VERSION     = "social-topics-v1"
+      SOCIAL_TOPIC_TAXONOMY_VERSION   = "social-topics-v1"
+      SOCIAL_TOPIC_BACKFILL_BATCH_SIZE = "500"
+      SOCIAL_TOPIC_CONFIDENCE_MIN     = "0.55"
+      SOCIAL_TOPIC_REVIEW_THRESHOLD   = "0.65"
+    }
+  }
+}
+
 resource "aws_lambda_function" "social_scheduler" {
   function_name = "${local.name_prefix}-social-scheduler"
   role          = aws_iam_role.lambda_social_scheduler.arn
@@ -878,7 +994,12 @@ resource "aws_lambda_function" "social_scheduler" {
       SOCIAL_RAW_BUCKET_NAME        = var.social_raw_bucket_name
       SOCIAL_RAW_PREFIX             = var.social_raw_prefix
       CLASSIFICATION_QUEUE_URL      = aws_sqs_queue.classification_generation.url
+      SOCIAL_TOPIC_QUEUE_URL        = aws_sqs_queue.social_topic_generation.url
       CLASSIFICATION_PROMPT_VERSION = "social-sentiment-v1"
+      SOCIAL_TOPIC_PROMPT_VERSION   = "social-topics-v1"
+      SOCIAL_TOPIC_TAXONOMY_VERSION = "social-topics-v1"
+      SOCIAL_TOPIC_CONFIDENCE_MIN   = "0.55"
+      SOCIAL_TOPIC_REVIEW_THRESHOLD = "0.65"
       BEDROCK_MODEL_ID              = "us.anthropic.claude-haiku-4-5-20251001-v1:0"
     }
   }
@@ -1080,6 +1201,8 @@ resource "aws_apigatewayv2_route" "private_routes" {
     "GET /v1/monitor/social/charts/er-breakdown",
     "GET /v1/monitor/social/targets/er",
     "PATCH /v1/monitor/social/targets/er",
+    "GET /v1/monitor/social/topics/status",
+    "POST /v1/monitor/social/topics/backfill",
     "POST /v1/monitor/social/hashtags/backfill",
     "GET /v1/monitor/social/etl-quality",
     "GET /v1/monitor/social/export.xlsx",
@@ -1294,6 +1417,29 @@ resource "aws_lambda_event_source_mapping" "classification_queue_to_worker" {
   batch_size       = 1
 }
 
+resource "aws_sqs_queue" "social_topic_generation_dlq" {
+  name                      = "${local.name_prefix}-social-topic-generation-dlq"
+  message_retention_seconds = 1209600
+  kms_master_key_id         = aws_kms_key.app.arn
+}
+
+resource "aws_sqs_queue" "social_topic_generation" {
+  name                       = "${local.name_prefix}-social-topic-generation"
+  visibility_timeout_seconds = 360
+  message_retention_seconds  = 345600
+  kms_master_key_id          = aws_kms_key.app.arn
+  redrive_policy = jsonencode({
+    deadLetterTargetArn = aws_sqs_queue.social_topic_generation_dlq.arn
+    maxReceiveCount     = 5
+  })
+}
+
+resource "aws_lambda_event_source_mapping" "social_topic_queue_to_worker" {
+  event_source_arn = aws_sqs_queue.social_topic_generation.arn
+  function_name    = aws_lambda_function.social_topic_worker.arn
+  batch_size       = 1
+}
+
 resource "aws_sqs_queue" "analysis_generation_dlq" {
   name                      = "${local.name_prefix}-analysis-generation-dlq"
   message_retention_seconds = 1209600
@@ -1426,7 +1572,7 @@ resource "aws_lambda_permission" "awario_sync_scheduler_eventbridge" {
 
 resource "aws_cloudwatch_event_rule" "social_daily_8am_bogota" {
   name                = "${local.name_prefix}-social-daily-8am-bogota"
-  schedule_expression = "cron(0 13 * * ? *)"
+  schedule_expression = var.social_schedule_expression
 }
 
 resource "aws_cloudwatch_event_target" "social_daily_8am_bogota" {

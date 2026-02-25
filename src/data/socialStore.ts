@@ -123,6 +123,7 @@ type SocialOverviewFilters = {
   campaigns?: string[];
   strategies?: string[];
   hashtags?: string[];
+  topics?: string[];
   sentiment?: SentimentBucket;
   trendGranularity?: SocialTrendGranularity;
   comparisonMode?: SocialComparisonMode;
@@ -163,6 +164,14 @@ type SocialPostRecord = {
   campaignKey: string | null;
   strategyKeys: string[];
   hashtags: string[];
+  topics: Array<{
+    key: string;
+    label: string;
+    confidence: number;
+    rank: number;
+  }>;
+  topicsVersion: string | null;
+  topicsNeedsReview: boolean;
   createdAt: Date;
   updatedAt: Date;
 };
@@ -1017,6 +1026,42 @@ const parseJsonTextArray = (value: string | null): string[] => {
   }
 };
 
+const parsePostTopics = (value: string | null): Array<{ key: string; label: string; confidence: number; rank: number }> => {
+  if (!value) return [];
+  try {
+    const parsed = JSON.parse(value) as unknown;
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .map((item) => {
+        if (!item || typeof item !== "object" || Array.isArray(item)) return null;
+        const row = item as Record<string, unknown>;
+        const key = typeof row.key === "string" ? row.key.trim() : "";
+        const label = typeof row.label === "string" ? row.label.trim() : key;
+        const confidenceRaw =
+          typeof row.confidence === "number"
+            ? row.confidence
+            : typeof row.confidence === "string"
+              ? Number.parseFloat(row.confidence)
+              : Number.NaN;
+        const rankRaw =
+          typeof row.rank === "number"
+            ? row.rank
+            : typeof row.rank === "string"
+              ? Number.parseInt(row.rank, 10)
+              : Number.NaN;
+        if (!key) return null;
+        const confidence = Number.isFinite(confidenceRaw) ? clamp(confidenceRaw, 0, 1) : 0;
+        const rank = Number.isFinite(rankRaw) ? Math.max(1, Math.floor(rankRaw)) : 9999;
+        return { key, label, confidence, rank };
+      })
+      .filter((item): item is { key: string; label: string; confidence: number; rank: number } => item !== null)
+      .sort((a, b) => a.rank - b.rank || b.confidence - a.confidence || a.key.localeCompare(b.key))
+      .slice(0, 10);
+  } catch {
+    return [];
+  }
+};
+
 const normalizeHashtagToken = (value: string): string =>
   value
     .trim()
@@ -1544,8 +1589,11 @@ const parsePostRow = (row: SqlRow | undefined): SocialPostRecord | null => {
   const hashtags = parseJsonTextArray(fieldString(row, 25))
     .map((item) => normalizeHashtagToken(item))
     .filter((item) => item.length >= 2);
-  const createdAt = fieldDate(row, 26);
-  const updatedAt = fieldDate(row, 27);
+  const topics = parsePostTopics(fieldString(row, 26));
+  const topicsVersion = fieldString(row, 27);
+  const topicsNeedsReview = fieldBoolean(row, 28) ?? false;
+  const createdAt = fieldDate(row, 29);
+  const updatedAt = fieldDate(row, 30);
 
   if (!id || !contentItemId || !channel || !accountName || !externalPostId || !postUrl || !title || !createdAt || !updatedAt) {
     return null;
@@ -1579,6 +1627,9 @@ const parsePostRow = (row: SqlRow | undefined): SocialPostRecord | null => {
     campaignKey,
     strategyKeys,
     hashtags,
+    topics,
+    topicsVersion,
+    topicsNeedsReview,
     createdAt,
     updatedAt
   };
@@ -1697,6 +1748,8 @@ const isLegacySocialSchemaError = (error: unknown): boolean => {
     message.includes("socialposthashtag") ||
     message.includes("campaigntaxonomyid") ||
     message.includes("socialpostcomment") ||
+    message.includes("socialposttopicclassification") ||
+    message.includes("socialposttopicassignment") ||
     message.includes("\"hashtag\"")
   );
 };
@@ -2653,6 +2706,35 @@ class SocialStore {
       }
     }
 
+    const topicValues = Array.from(
+      new Set(
+        (filters.topics ?? [])
+          .map((value) => value.trim().toLowerCase())
+          .filter((value) => value.length > 0)
+      )
+    );
+    if (topicValues.length > 0) {
+      const placeholders = topicValues.map((_, index) => `:topic_${index}`);
+      conditions.push(`
+        EXISTS (
+          SELECT 1
+          FROM "public"."SocialPostTopicClassification" stc_topic
+          JOIN "public"."SocialPostTopicAssignment" spta_topic ON spta_topic."classificationId" = stc_topic."id"
+          JOIN "public"."TaxonomyEntry" te_topic ON te_topic."id" = spta_topic."taxonomyEntryId"
+          WHERE
+            stc_topic."contentItemId" = ci."id"
+            AND stc_topic."taxonomyVersion" = :topic_filter_taxonomy_version
+            AND stc_topic."promptVersion" = :topic_filter_prompt_version
+            AND LOWER(te_topic."key") IN (${placeholders.join(", ")})
+        )
+      `);
+      params.push(sqlString("topic_filter_taxonomy_version", env.socialTopicTaxonomyVersion));
+      params.push(sqlString("topic_filter_prompt_version", env.socialTopicPromptVersion));
+      for (const [index, value] of topicValues.entries()) {
+        params.push(sqlString(`topic_${index}`, value));
+      }
+    }
+
     const sentimentClause = this.sentimentFilterClause(filters.sentiment);
     if (sentimentClause) conditions.push(sentimentClause.replace(/^AND /, ""));
 
@@ -2672,7 +2754,12 @@ class SocialStore {
   ): Promise<SocialPostRecord[]> {
     const { clause, params } = this.buildPostsWhere(filters, windowStart, windowEnd);
     const sortExpressions = buildPostSortExpressions(sort);
-    const statementParams = [...params, sqlLong("limit", limit)];
+    const statementParams = [
+      ...params,
+      sqlString("topics_taxonomy_version", env.socialTopicTaxonomyVersion),
+      sqlString("topics_prompt_version", env.socialTopicPromptVersion),
+      sqlLong("limit", limit)
+    ];
     const keysetCursor = options.keysetCursor ?? null;
 
     let whereClause = clause;
@@ -2732,6 +2819,9 @@ class SocialStore {
         te_campaign."key",
         COALESCE(strategies."strategy_keys", '[]'::json)::text,
         COALESCE(hashtags."hashtag_slugs", '[]'::json)::text,
+        COALESCE(post_topics."topics", '[]'::json)::text,
+        stc_topics."taxonomyVersion",
+        COALESCE(stc_topics."needsReview", FALSE),
         spm."createdAt",
         spm."updatedAt"
       FROM "public"."SocialPostMetric" spm
@@ -2763,6 +2853,38 @@ class SocialStore {
         JOIN "public"."Hashtag" h ON h."id" = sph."hashtagId"
         WHERE sph."socialPostMetricId" = spm."id"
       ) hashtags ON TRUE
+      LEFT JOIN LATERAL (
+        SELECT
+          stc."id",
+          stc."taxonomyVersion",
+          stc."needsReview"
+        FROM "public"."SocialPostTopicClassification" stc
+        WHERE
+          stc."contentItemId" = ci."id"
+          AND stc."taxonomyVersion" = :topics_taxonomy_version
+          AND stc."promptVersion" = :topics_prompt_version
+        ORDER BY stc."updatedAt" DESC, stc."createdAt" DESC
+        LIMIT 1
+      ) stc_topics ON TRUE
+      LEFT JOIN LATERAL (
+        SELECT to_json(
+          COALESCE(
+            array_agg(
+              json_build_object(
+                'key', te_topic."key",
+                'label', te_topic."label",
+                'confidence', spta."confidence",
+                'rank', spta."rank"
+              )
+              ORDER BY spta."rank" ASC, spta."confidence" DESC
+            ),
+            ARRAY[]::json[]
+          )
+        ) AS topics
+        FROM "public"."SocialPostTopicAssignment" spta
+        JOIN "public"."TaxonomyEntry" te_topic ON te_topic."id" = spta."taxonomyEntryId"
+        WHERE spta."classificationId" = stc_topics."id"
+      ) post_topics ON TRUE
       ${whereClause}
       ORDER BY ${sortExpressions.orderBy}
       ${paginationClause}
@@ -2806,6 +2928,9 @@ class SocialStore {
           NULL::text AS campaign_key,
           '[]'::text AS strategy_keys,
           '[]'::text AS hashtag_slugs,
+          '[]'::text AS topics,
+          NULL::text AS topics_version,
+          FALSE AS topics_needs_review,
           spm."createdAt",
           spm."updatedAt"
         FROM "public"."SocialPostMetric" spm

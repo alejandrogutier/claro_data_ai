@@ -1,5 +1,6 @@
 owner                = "data-platform"
 cost_center          = "marketing-intelligence"
+environment          = "prod"
 vpc_id               = "vpc-xxxxxxxx"
 private_subnet_ids   = ["subnet-aaaaaaaa", "subnet-bbbbbbbb"]
 db_master_password   = "replace-me"
@@ -14,6 +15,8 @@ aws_credentials_secret_name = "claro-data-prod/aws-credentials"
 database_secret_name        = "claro-data-prod/database"
 social_raw_bucket_name      = "claro-dataslayer-dump"
 social_raw_prefix           = "raw/organic/"
+social_risk_stale_after_minutes = 30
+social_schedule_expression      = "cron(0 13 * * ? *)"
 cognito_additional_callback_urls = ["http://localhost:5173/auth/callback"]
 cognito_additional_logout_urls   = ["http://localhost:5173"]
 api_additional_allowed_origins   = ["http://localhost:5173"]

@@ -25,6 +25,9 @@ if [[ "${#SUBNET_IDS[@]}" -lt 2 ]]; then
 fi
 
 DB_PASSWORD="$(openssl rand -base64 24 | tr -dc 'A-Za-z0-9' | cut -c1-28)"
+PROJECT_NAME="${PROJECT_NAME:-claro-data}"
+ENVIRONMENT="${ENVIRONMENT:-prod}"
+SECRET_PREFIX="${SECRET_PREFIX:-${PROJECT_NAME}-${ENVIRONMENT}}"
 OWNER="${OWNER:-claro-data-team}"
 COST_CENTER="${COST_CENTER:-marketing-intelligence}"
 BUDGET_EMAIL="${BUDGET_EMAIL:-ops@example.com}"
@@ -33,13 +36,24 @@ ALERT_EMAIL_RECIPIENTS="${ALERT_EMAIL_RECIPIENTS:-}"
 API_ADDITIONAL_ALLOWED_ORIGINS="${API_ADDITIONAL_ALLOWED_ORIGINS:-http://localhost:5173,https://main.d34ae2z3oew4p.amplifyapp.com}"
 COGNITO_ADDITIONAL_CALLBACK_URLS="${COGNITO_ADDITIONAL_CALLBACK_URLS:-http://localhost:5173/auth/callback,https://main.d34ae2z3oew4p.amplifyapp.com/auth/callback}"
 COGNITO_ADDITIONAL_LOGOUT_URLS="${COGNITO_ADDITIONAL_LOGOUT_URLS:-http://localhost:5173,https://main.d34ae2z3oew4p.amplifyapp.com}"
-PROVIDER_KEYS_SECRET_NAME="${PROVIDER_KEYS_SECRET_NAME:-claro-data-prod/provider-api-keys}"
-APP_CONFIG_SECRET_NAME="${APP_CONFIG_SECRET_NAME:-claro-data-prod/app-config}"
-AWS_CREDENTIALS_SECRET_NAME="${AWS_CREDENTIALS_SECRET_NAME:-claro-data-prod/aws-credentials}"
-DATABASE_SECRET_NAME="${DATABASE_SECRET_NAME:-claro-data-prod/database}"
+PROVIDER_KEYS_SECRET_NAME="${PROVIDER_KEYS_SECRET_NAME:-${SECRET_PREFIX}/provider-api-keys}"
+APP_CONFIG_SECRET_NAME="${APP_CONFIG_SECRET_NAME:-${SECRET_PREFIX}/app-config}"
+AWS_CREDENTIALS_SECRET_NAME="${AWS_CREDENTIALS_SECRET_NAME:-${SECRET_PREFIX}/aws-credentials}"
+DATABASE_SECRET_NAME="${DATABASE_SECRET_NAME:-${SECRET_PREFIX}/database}"
+SOCIAL_RISK_STALE_AFTER_MINUTES="${SOCIAL_RISK_STALE_AFTER_MINUTES:-30}"
+SOCIAL_SCHEDULE_EXPRESSION="${SOCIAL_SCHEDULE_EXPRESSION:-cron(0 13 * * ? *)}"
 
-TFVARS_PATH="$ROOT_DIR/infra/terraform/terraform.tfvars"
+TFVARS_PATH_DEFAULT="$ROOT_DIR/infra/terraform/terraform.tfvars"
+if [[ "$ENVIRONMENT" != "prod" ]]; then
+  TFVARS_PATH_DEFAULT="$ROOT_DIR/infra/terraform/terraform.${ENVIRONMENT}.tfvars"
+fi
+TFVARS_PATH="${TFVARS_PATH:-$TFVARS_PATH_DEFAULT}"
 LAMBDA_PACKAGE_PATH="$ROOT_DIR/build/lambda-api.zip"
+
+if ! [[ "$SOCIAL_RISK_STALE_AFTER_MINUTES" =~ ^[0-9]+$ ]]; then
+  echo "SOCIAL_RISK_STALE_AFTER_MINUTES must be an integer"
+  exit 1
+fi
 
 if [[ -f "$TFVARS_PATH" ]]; then
   EXISTING_DB_PASSWORD="$(grep -E '^db_master_password[[:space:]]*=' "$TFVARS_PATH" | head -n 1 | sed -E 's/.*"([^"]*)".*/\1/' || true)"
@@ -88,6 +102,7 @@ COGNITO_LOGOUT_URLS_HCL="$(build_hcl_list_from_csv "$COGNITO_ADDITIONAL_LOGOUT_U
 cat > "$TFVARS_PATH" <<VARS
 owner                = "$OWNER"
 cost_center          = "$COST_CENTER"
+environment          = "$ENVIRONMENT"
 vpc_id               = "$VPC_ID"
 private_subnet_ids   = ["${SUBNET_IDS[0]}", "${SUBNET_IDS[1]}"]
 db_master_password   = "$DB_PASSWORD"
@@ -99,11 +114,14 @@ provider_keys_secret_name = "$PROVIDER_KEYS_SECRET_NAME"
 app_config_secret_name    = "$APP_CONFIG_SECRET_NAME"
 aws_credentials_secret_name = "$AWS_CREDENTIALS_SECRET_NAME"
 database_secret_name      = "$DATABASE_SECRET_NAME"
+social_risk_stale_after_minutes = $SOCIAL_RISK_STALE_AFTER_MINUTES
+social_schedule_expression      = "$SOCIAL_SCHEDULE_EXPRESSION"
 api_additional_allowed_origins = [$API_ALLOWED_ORIGINS_HCL]
 cognito_additional_callback_urls = [$COGNITO_CALLBACK_URLS_HCL]
 cognito_additional_logout_urls = [$COGNITO_LOGOUT_URLS_HCL]
 VARS
 
 echo "Generated: $TFVARS_PATH"
+echo "Environment: $ENVIRONMENT"
 echo "Using VPC: $VPC_ID"
 echo "Using subnets: ${SUBNET_IDS[0]}, ${SUBNET_IDS[1]}"

@@ -227,6 +227,7 @@ model ContentItem {
   updatedAt        DateTime            @updatedAt
   term             TrackedTerm?        @relation(fields: [termId], references: [id], onDelete: SetNull)
   classifications  Classification[]
+  socialTopicClassifications SocialPostTopicClassification[]
   stateEvents      ContentStateEvent[]
   analysisLinks    AnalysisRunItem[]
   ingestionLinks   IngestionRunContentLink[]
@@ -302,6 +303,7 @@ model SocialPostMetric {
   campaignTaxonomy TaxonomyEntry? @relation("SocialPostCampaign", fields: [campaignTaxonomyId], references: [id], onDelete: SetNull)
   hashtags         SocialPostHashtag[]
   strategies       SocialPostStrategy[]
+  topicClassifications SocialPostTopicClassification[]
   awarioComments   SocialPostComment[]
 
   @@unique([channel, externalPostId])
@@ -828,6 +830,7 @@ model TaxonomyEntry {
   updatedAt   DateTime @updatedAt
   socialCampaignPosts SocialPostMetric[] @relation("SocialPostCampaign")
   socialPostStrategies SocialPostStrategy[]
+  socialTopicAssignments SocialPostTopicAssignment[]
 
   @@unique([kind, key])
   @@index([kind, isActive, sortOrder])
@@ -866,6 +869,44 @@ model SocialPostStrategy {
 
   @@unique([socialPostMetricId, taxonomyEntryId])
   @@index([taxonomyEntryId, createdAt])
+}
+
+model SocialPostTopicClassification {
+  id                  String     @id @default(uuid()) @db.Uuid
+  contentItemId       String     @db.Uuid
+  socialPostMetricId  String     @db.Uuid
+  taxonomyVersion     String     @default("social-topics-v1")
+  promptVersion       String     @default("social-topics-v1")
+  modelId             String
+  overallConfidence   Decimal?   @db.Decimal(4, 3)
+  needsReview         Boolean    @default(false)
+  ambiguousDualContext Boolean   @default(false)
+  metadata            Json?
+  createdAt           DateTime   @default(now())
+  updatedAt           DateTime   @updatedAt
+  contentItem         ContentItem @relation(fields: [contentItemId], references: [id], onDelete: Cascade)
+  socialPostMetric    SocialPostMetric @relation(fields: [socialPostMetricId], references: [id], onDelete: Cascade)
+  assignments         SocialPostTopicAssignment[]
+
+  @@unique([contentItemId, taxonomyVersion, promptVersion, modelId])
+  @@index([socialPostMetricId, updatedAt])
+  @@index([needsReview, updatedAt])
+}
+
+model SocialPostTopicAssignment {
+  id              String                       @id @default(uuid()) @db.Uuid
+  classificationId String                      @db.Uuid
+  taxonomyEntryId String                       @db.Uuid
+  rank            Int
+  confidence      Decimal                      @db.Decimal(4, 3)
+  evidence        Json?
+  createdAt       DateTime                     @default(now())
+  classification  SocialPostTopicClassification @relation(fields: [classificationId], references: [id], onDelete: Cascade)
+  taxonomyEntry   TaxonomyEntry                @relation(fields: [taxonomyEntryId], references: [id], onDelete: Cascade)
+
+  @@unique([classificationId, taxonomyEntryId])
+  @@index([taxonomyEntryId, createdAt])
+  @@index([classificationId, rank])
 }
 
 model SocialKpiTarget {

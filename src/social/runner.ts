@@ -625,6 +625,7 @@ export const runSocialSync = async (input: SocialSyncInput): Promise<SocialSyncO
   let objectsDiscovered = 0;
   let aggregatedRows = 0;
   let objectsClassifiedQueued = 0;
+  let objectsTopicsQueued = 0;
 
   const alertOutput: SocialSyncOutput["alert"] = {
     triggered: false,
@@ -662,7 +663,9 @@ export const runSocialSync = async (input: SocialSyncInput): Promise<SocialSyncO
     const objects = await listAllObjects(bucket, prefix);
     objectsDiscovered = objects.length;
     const queueClassification = Boolean(env.classificationQueueUrl);
+    const queueSocialTopics = Boolean(env.socialTopicQueueUrl);
     const classificationContentIds = new Set<string>();
+    const topicClassificationContentIds = new Set<string>();
     const channelStats = buildEmptyChannelStats();
     const touchedChannels = new Set<SocialChannel>();
 
@@ -753,6 +756,10 @@ export const runSocialSync = async (input: SocialSyncInput): Promise<SocialSyncO
           if (sentiment.sentimiento === "unknown") rowsUnknownSentiment += 1;
           else rowsClassified += 1;
         }
+
+        if (queueSocialTopics) {
+          topicClassificationContentIds.add(persisted.contentItemId);
+        }
       }
 
       if (!alreadyProcessed) {
@@ -816,6 +823,28 @@ export const runSocialSync = async (input: SocialSyncInput): Promise<SocialSyncO
       objectsClassifiedQueued = classificationContentIds.size;
     }
 
+    if (queueSocialTopics && env.socialTopicQueueUrl) {
+      const requestedAt = new Date().toISOString();
+      for (const contentItemId of topicClassificationContentIds) {
+        await sqs
+          .sendMessage({
+            QueueUrl: env.socialTopicQueueUrl,
+            MessageBody: JSON.stringify({
+              content_item_id: contentItemId,
+              taxonomy_version: env.socialTopicTaxonomyVersion,
+              prompt_version: env.socialTopicPromptVersion,
+              model_id: env.bedrockModelId,
+              trigger_type: input.triggerType,
+              request_id: input.requestId ?? null,
+              run_id: run.id,
+              requested_at: requestedAt
+            })
+          })
+          .promise();
+      }
+      objectsTopicsQueued = topicClassificationContentIds.size;
+    }
+
     await store.updateSyncRunPhase({
       runId: run.id,
       phase: "classify",
@@ -823,7 +852,8 @@ export const runSocialSync = async (input: SocialSyncInput): Promise<SocialSyncO
       details: {
         mode: queueClassification ? "queued_async" : "inline_sync",
         rows_classified: rowsClassified,
-        rows_pending_classification: rowsPendingClassification
+        rows_pending_classification: rowsPendingClassification,
+        rows_pending_topics: objectsTopicsQueued
       },
       metrics: phaseMetrics()
     });
@@ -954,6 +984,7 @@ export const runSocialSync = async (input: SocialSyncInput): Promise<SocialSyncO
     const metrics = {
       ...phaseMetrics(),
       objects_classification_queued: objectsClassifiedQueued,
+      objects_topics_queued: objectsTopicsQueued,
       rows_aggregated: aggregatedRows,
       reconciliation: snapshots.map((item) => ({
         channel: item.channel,

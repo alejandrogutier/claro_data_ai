@@ -12,7 +12,7 @@ Provisionar la base AWS de `claro_data` para V1 en una sola region (`us-east-1`)
 - API Gateway HTTP + Lambda base
 - SQS + DLQ
 - Step Functions + EventBridge (15 min)
-- Scheduler social diario 08:00 America/Bogota (ETL S3 organic)
+- Scheduler social configurable (default diario 08:00 America/Bogota para ETL social)
 - Aurora PostgreSQL Serverless v2
 - Secrets Manager
 - SES identidad remitente
@@ -32,6 +32,19 @@ terraform plan -var-file=terraform.tfvars
 terraform apply -var-file=terraform.tfvars
 ```
 
+### Entornos (`prod` / `stg`)
+`generate_terraform_tfvars.sh` soporta `ENVIRONMENT` y genera por defecto:
+- `prod` -> `infra/terraform/terraform.tfvars`
+- cualquier otro entorno -> `infra/terraform/terraform.<env>.tfvars`
+
+Ejemplo para `stg`:
+```bash
+ENVIRONMENT=stg \
+SOCIAL_RISK_STALE_AFTER_MINUTES=1560 \
+SOCIAL_SCHEDULE_EXPRESSION='cron(0 13 * * ? *)' \
+./scripts/aws/generate_terraform_tfvars.sh
+```
+
 ## Notas
 - Baseline de arranque. Ajustar networking (CIDR/SG), dominios y politicas IAM por entorno real.
 - Desarrollo local frontend: callbacks/logout de `http://localhost:5173` habilitados por defecto en Cognito.
@@ -44,6 +57,9 @@ terraform apply -var-file=terraform.tfvars
 - Origen social configurable:
   - `social_raw_bucket_name` (default: `claro-dataslayer-dump`)
   - `social_raw_prefix` (default: `raw/organic/`)
+- Frescura y scheduler social configurables:
+  - `social_risk_stale_after_minutes` (default: `30`)
+  - `social_schedule_expression` (default: `cron(0 13 * * ? *)`)
 
 ## Tags obligatorios
 Aplicar en todos los recursos:

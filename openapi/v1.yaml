@@ -610,6 +610,11 @@ paths:
           schema:
             type: string
           description: Hashtag o lista CSV de hashtags (con o sin #)
+        - name: topic
+          in: query
+          schema:
+            type: string
+          description: Topic de taxonomia social_topic o lista CSV de topics
         - name: comparison_mode
           in: query
           schema:
@@ -696,6 +701,11 @@ paths:
           schema:
             type: string
           description: Hashtag o lista CSV de hashtags (con o sin #)
+        - name: topic
+          in: query
+          schema:
+            type: string
+          description: Topic de taxonomia social_topic o lista CSV de topics
         - name: comparison_mode
           in: query
           schema:
@@ -881,6 +891,11 @@ paths:
           schema:
             type: string
           description: Hashtag o lista CSV de hashtags (con o sin #)
+        - name: topic
+          in: query
+          schema:
+            type: string
+          description: Topic de taxonomia social_topic o lista CSV de topics
         - name: comparison_mode
           in: query
           schema:
@@ -1467,6 +1482,57 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/MonitorSocialErTargetsResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+  /v1/monitor/social/topics/status:
+    get:
+      tags: [Monitor]
+      summary: Estado de cobertura de clasificacion tematica social
+      parameters:
+        - name: from
+          in: query
+          schema:
+            type: string
+            format: date-time
+        - name: to
+          in: query
+          schema:
+            type: string
+            format: date-time
+      responses:
+        '200':
+          description: Cobertura de clasificacion de topics
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MonitorSocialTopicsStatusResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+  /v1/monitor/social/topics/backfill:
+    post:
+      tags: [Monitor]
+      summary: Disparar backfill de clasificacion tematica social (Admin)
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MonitorSocialTopicsBackfillRequest'
+      responses:
+        '202':
+          description: Backfill de topics aceptado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MonitorSocialTopicsBackfillResponse'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
@@ -5909,6 +5975,9 @@ components:
           campaign,
           strategies,
           hashtags,
+          topics,
+          topics_version,
+          topics_needs_review,
           created_at,
           updated_at
         ]
@@ -5987,12 +6056,33 @@ components:
           type: array
           items:
             type: string
+        topics:
+          type: array
+          items:
+            $ref: '#/components/schemas/MonitorSocialTopicItem'
+        topics_version:
+          type: string
+          nullable: true
+        topics_needs_review:
+          type: boolean
         created_at:
           type: string
           format: date-time
         updated_at:
           type: string
           format: date-time
+    MonitorSocialTopicItem:
+      type: object
+      required: [key, label, confidence, rank]
+      properties:
+        key:
+          type: string
+        label:
+          type: string
+        confidence:
+          type: number
+        rank:
+          type: integer
     MonitorSocialPostsResponse:
       type: object
       required: [items, page_info]
@@ -6364,6 +6454,113 @@ components:
           minItems: 1
           items:
             $ref: '#/components/schemas/PatchMonitorSocialErTargetItem'
+    MonitorSocialTopicsBackfillRequest:
+      type: object
+      properties:
+        from:
+          type: string
+          format: date-time
+          default: '2024-01-01T00:00:00Z'
+        to:
+          type: string
+          format: date-time
+          nullable: true
+        limit:
+          type: integer
+          minimum: 1
+          maximum: 5000
+          default: 500
+        dry_run:
+          type: boolean
+          default: false
+    MonitorSocialTopicsBackfillResponse:
+      type: object
+      required: [status, run_id, selected_count, enqueued_count]
+      properties:
+        status:
+          type: string
+          enum: [accepted]
+        run_id:
+          type: string
+        selected_count:
+          type: integer
+        enqueued_count:
+          type: integer
+    MonitorSocialTopicsLastRun:
+      type: object
+      required: [createdAt]
+      properties:
+        runId:
+          type: string
+          nullable: true
+        status:
+          type: string
+          enum: [completed, failed]
+          nullable: true
+        triggerType:
+          type: string
+          enum: [manual, scheduled]
+          nullable: true
+        requestedAt:
+          type: string
+          format: date-time
+          nullable: true
+        from:
+          type: string
+          format: date-time
+          nullable: true
+        to:
+          type: string
+          format: date-time
+          nullable: true
+        limit:
+          type: integer
+          nullable: true
+        dryRun:
+          type: boolean
+          nullable: true
+        selectedCount:
+          type: integer
+          nullable: true
+        enqueuedCount:
+          type: integer
+          nullable: true
+        errorMessage:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+    MonitorSocialTopicsStatusResponse:
+      type: object
+      required: [generated_at, window_start, window_end, taxonomy_version, prompt_version, total_posts, classified, pending, in_review, last_run]
+      properties:
+        generated_at:
+          type: string
+          format: date-time
+        window_start:
+          type: string
+          format: date-time
+        window_end:
+          type: string
+          format: date-time
+          nullable: true
+        taxonomy_version:
+          type: string
+        prompt_version:
+          type: string
+        total_posts:
+          type: integer
+        classified:
+          type: integer
+        pending:
+          type: integer
+        in_review:
+          type: integer
+        last_run:
+          allOf:
+            - $ref: '#/components/schemas/MonitorSocialTopicsLastRun'
+          nullable: true
     MonitorSocialHashtagBackfillResponse:
       type: object
       required: [status, updated_rows]

@@ -150,6 +150,18 @@ variable "social_raw_prefix" {
   default     = "raw/organic/"
 }
 
+variable "social_risk_stale_after_minutes" {
+  type        = number
+  description = "Umbral de frescura (minutos) para marcar stale_data en monitor social."
+  default     = 30
+}
+
+variable "social_schedule_expression" {
+  type        = string
+  description = "Expresion EventBridge para ejecutar el scheduler social."
+  default     = "cron(0 13 * * ? *)"
+}
+
 variable "cognito_domain_prefix" {
   type        = string
   description = "Prefijo de dominio Cognito Hosted UI (debe ser unico globalmente). Si es null, se construye automaticamente."

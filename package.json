@@ -10,6 +10,7 @@
     "openapi:validate": "node scripts/openapi/validate.js",
     "openapi:types": "openapi-typescript openapi/v1.yaml -o frontend/src/api/generated/openapi-types.ts",
     "contract:test": "node scripts/contracts/test_api_contract.js",
+    "analyze:social:themes": "node scripts/analysis/run_social_theme_analysis.js",
     "frontend:dev": "npm --prefix frontend run dev",
     "frontend:build": "npm --prefix frontend run build",
     "frontend:check": "npm --prefix frontend run check",

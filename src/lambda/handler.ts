@@ -52,6 +52,8 @@ import {
   listMonitorSocialPosts,
   listMonitorSocialPostComments,
   listMonitorSocialRuns,
+  getMonitorSocialTopicsStatus,
+  postMonitorSocialTopicsBackfill,
   postMonitorSocialHashtagBackfill,
   patchMonitorSocialComment,
   patchMonitorSocialErTargets,
@@ -149,6 +151,8 @@ const roleRules: RoleRule[] = [
   { pattern: /^GET \/v1\/monitor\/social\/charts\/er-breakdown$/, requiredRole: "SocialOverviewViewer" },
   { pattern: /^GET \/v1\/monitor\/social\/targets\/er$/, requiredRole: "SocialOverviewViewer" },
   { pattern: /^PATCH \/v1\/monitor\/social\/targets\/er$/, requiredRole: "Admin" },
+  { pattern: /^GET \/v1\/monitor\/social\/topics\/status$/, requiredRole: "SocialOverviewViewer" },
+  { pattern: /^POST \/v1\/monitor\/social\/topics\/backfill$/, requiredRole: "Admin" },
   { pattern: /^POST \/v1\/monitor\/social\/hashtags\/backfill$/, requiredRole: "Admin" },
   { pattern: /^GET \/v1\/monitor\/social\/etl-quality$/, requiredRole: "SocialOverviewViewer" },
   { pattern: /^GET \/v1\/monitor\/social\/export\\.xlsx$/, requiredRole: "Analyst" },
@@ -293,6 +297,8 @@ export const main = async (event: APIGatewayProxyEventV2) => {
   if (key === "GET /v1/monitor/social/charts/er-breakdown") return getMonitorSocialErBreakdown(event);
   if (key === "GET /v1/monitor/social/targets/er") return getMonitorSocialErTargets(event);
   if (key === "PATCH /v1/monitor/social/targets/er") return patchMonitorSocialErTargets(event);
+  if (key === "GET /v1/monitor/social/topics/status") return getMonitorSocialTopicsStatus(event);
+  if (key === "POST /v1/monitor/social/topics/backfill") return postMonitorSocialTopicsBackfill(event);
   if (key === "POST /v1/monitor/social/hashtags/backfill") return postMonitorSocialHashtagBackfill(event);
   if (key === "GET /v1/monitor/social/etl-quality") return getMonitorSocialEtlQuality(event);
   if (key === "GET /v1/monitor/social/export.xlsx") return getMonitorSocialExportXlsx(event);
