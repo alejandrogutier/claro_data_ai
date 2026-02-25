@@ -2146,7 +2146,8 @@ const resolvePrimaryTopicForPost = (
   label: string;
 } | null => {
   if (post.topics.length === 0) return null;
-  const primary = [...post.topics].sort((a, b) => a.rank - b.rank || b.confidence - a.confidence)[0];
+  const primaryByRankOne = post.topics.find((topic) => topic.rank === 1);
+  const primary = primaryByRankOne ?? [...post.topics].sort((a, b) => a.rank - b.rank || b.confidence - a.confidence)[0];
   if (!primary) return null;
   return {
     key: primary.key.trim().toLowerCase(),
@@ -5381,7 +5382,12 @@ class SocialStore {
   ): Promise<SocialTopicBreakdownRecord> {
     const topicLimitApplied = Math.max(1, Math.min(50, Math.floor(topicLimit)));
     const segmentLimitApplied = Math.max(1, Math.min(30, Math.floor(segmentLimit)));
-    const posts = await this.listAllPosts(filters, "published_at_desc", 100000);
+    const selectedPrimaryTopics = new Set(
+      (filters.topics ?? [])
+        .map((value) => value.trim().toLowerCase())
+        .filter((value) => value.length > 0)
+    );
+    const posts = await this.listAllPosts({ ...filters, topics: undefined }, "published_at_desc", 100000);
 
     const topicBuckets = new Map<
       string,
@@ -5396,6 +5402,7 @@ class SocialStore {
     for (const post of posts) {
       const primaryTopic = resolvePrimaryTopicForPost(post);
       if (!primaryTopic?.key) continue;
+      if (selectedPrimaryTopics.size > 0 && !selectedPrimaryTopics.has(primaryTopic.key)) continue;
 
       const secondaryLabel = resolveTopicBreakdownSecondaryLabel(post, dimension);
       const currentTopic = topicBuckets.get(primaryTopic.key) ?? {

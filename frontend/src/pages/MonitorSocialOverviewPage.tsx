@@ -1875,10 +1875,7 @@ export const MonitorSocialOverviewPage = () => {
     return topicBreakdownChartData.flatMap((row) => topicBreakdownSegments.map((segment) => Number(row[segment.key] ?? 0)));
   }, [topicBreakdownChartData, topicBreakdownSegments, topicBreakdownNormalize100]);
 
-  const topicBreakdownScale = useMemo(
-    () => (topicBreakdownNormalize100 ? "linear" : resolveScale("auto", topicBreakdownAxisValues)),
-    [topicBreakdownNormalize100, topicBreakdownAxisValues]
-  );
+  const topicBreakdownScale = "linear";
 
   const topicBreakdownChartHeight = useMemo(
     () => Math.max(320, topicBreakdownChartData.length * 34 + 90),
