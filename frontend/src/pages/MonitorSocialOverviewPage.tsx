@@ -31,6 +31,7 @@ import type {
   MonitorSocialPostsResponse,
   MonitorSocialRiskResponse,
   MonitorSocialRunItem,
+  MonitorSocialTopicBreakdownResponse,
   MonitorSocialScatterResponse,
   MonitorSocialTrendByDimensionResponse,
   SocialAccountsSort,
@@ -41,6 +42,7 @@ import type {
   SocialHeatmapMetric,
   SocialPostSort,
   SocialScatterDimension,
+  SocialTopicBreakdownDimension,
   SocialTrendByDimensionMetric
 } from "../api/client";
 import { ApiError } from "../api/client";
@@ -395,6 +397,8 @@ const toScatterDimensionLabel = (dimension: SocialScatterDimension): string => {
   return "Hashtag";
 };
 
+const toTopicFilterLabel = (value: string): string => value.replaceAll("_", " ");
+
 const normalizePostType = (value: string): string => {
   const normalized = value.trim().toLowerCase();
   if (!normalized) return "unknown";
@@ -494,6 +498,7 @@ const CHART_QUESTION_BY_KEY: Record<string, string> = {
   gap: "¿Qué responde?: ¿Qué tan lejos está cada canal de su meta ER?",
   scatter: "¿Qué responde?: ¿Qué grupos destacan al cruzar dos métricas seleccionadas?",
   heatmap: "¿Qué responde?: ¿Qué días y meses concentran mejor rendimiento?",
+  topic_breakdown: "¿Qué responde?: ¿Cómo se compone cada tema según la dimensión secundaria elegida?",
   breakdown: "¿Qué responde?: ¿Qué dimensión explica mejor la métrica seleccionada?",
   share: "¿Qué responde?: ¿Cómo se distribuye el SOV interno entre cuentas?"
 };
@@ -506,6 +511,21 @@ const CHANNEL_SERIES_COLORS: Record<SocialChannel, string> = {
 };
 
 const DIMENSION_SERIES_COLORS = ["#e30613", "#1d4ed8", "#0f766e", "#f59e0b", "#7c3aed", "#0891b2", "#be123c", "#374151", "#059669", "#ea580c"];
+const TOPIC_SEGMENT_COLORS = [
+  "#e30613",
+  "#2563eb",
+  "#0f766e",
+  "#f59e0b",
+  "#7c3aed",
+  "#0891b2",
+  "#be123c",
+  "#475569",
+  "#059669",
+  "#ea580c",
+  "#0284c7",
+  "#a16207",
+  "#334155"
+];
 
 const toHeatmapMetricKey = (metric: SocialHeatmapMetric | undefined): string => {
   if (metric === "er") return "er_global";
@@ -804,6 +824,7 @@ export const MonitorSocialOverviewPage = () => {
   const selectedCampaigns = useMemo(() => parseCsvList(searchParams.get("campaign")).map((item) => item.toLowerCase()), [searchParams]);
   const selectedStrategies = useMemo(() => parseCsvList(searchParams.get("strategy")).map((item) => item.toLowerCase()), [searchParams]);
   const selectedHashtags = useMemo(() => parseCsvList(searchParams.get("hashtag")).map((item) => item.toLowerCase().replace(/^#+/, "")), [searchParams]);
+  const selectedTopics = useMemo(() => parseCsvList(searchParams.get("topic")).map((item) => item.toLowerCase()), [searchParams]);
   const selectedSentiment = useMemo(() => parseSentimentFilter(searchParams.get("sentiment")), [searchParams]);
 
   const postsSort = useMemo(() => parsePostSort(searchParams.get("posts_sort") ?? searchParams.get("sort")), [searchParams]);
@@ -850,10 +871,13 @@ export const MonitorSocialOverviewPage = () => {
   const [heatmapData, setHeatmapData] = useState<MonitorSocialHeatmapResponse | null>(null);
   const [scatterData, setScatterData] = useState<MonitorSocialScatterResponse | null>(null);
   const [trendByDimensionData, setTrendByDimensionData] = useState<MonitorSocialTrendByDimensionResponse | null>(null);
+  const [topicBreakdownData, setTopicBreakdownData] = useState<MonitorSocialTopicBreakdownResponse | null>(null);
   const [breakdownData, setBreakdownData] = useState<MonitorSocialErBreakdownResponse | null>(null);
   const [erTargets, setErTargets] = useState<MonitorSocialErTargetsResponse | null>(null);
   const [loadingTrendByDimension, setLoadingTrendByDimension] = useState(false);
   const [trendByDimensionError, setTrendByDimensionError] = useState<string | null>(null);
+  const [loadingTopicBreakdown, setLoadingTopicBreakdown] = useState(false);
+  const [topicBreakdownError, setTopicBreakdownError] = useState<string | null>(null);
 
   const [heatmapMetric, setHeatmapMetric] = useState<SocialHeatmapMetric>("er");
   const [scatterDimension, setScatterDimension] = useState<SocialScatterDimension>("channel");
@@ -861,6 +885,9 @@ export const MonitorSocialOverviewPage = () => {
   const [scatterYMetric, setScatterYMetric] = useState<ScatterMetric>("er_global");
   const [trendByDimensionDimension, setTrendByDimensionDimension] = useState<SocialScatterDimension>("channel");
   const [trendByDimensionMetric, setTrendByDimensionMetric] = useState<TrendByDimensionMetric>("exposure_total");
+  const [topicBreakdownDimension, setTopicBreakdownDimension] = useState<SocialTopicBreakdownDimension>("channel");
+  const [topicBreakdownMetric, setTopicBreakdownMetric] = useState<TrendByDimensionMetric>("engagement_total");
+  const [topicBreakdownNormalize100, setTopicBreakdownNormalize100] = useState(true);
   const [trendByDimensionSeriesSearch, setTrendByDimensionSeriesSearch] = useState("");
   const [visibleTrendByDimensionSeries, setVisibleTrendByDimensionSeries] = useState<string[]>([]);
   const [breakdownDimension, setBreakdownDimension] = useState<SocialErBreakdownDimension>("post_type");
@@ -888,6 +915,7 @@ export const MonitorSocialOverviewPage = () => {
   const [campaignSearch, setCampaignSearch] = useState("");
   const [strategySearch, setStrategySearch] = useState("");
   const [hashtagSearch, setHashtagSearch] = useState("");
+  const [topicSearch, setTopicSearch] = useState("");
   const [minPostsInput, setMinPostsInput] = useState(String(minPosts));
   const [minExposureInput, setMinExposureInput] = useState(String(minExposure));
 
@@ -925,6 +953,7 @@ export const MonitorSocialOverviewPage = () => {
       campaign: selectedCampaigns.length > 0 ? selectedCampaigns.join(",") : undefined,
       strategy: selectedStrategies.length > 0 ? selectedStrategies.join(",") : undefined,
       hashtag: selectedHashtags.length > 0 ? selectedHashtags.join(",") : undefined,
+      topic: selectedTopics.length > 0 ? selectedTopics.join(",") : undefined,
       sentiment: selectedSentiment === "all" ? undefined : selectedSentiment,
       comparison_mode: comparisonMode,
       comparison_days: comparisonMode === "exact_days" ? comparisonDays : undefined
@@ -936,7 +965,7 @@ export const MonitorSocialOverviewPage = () => {
     }
 
     return query;
-  }, [preset, selectedChannels, selectedAccounts, selectedPostTypes, selectedCampaigns, selectedStrategies, selectedHashtags, selectedSentiment, comparisonMode, comparisonDays, from, to]);
+  }, [preset, selectedChannels, selectedAccounts, selectedPostTypes, selectedCampaigns, selectedStrategies, selectedHashtags, selectedTopics, selectedSentiment, comparisonMode, comparisonDays, from, to]);
 
   const normalizePosts = (items: MonitorSocialPostsResponse["items"]): PostRow[] =>
     (items ?? []).map((item) => {
@@ -1105,6 +1134,27 @@ export const MonitorSocialOverviewPage = () => {
     }
   };
 
+  const loadTopicBreakdown = async () => {
+    setLoadingTopicBreakdown(true);
+    setTopicBreakdownError(null);
+    try {
+      const response = await client.getMonitorSocialTopicBreakdown({
+        ...commonQuery,
+        dimension: topicBreakdownDimension,
+        metric: topicBreakdownMetric,
+        topic_limit: 15,
+        segment_limit: 12
+      });
+      setTopicBreakdownData(response);
+    } catch (requestError) {
+      applyRequestError(requestError);
+      setTopicBreakdownError((requestError as Error)?.message ?? "No fue posible cargar distribución por tema");
+      setTopicBreakdownData(null);
+    } finally {
+      setLoadingTopicBreakdown(false);
+    }
+  };
+
   const loadBreakdown = async () => {
     try {
       const response = await client.getMonitorSocialErBreakdown({ ...commonQuery, dimension: breakdownDimension });
@@ -1146,6 +1196,10 @@ export const MonitorSocialOverviewPage = () => {
   useEffect(() => {
     void loadTrendByDimension();
   }, [client, commonQuery, trendByDimensionDimension, trendByDimensionMetric, reloadVersion]);
+
+  useEffect(() => {
+    void loadTopicBreakdown();
+  }, [client, commonQuery, topicBreakdownDimension, topicBreakdownMetric, reloadVersion]);
 
   useEffect(() => {
     void loadBreakdown();
@@ -1571,6 +1625,13 @@ export const MonitorSocialOverviewPage = () => {
     return Array.from(values).sort((a, b) => a.localeCompare(b));
   }, [facetsData, selectedHashtags]);
 
+  const topicOptions = useMemo(() => {
+    const values = new Set<string>();
+    for (const item of facetsData?.facets?.topic ?? []) values.add(item.value.toLowerCase());
+    for (const row of selectedTopics) values.add(row);
+    return Array.from(values).sort((a, b) => a.localeCompare(b));
+  }, [facetsData, selectedTopics]);
+
   const filterBySearch = (values: string[], term: string): string[] => {
     const normalized = term.trim().toLowerCase();
     if (!normalized) return values;
@@ -1583,6 +1644,7 @@ export const MonitorSocialOverviewPage = () => {
   const filteredCampaignOptions = useMemo(() => filterBySearch(campaignOptions, campaignSearch), [campaignOptions, campaignSearch]);
   const filteredStrategyOptions = useMemo(() => filterBySearch(strategyOptions, strategySearch), [strategyOptions, strategySearch]);
   const filteredHashtagOptions = useMemo(() => filterBySearch(hashtagOptions, hashtagSearch), [hashtagOptions, hashtagSearch]);
+  const filteredTopicOptions = useMemo(() => filterBySearch(topicOptions, topicSearch), [topicOptions, topicSearch]);
 
   const dataStatus = useMemo(() => {
     if (loading) return "loading";
@@ -1762,6 +1824,65 @@ export const MonitorSocialOverviewPage = () => {
   const trendByDimensionScale = useMemo(
     () => (trendByDimensionHasNonPositiveValues ? "linear" : resolveScale("auto", trendByDimensionAxisValues)),
     [trendByDimensionAxisValues, trendByDimensionHasNonPositiveValues]
+  );
+
+  const topicBreakdownSegments = useMemo(
+    () =>
+      (topicBreakdownData?.segments_order ?? []).map((segment, index) => ({
+        ...segment,
+        color: TOPIC_SEGMENT_COLORS[index % TOPIC_SEGMENT_COLORS.length]
+      })),
+    [topicBreakdownData]
+  );
+
+  const topicBreakdownSegmentByKey = useMemo(
+    () => new Map(topicBreakdownSegments.map((segment) => [segment.key, segment])),
+    [topicBreakdownSegments]
+  );
+
+  const topicBreakdownChartData = useMemo(() => {
+    const segments = topicBreakdownData?.segments_order ?? [];
+    return (topicBreakdownData?.items ?? []).map((item) => {
+      const valuesByKey = new Map(item.segments.map((segment) => [segment.key, Number(segment.metric_value ?? 0)]));
+      const row: Record<string, string | number> = {
+        topic_key: item.topic_key,
+        topic_label: item.topic_label,
+        metric_total: Number(item.metric_total ?? 0),
+        posts_total: Number(item.posts_total ?? 0)
+      };
+
+      let total = 0;
+      for (const segment of segments) {
+        const value = valuesByKey.get(segment.key) ?? 0;
+        row[`raw_${segment.key}`] = value;
+        total += value;
+        row[segment.key] = value;
+      }
+
+      if (topicBreakdownNormalize100) {
+        const denominator = Math.max(total, 0.00001);
+        for (const segment of segments) {
+          row[segment.key] = (Number(row[segment.key] ?? 0) / denominator) * 100;
+        }
+      }
+
+      return row;
+    });
+  }, [topicBreakdownData, topicBreakdownNormalize100]);
+
+  const topicBreakdownAxisValues = useMemo(() => {
+    if (topicBreakdownNormalize100) return [100];
+    return topicBreakdownChartData.flatMap((row) => topicBreakdownSegments.map((segment) => Number(row[segment.key] ?? 0)));
+  }, [topicBreakdownChartData, topicBreakdownSegments, topicBreakdownNormalize100]);
+
+  const topicBreakdownScale = useMemo(
+    () => (topicBreakdownNormalize100 ? "linear" : resolveScale("auto", topicBreakdownAxisValues)),
+    [topicBreakdownNormalize100, topicBreakdownAxisValues]
+  );
+
+  const topicBreakdownChartHeight = useMemo(
+    () => Math.max(320, topicBreakdownChartData.length * 34 + 90),
+    [topicBreakdownChartData.length]
   );
 
   const erGapByChannel = useMemo(
@@ -2062,6 +2183,7 @@ export const MonitorSocialOverviewPage = () => {
                 campaign: null,
                 strategy: null,
                 hashtag: null,
+                topic: null,
                 sentiment: null,
                 posts_sort: null,
                 accounts_sort: null,
@@ -2076,7 +2198,7 @@ export const MonitorSocialOverviewPage = () => {
           </button>
         </div>
 
-        <div className="grid gap-3 xl:grid-cols-8">
+        <div className="grid gap-3 xl:grid-cols-10">
           <details className="group relative min-w-0 xl:col-span-2">
             <summary className="list-none cursor-pointer rounded-xl border border-slate-200 bg-white px-3 py-2 shadow-sm">
               <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Periodo y comparación</p>
@@ -2238,6 +2360,21 @@ export const MonitorSocialOverviewPage = () => {
             onToggle={(value) => toggleMultiValue("hashtag", selectedHashtags, value)}
             onClear={() => setQueryPatch({ hashtag: null })}
             toLabel={(value) => `#${value}`}
+          />
+
+          <SmartMultiSelect
+            className="xl:col-span-1"
+            label="Tema"
+            summary={selectedTopics.length > 0 ? `${selectedTopics.length} seleccionados` : "Todos"}
+            secondary={`${topicOptions.length} disponibles`}
+            options={filteredTopicOptions}
+            selected={selectedTopics}
+            search={topicSearch}
+            placeholder="Buscar tema..."
+            onSearch={setTopicSearch}
+            onToggle={(value) => toggleMultiValue("topic", selectedTopics, value)}
+            onClear={() => setQueryPatch({ topic: null })}
+            toLabel={toTopicFilterLabel}
           />
 
           <div className="rounded-xl border border-slate-200 bg-white px-3 py-2 shadow-sm xl:col-span-1">
@@ -2730,6 +2867,140 @@ export const MonitorSocialOverviewPage = () => {
                           />
                         ))}
                       </LineChart>
+                    </ResponsiveContainer>
+                  </div>
+                ) : null}
+              </article>
+            </div>
+
+            <div className="grid grid-cols-1 gap-3 xl:grid-cols-3">
+              <article className="min-w-0 rounded-2xl border border-slate-200 bg-white p-4 shadow-panel xl:col-span-3">
+                <div className="mb-2 flex flex-wrap items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <h3 className="text-base font-semibold text-slate-900">Distribución por tema</h3>
+                    <p className="text-xs text-slate-500">{CHART_QUESTION_BY_KEY.topic_breakdown}</p>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <label className="text-xs font-semibold text-slate-600">
+                      Dimensión secundaria
+                      <select
+                        value={topicBreakdownDimension}
+                        onChange={(event) => setTopicBreakdownDimension(event.target.value as SocialTopicBreakdownDimension)}
+                        className="ml-2 rounded-md border border-slate-200 px-2 py-1 text-xs"
+                      >
+                        <option value="channel">Canal</option>
+                        <option value="account">Cuenta</option>
+                        <option value="post_type">Tipo de post</option>
+                        <option value="campaign">Campaña</option>
+                        <option value="strategy">Estrategia</option>
+                        <option value="hashtag">Hashtag</option>
+                      </select>
+                    </label>
+                    <label className="text-xs font-semibold text-slate-600">
+                      Métrica
+                      <select
+                        value={topicBreakdownMetric}
+                        onChange={(event) => setTopicBreakdownMetric(event.target.value as TrendByDimensionMetric)}
+                        className="ml-2 rounded-md border border-slate-200 px-2 py-1 text-xs"
+                      >
+                        {TREND_METRICS.map((metric) => (
+                          <option key={metric} value={metric}>
+                            {METRIC_META[metric].label}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="inline-flex items-center gap-2 rounded-md border border-slate-200 px-2 py-1 text-xs font-semibold text-slate-700">
+                      <input
+                        type="checkbox"
+                        checked={topicBreakdownNormalize100}
+                        onChange={(event) => setTopicBreakdownNormalize100(event.target.checked)}
+                        className="h-3.5 w-3.5 accent-red-700"
+                      />
+                      Apilar al 100%
+                    </label>
+                  </div>
+                </div>
+
+                {topicBreakdownError ? <div className="mb-2 rounded-lg border border-amber-200 bg-amber-50 px-2 py-1 text-xs text-amber-800">{topicBreakdownError}</div> : null}
+                {loadingTopicBreakdown ? <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-10 text-center text-sm text-slate-500">Cargando distribución por tema...</div> : null}
+                {!loadingTopicBreakdown && topicBreakdownChartData.length === 0 ? (
+                  <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-10 text-center text-sm text-slate-500">
+                    Sin temas clasificados para los filtros activos.
+                  </div>
+                ) : null}
+                {!loadingTopicBreakdown && topicBreakdownChartData.length > 0 ? (
+                  <div className="w-full min-w-0" style={{ height: `${topicBreakdownChartHeight}px` }}>
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={topicBreakdownChartData} layout="vertical" margin={{ top: 8, right: 16, left: 20, bottom: 8 }}>
+                        <CartesianGrid strokeDasharray="3 3" />
+                        <XAxis
+                          type="number"
+                          scale={topicBreakdownScale}
+                          domain={topicBreakdownNormalize100 ? [0, 100] : resolveAxisDomain(topicBreakdownScale, topicBreakdownAxisValues)}
+                          tickFormatter={(value) =>
+                            topicBreakdownNormalize100
+                              ? formatAxisPercentNoDecimals(Number(value))
+                              : formatChartAxisByMetrics([topicBreakdownMetric], Number(value))
+                          }
+                          label={{
+                            value: topicBreakdownNormalize100 ? `${METRIC_META[topicBreakdownMetric].label} (%)` : METRIC_META[topicBreakdownMetric].label,
+                            position: "insideBottom",
+                            offset: -6,
+                            fontSize: 11
+                          }}
+                        />
+                        <YAxis type="category" dataKey="topic_label" width={185} tickFormatter={(value) => truncate(String(value), 30)} />
+                        <Tooltip
+                          content={(tooltip: ChartTooltipProps) => {
+                            if (!tooltip.active || !tooltip.payload || tooltip.payload.length === 0) return null;
+                            const payload = (tooltip.payload[0]?.payload ?? {}) as Record<string, unknown>;
+                            const topicLabel = String(payload.topic_label ?? tooltip.label ?? "");
+                            const metricTotal = Number(payload.metric_total ?? 0);
+                            const rows = tooltip.payload
+                              .filter((item) => item.dataKey !== undefined)
+                              .map((item) => {
+                                const key = String(item.dataKey);
+                                const segment = topicBreakdownSegmentByKey.get(key);
+                                const shownValue = Number(item.value ?? 0);
+                                const rawValue = Number(payload[`raw_${key}`] ?? shownValue);
+                                return {
+                                  key,
+                                  label: segment?.label ?? item.name ?? key,
+                                  shownValue,
+                                  rawValue,
+                                  color: segment?.color ?? item.color ?? "#334155"
+                                };
+                              })
+                              .filter((row) => Math.abs(row.shownValue) > 0.000001 || Math.abs(row.rawValue) > 0.000001);
+
+                            return (
+                              <div className="min-w-[220px] rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs shadow-lg">
+                                <p className="font-semibold text-slate-800">{topicLabel}</p>
+                                <p className="mt-1 flex items-center justify-between gap-2 text-slate-600">
+                                  <span>Total</span>
+                                  <strong>{formatChartMetricValue(topicBreakdownMetric, metricTotal)}</strong>
+                                </p>
+                                {rows.map((row) => (
+                                  <p key={row.key} style={{ color: row.color }} className="mt-1 flex items-center justify-between gap-2">
+                                    <span>{row.label}</span>
+                                    <strong>
+                                      {topicBreakdownNormalize100
+                                        ? `${formatAxisPercentNoDecimals(row.shownValue)} (${formatChartMetricValue(topicBreakdownMetric, row.rawValue)})`
+                                        : formatChartMetricValue(topicBreakdownMetric, row.shownValue)}
+                                    </strong>
+                                  </p>
+                                ))}
+                              </div>
+                            );
+                          }}
+                        />
+                        <Legend />
+                        {topicBreakdownSegments.map((segment) => (
+                          <Bar key={segment.key} dataKey={segment.key} name={segment.label} stackId="topic-stack" fill={segment.color} />
+                        ))}
+                        {topicBreakdownNormalize100 ? <ReferenceLine x={100} stroke="#94a3b8" strokeDasharray="4 4" /> : null}
+                      </BarChart>
                     </ResponsiveContainer>
                   </div>
                 ) : null}

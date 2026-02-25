@@ -808,6 +808,11 @@ paths:
           schema:
             type: string
           description: Hashtag o lista CSV de hashtags (con o sin #)
+        - name: topic
+          in: query
+          schema:
+            type: string
+          description: Topic de taxonomia social_topic o lista CSV de topics
         - name: comparison_mode
           in: query
           schema:
@@ -1077,6 +1082,11 @@ paths:
           schema:
             type: string
           description: Hashtag o lista CSV de hashtags (con o sin #)
+        - name: topic
+          in: query
+          schema:
+            type: string
+          description: Topic de taxonomia social_topic o lista CSV de topics
         - name: comparison_mode
           in: query
           schema:
@@ -1154,6 +1164,11 @@ paths:
           schema:
             type: string
           description: Hashtag o lista CSV de hashtags (con o sin #)
+        - name: topic
+          in: query
+          schema:
+            type: string
+          description: Topic de taxonomia social_topic o lista CSV de topics
         - name: comparison_mode
           in: query
           schema:
@@ -1235,6 +1250,11 @@ paths:
           schema:
             type: string
           description: Hashtag o lista CSV de hashtags (con o sin #)
+        - name: topic
+          in: query
+          schema:
+            type: string
+          description: Topic de taxonomia social_topic o lista CSV de topics
         - name: comparison_mode
           in: query
           schema:
@@ -1316,6 +1336,11 @@ paths:
           schema:
             type: string
           description: Hashtag o lista CSV de hashtags (con o sin #)
+        - name: topic
+          in: query
+          schema:
+            type: string
+          description: Topic de taxonomia social_topic o lista CSV de topics
         - name: sentiment
           in: query
           schema:
@@ -1415,6 +1440,11 @@ paths:
           schema:
             type: string
           description: Hashtag o lista CSV de hashtags (con o sin #)
+        - name: topic
+          in: query
+          schema:
+            type: string
+          description: Topic de taxonomia social_topic o lista CSV de topics
         - name: comparison_mode
           in: query
           schema:
@@ -1436,6 +1466,112 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/MonitorSocialErBreakdownResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+  /v1/monitor/social/charts/topic-breakdown:
+    get:
+      tags: [Monitor]
+      summary: Distribucion por tema con segunda dimension seleccionable
+      parameters:
+        - name: preset
+          in: query
+          schema:
+            $ref: '#/components/schemas/SocialDatePreset'
+        - name: window_days
+          in: query
+          schema:
+            type: integer
+            enum: [7, 30, 90]
+        - name: from
+          in: query
+          schema:
+            type: string
+            format: date-time
+        - name: to
+          in: query
+          schema:
+            type: string
+            format: date-time
+        - name: channel
+          in: query
+          schema:
+            type: string
+          description: Canal o lista CSV de canales (`facebook,instagram,...`)
+        - name: account
+          in: query
+          schema:
+            type: string
+          description: Cuenta o lista CSV de cuentas
+        - name: post_type
+          in: query
+          schema:
+            type: string
+          description: Tipo de post o lista CSV de tipos (`unknown` para vacios)
+        - name: campaign
+          in: query
+          schema:
+            type: string
+          description: Campaña o lista CSV de campañas
+        - name: strategy
+          in: query
+          schema:
+            type: string
+          description: Estrategia o lista CSV de estrategias
+        - name: hashtag
+          in: query
+          schema:
+            type: string
+          description: Hashtag o lista CSV de hashtags (con o sin #)
+        - name: topic
+          in: query
+          schema:
+            type: string
+          description: Topic de taxonomia social_topic o lista CSV de topics
+        - name: sentiment
+          in: query
+          schema:
+            $ref: '#/components/schemas/SocialSentiment'
+        - name: comparison_mode
+          in: query
+          schema:
+            $ref: '#/components/schemas/SocialComparisonMode'
+        - name: comparison_days
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 366
+        - name: dimension
+          in: query
+          schema:
+            $ref: '#/components/schemas/SocialTopicBreakdownDimension'
+        - name: metric
+          in: query
+          schema:
+            $ref: '#/components/schemas/SocialTrendByDimensionMetric'
+        - name: topic_limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 50
+        - name: segment_limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 30
+      responses:
+        '200':
+          description: Dataset de distribucion por tema
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MonitorSocialTopicBreakdownResponse'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
@@ -4950,6 +5086,9 @@ components:
     SocialScatterDimension:
       type: string
       enum: [post_type, channel, account, campaign, strategy, hashtag]
+    SocialTopicBreakdownDimension:
+      type: string
+      enum: [post_type, channel, account, campaign, strategy, hashtag]
     SocialTrendByDimensionMetric:
       type: string
       enum:
@@ -5666,7 +5805,7 @@ components:
           type: integer
     MonitorSocialFacets:
       type: object
-      required: [account, post_type, campaign, strategy, hashtag, sentiment]
+      required: [account, post_type, campaign, strategy, hashtag, topic, sentiment]
       properties:
         account:
           type: array
@@ -5685,6 +5824,10 @@ components:
           items:
             $ref: '#/components/schemas/MonitorSocialFacetItem'
         hashtag:
+          type: array
+          items:
+            $ref: '#/components/schemas/MonitorSocialFacetItem'
+        topic:
           type: array
           items:
             $ref: '#/components/schemas/MonitorSocialFacetItem'
@@ -6355,6 +6498,63 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/MonitorSocialTrendByDimensionSeriesItem'
+    MonitorSocialTopicBreakdownSegment:
+      type: object
+      required: [key, label, metric_value, posts]
+      properties:
+        key:
+          type: string
+        label:
+          type: string
+        metric_value:
+          type: number
+        posts:
+          type: integer
+    MonitorSocialTopicBreakdownItem:
+      type: object
+      required: [topic_key, topic_label, metric_total, posts_total, segments]
+      properties:
+        topic_key:
+          type: string
+        topic_label:
+          type: string
+        metric_total:
+          type: number
+        posts_total:
+          type: integer
+        segments:
+          type: array
+          items:
+            $ref: '#/components/schemas/MonitorSocialTopicBreakdownSegment'
+    MonitorSocialTopicBreakdownResponse:
+      type: object
+      required: [generated_at, dimension, metric, topic_limit_applied, segment_limit_applied, segments_order, items]
+      properties:
+        generated_at:
+          type: string
+          format: date-time
+        dimension:
+          $ref: '#/components/schemas/SocialTopicBreakdownDimension'
+        metric:
+          $ref: '#/components/schemas/SocialTrendByDimensionMetric'
+        topic_limit_applied:
+          type: integer
+        segment_limit_applied:
+          type: integer
+        segments_order:
+          type: array
+          items:
+            type: object
+            required: [key, label]
+            properties:
+              key:
+                type: string
+              label:
+                type: string
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/MonitorSocialTopicBreakdownItem'
     MonitorSocialErBreakdownItem:
       type: object
       required: [label, posts, exposure_total, engagement_total, er_global]

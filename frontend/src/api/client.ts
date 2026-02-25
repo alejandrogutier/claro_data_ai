@@ -127,6 +127,7 @@ export type SocialHeatmapMetric =
   | "er_impressions"
   | "er_reach";
 export type SocialScatterDimension = "post_type" | "channel" | "account" | "campaign" | "strategy" | "hashtag";
+export type SocialTopicBreakdownDimension = "post_type" | "channel" | "account" | "campaign" | "strategy" | "hashtag";
 export type SocialTrendByDimensionMetric =
   | "posts"
   | "exposure_total"
@@ -230,6 +231,27 @@ export type MonitorSocialErBreakdownResponse = {
   }>;
 };
 
+export type MonitorSocialTopicBreakdownResponse = {
+  generated_at: string;
+  dimension: SocialTopicBreakdownDimension;
+  metric: SocialTrendByDimensionMetric;
+  topic_limit_applied: number;
+  segment_limit_applied: number;
+  segments_order: Array<{ key: string; label: string }>;
+  items: Array<{
+    topic_key: string;
+    topic_label: string;
+    metric_total: number;
+    posts_total: number;
+    segments: Array<{
+      key: string;
+      label: string;
+      metric_value: number;
+      posts: number;
+    }>;
+  }>;
+};
+
 export type MonitorSocialErTargetsResponse = {
   generated_at: string;
   last_etl_at: string | null;
@@ -266,6 +288,7 @@ type MonitorSocialQuery = {
   campaign?: string;
   strategy?: string;
   hashtag?: string;
+  topic?: string;
   origin?: OriginType;
   medium?: string;
   tag?: string;
@@ -754,6 +777,17 @@ export class ApiClient {
     } = {}
   ): Promise<MonitorSocialTrendByDimensionResponse> {
     return this.request<MonitorSocialTrendByDimensionResponse>("/v1/monitor/social/charts/trend-by-dimension", { query });
+  }
+
+  getMonitorSocialTopicBreakdown(
+    query: MonitorSocialQuery & {
+      dimension?: SocialTopicBreakdownDimension;
+      metric?: SocialTrendByDimensionMetric;
+      topic_limit?: number;
+      segment_limit?: number;
+    } = {}
+  ): Promise<MonitorSocialTopicBreakdownResponse> {
+    return this.request<MonitorSocialTopicBreakdownResponse>("/v1/monitor/social/charts/topic-breakdown", { query });
   }
 
   getMonitorSocialErBreakdown(

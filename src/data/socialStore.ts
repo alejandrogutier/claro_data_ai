@@ -37,6 +37,7 @@ type SocialAccountsSortMode =
 type SentimentBucket = "positive" | "negative" | "neutral" | "unknown";
 type SocialComparisonMode = "weekday_aligned_week" | "exact_days" | "same_period_last_year";
 type SocialScatterDimension = "post_type" | "channel" | "account" | "campaign" | "strategy" | "hashtag";
+type SocialTopicBreakdownDimension = "post_type" | "channel" | "account" | "campaign" | "strategy" | "hashtag";
 type SocialErBreakdownDimension = "hashtag" | "word" | "post_type" | "publish_frequency" | "weekday";
 type ReconciliationStatus = "ok" | "warning" | "error" | "unknown";
 type SocialPhase = "ingest" | "classify" | "aggregate" | "reconcile" | "alerts";
@@ -289,6 +290,7 @@ type SocialFacetsRecord = {
     campaign: SocialFacetItem[];
     strategy: SocialFacetItem[];
     hashtag: SocialFacetItem[];
+    topic: SocialFacetItem[];
     sentiment: Array<{ value: SentimentBucket; count: number }>;
   };
 };
@@ -681,6 +683,30 @@ type SocialTrendByDimensionRecord = {
   }>;
 };
 
+type SocialTopicBreakdownRecord = {
+  generatedAt: Date;
+  dimension: SocialTopicBreakdownDimension;
+  metric: SocialTrendByDimensionMetric;
+  topicLimitApplied: number;
+  segmentLimitApplied: number;
+  segmentsOrder: Array<{
+    key: string;
+    label: string;
+  }>;
+  items: Array<{
+    topicKey: string;
+    topicLabel: string;
+    metricTotal: number;
+    postsTotal: number;
+    segments: Array<{
+      key: string;
+      label: string;
+      metricValue: number;
+      posts: number;
+    }>;
+  }>;
+};
+
 type SocialErBreakdownRecord = {
   generatedAt: Date;
   dimension: SocialErBreakdownDimension;
@@ -993,6 +1019,7 @@ type FacetBuilderResult = {
   campaign: FacetCountMap;
   strategy: FacetCountMap;
   hashtag: FacetCountMap;
+  topic: FacetCountMap;
   sentiment: Map<SentimentBucket, number>;
 };
 
@@ -2110,6 +2137,37 @@ const resolveTrendLabelsForPost = (post: SocialPostRecord, dimension: SocialScat
   if (dimension === "campaign") return [post.campaignKey ?? "sin_campana"];
   if (dimension === "strategy") return post.strategyKeys.length > 0 ? post.strategyKeys : ["sin_estrategia"];
   return post.hashtags.length > 0 ? post.hashtags : ["sin_hashtag"];
+};
+
+const resolvePrimaryTopicForPost = (
+  post: SocialPostRecord
+): {
+  key: string;
+  label: string;
+} | null => {
+  if (post.topics.length === 0) return null;
+  const primary = [...post.topics].sort((a, b) => a.rank - b.rank || b.confidence - a.confidence)[0];
+  if (!primary) return null;
+  return {
+    key: primary.key.trim().toLowerCase(),
+    label: (primary.label ?? primary.key).trim() || primary.key
+  };
+};
+
+const resolveTopicBreakdownSecondaryLabel = (
+  post: SocialPostRecord,
+  dimension: SocialTopicBreakdownDimension
+): string => {
+  if (dimension === "post_type") return post.postType ?? "unknown";
+  if (dimension === "channel") return post.channel;
+  if (dimension === "account") return post.accountName;
+  if (dimension === "campaign") return post.campaignKey ?? "sin_campana";
+  if (dimension === "strategy") {
+    if (post.strategyKeys.length === 0) return "sin_estrategia";
+    return [...post.strategyKeys].sort((a, b) => a.localeCompare(b))[0];
+  }
+  if (post.hashtags.length === 0) return "sin_hashtag";
+  return [...post.hashtags].sort((a, b) => a.localeCompare(b))[0];
 };
 
 const buildTrendBucketTimeline = (
@@ -4978,6 +5036,7 @@ class SocialStore {
       campaign: new Map<string, number>(),
       strategy: new Map<string, number>(),
       hashtag: new Map<string, number>(),
+      topic: new Map<string, number>(),
       sentiment: new Map<SentimentBucket, number>()
     };
 
@@ -4989,6 +5048,8 @@ class SocialStore {
       for (const strategy of post.strategyKeys) incrementFacetCount(counters.strategy, strategy);
       if (post.hashtags.length === 0) incrementFacetCount(counters.hashtag, "sin_hashtag");
       for (const hashtag of post.hashtags) incrementFacetCount(counters.hashtag, hashtag);
+      const primaryTopic = resolvePrimaryTopicForPost(post);
+      if (primaryTopic?.key) incrementFacetCount(counters.topic, primaryTopic.key);
       counters.sentiment.set(post.sentiment, (counters.sentiment.get(post.sentiment) ?? 0) + 1);
     }
 
@@ -5007,6 +5068,7 @@ class SocialStore {
         campaign: sortFacetMap(counters.campaign).slice(0, 300),
         strategy: sortFacetMap(counters.strategy).slice(0, 300),
         hashtag: sortFacetMap(counters.hashtag).slice(0, 500),
+        topic: sortFacetMap(counters.topic).slice(0, 300),
         sentiment: sortSentimentFacetMap(counters.sentiment)
       }
     };
@@ -5307,6 +5369,162 @@ class SocialStore {
       metric,
       seriesLimitApplied,
       series
+    };
+  }
+
+  async getTopicBreakdown(
+    filters: SocialOverviewFilters,
+    dimension: SocialTopicBreakdownDimension,
+    metric: SocialTrendByDimensionMetric,
+    topicLimit = 15,
+    segmentLimit = 12
+  ): Promise<SocialTopicBreakdownRecord> {
+    const topicLimitApplied = Math.max(1, Math.min(50, Math.floor(topicLimit)));
+    const segmentLimitApplied = Math.max(1, Math.min(30, Math.floor(segmentLimit)));
+    const posts = await this.listAllPosts(filters, "published_at_desc", 100000);
+
+    const topicBuckets = new Map<
+      string,
+      {
+        topicKey: string;
+        topicLabel: string;
+        aggregate: TrendMetricAccumulator;
+        segments: Map<string, TrendMetricAccumulator>;
+      }
+    >();
+
+    for (const post of posts) {
+      const primaryTopic = resolvePrimaryTopicForPost(post);
+      if (!primaryTopic?.key) continue;
+
+      const secondaryLabel = resolveTopicBreakdownSecondaryLabel(post, dimension);
+      const currentTopic = topicBuckets.get(primaryTopic.key) ?? {
+        topicKey: primaryTopic.key,
+        topicLabel: primaryTopic.label,
+        aggregate: createEmptyTrendMetricAccumulator(),
+        segments: new Map<string, TrendMetricAccumulator>()
+      };
+
+      addPostToTrendAccumulator(currentTopic.aggregate, post);
+
+      const segmentStats = currentTopic.segments.get(secondaryLabel) ?? createEmptyTrendMetricAccumulator();
+      addPostToTrendAccumulator(segmentStats, post);
+      currentTopic.segments.set(secondaryLabel, segmentStats);
+
+      topicBuckets.set(primaryTopic.key, currentTopic);
+    }
+
+    if (topicBuckets.size === 0) {
+      return {
+        generatedAt: new Date(),
+        dimension,
+        metric,
+        topicLimitApplied,
+        segmentLimitApplied,
+        segmentsOrder: [],
+        items: []
+      };
+    }
+
+    const globalSegments = new Map<string, TrendMetricAccumulator>();
+    for (const topic of topicBuckets.values()) {
+      for (const [segmentLabel, stats] of topic.segments.entries()) {
+        const global = globalSegments.get(segmentLabel) ?? createEmptyTrendMetricAccumulator();
+        mergeTrendAccumulator(global, stats);
+        globalSegments.set(segmentLabel, global);
+      }
+    }
+
+    const sortedGlobalSegments = Array.from(globalSegments.entries())
+      .map(([label, stats]) => ({
+        label,
+        metricValue: roundMetric(computeTrendMetricValue(metric, stats, stats.exposure)),
+        posts: stats.posts
+      }))
+      .sort((a, b) => b.metricValue - a.metricValue || b.posts - a.posts || a.label.localeCompare(b.label));
+
+    const topSegmentLabels = sortedGlobalSegments.slice(0, segmentLimitApplied).map((item) => item.label);
+    const topSegmentSet = new Set(topSegmentLabels);
+    const includeOthers = sortedGlobalSegments.length > topSegmentLabels.length;
+    const usedSegmentKeys = new Set<string>();
+    const toSegmentKey = (label: string): string => {
+      const normalized = label
+        .toLowerCase()
+        .normalize("NFKD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .replace(/[^a-z0-9]+/g, "_")
+        .replace(/^_+|_+$/g, "");
+      const base = normalized || "segment";
+      if (!usedSegmentKeys.has(base)) {
+        usedSegmentKeys.add(base);
+        return base;
+      }
+      let idx = 2;
+      while (usedSegmentKeys.has(`${base}_${idx}`)) idx += 1;
+      const key = `${base}_${idx}`;
+      usedSegmentKeys.add(key);
+      return key;
+    };
+
+    const segmentsOrder = topSegmentLabels.map((label) => ({
+      key: toSegmentKey(label),
+      label
+    }));
+    if (includeOthers) {
+      segmentsOrder.push({ key: "otros", label: "otros" });
+    }
+    const segmentByLabel = new Map(segmentsOrder.map((item) => [item.label, item]));
+
+    const items = Array.from(topicBuckets.values())
+      .map((topic) => {
+        const segments = segmentsOrder.map((segment) => {
+          if (segment.label === "otros") {
+            const otherStats = createEmptyTrendMetricAccumulator();
+            for (const [segmentLabel, stats] of topic.segments.entries()) {
+              if (!topSegmentSet.has(segmentLabel)) mergeTrendAccumulator(otherStats, stats);
+            }
+            return {
+              key: segment.key,
+              label: segment.label,
+              metricValue: roundMetric(computeTrendMetricValue(metric, otherStats, otherStats.exposure)),
+              posts: otherStats.posts
+            };
+          }
+
+          const stats = topic.segments.get(segment.label) ?? createEmptyTrendMetricAccumulator();
+          return {
+            key: segment.key,
+            label: segment.label,
+            metricValue: roundMetric(computeTrendMetricValue(metric, stats, stats.exposure)),
+            posts: stats.posts
+          };
+        });
+
+        const metricTotal = roundMetric(computeTrendMetricValue(metric, topic.aggregate, topic.aggregate.exposure));
+        return {
+          topicKey: topic.topicKey,
+          topicLabel: topic.topicLabel,
+          metricTotal,
+          postsTotal: topic.aggregate.posts,
+          segments: segments.map((segment) => ({
+            key: segmentByLabel.get(segment.label)?.key ?? segment.key,
+            label: segment.label,
+            metricValue: segment.metricValue,
+            posts: segment.posts
+          }))
+        };
+      })
+      .sort((a, b) => b.metricTotal - a.metricTotal || b.postsTotal - a.postsTotal || a.topicLabel.localeCompare(b.topicLabel))
+      .slice(0, topicLimitApplied);
+
+    return {
+      generatedAt: new Date(),
+      dimension,
+      metric,
+      topicLimitApplied,
+      segmentLimitApplied,
+      segmentsOrder,
+      items
     };
   }
 
@@ -6058,6 +6276,7 @@ export type {
   SocialChannel,
   SocialDatePreset,
   SocialScatterDimension,
+  SocialTopicBreakdownDimension,
   SocialErBreakdownDimension,
   SocialHeatmapMetric,
   SocialTrendByDimensionMetric,
@@ -6070,6 +6289,7 @@ export type {
   SocialHeatmapRecord,
   SocialScatterRecord,
   SocialTrendByDimensionRecord,
+  SocialTopicBreakdownRecord,
   SocialErBreakdownRecord,
   SocialIncidentResult,
   SocialPhase,

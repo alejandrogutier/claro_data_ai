@@ -23,6 +23,7 @@ import {
   type SocialErBreakdownDimension,
   type SocialHeatmapMetric,
   type SocialScatterDimension,
+  type SocialTopicBreakdownDimension,
   type SocialTrendByDimensionMetric,
   type SocialTrendGranularity,
   type SortMode
@@ -94,6 +95,7 @@ const HEATMAP_METRICS: SocialHeatmapMetric[] = [
   "er_reach"
 ];
 const SCATTER_DIMENSIONS: SocialScatterDimension[] = ["post_type", "channel", "account", "campaign", "strategy", "hashtag"];
+const TOPIC_BREAKDOWN_DIMENSIONS: SocialTopicBreakdownDimension[] = ["post_type", "channel", "account", "campaign", "strategy", "hashtag"];
 const ER_BREAKDOWN_DIMENSIONS: SocialErBreakdownDimension[] = ["hashtag", "word", "post_type", "publish_frequency", "weekday"];
 const TREND_BY_DIMENSION_METRICS: SocialTrendByDimensionMetric[] = [
   "posts",
@@ -218,8 +220,20 @@ const parseErBreakdownDimension = (value: string | undefined): SocialErBreakdown
   return ER_BREAKDOWN_DIMENSIONS.includes(normalized) ? normalized : null;
 };
 
+const parseTopicBreakdownDimension = (value: string | undefined): SocialTopicBreakdownDimension | null => {
+  if (!value) return "channel";
+  const normalized = value.trim().toLowerCase() as SocialTopicBreakdownDimension;
+  return TOPIC_BREAKDOWN_DIMENSIONS.includes(normalized) ? normalized : null;
+};
+
 const parseTrendByDimensionMetric = (value: string | undefined): SocialTrendByDimensionMetric | null => {
   if (!value) return "exposure_total";
+  const normalized = value.trim().toLowerCase() as SocialTrendByDimensionMetric;
+  return TREND_BY_DIMENSION_METRICS.includes(normalized) ? normalized : null;
+};
+
+const parseTopicBreakdownMetric = (value: string | undefined): SocialTrendByDimensionMetric | null => {
+  if (!value) return "engagement_total";
   const normalized = value.trim().toLowerCase() as SocialTrendByDimensionMetric;
   return TREND_BY_DIMENSION_METRICS.includes(normalized) ? normalized : null;
 };
@@ -855,6 +869,7 @@ export const getMonitorSocialFacets = async (event: APIGatewayProxyEventV2) => {
         campaign: response.facets.campaign.map((item) => ({ value: item.value, count: item.count })),
         strategy: response.facets.strategy.map((item) => ({ value: item.value, count: item.count })),
         hashtag: response.facets.hashtag.map((item) => ({ value: item.value, count: item.count })),
+        topic: response.facets.topic.map((item) => ({ value: item.value, count: item.count })),
         sentiment: response.facets.sentiment.map((item) => ({ value: item.value, count: item.count }))
       }
     });
@@ -1073,6 +1088,81 @@ export const getMonitorSocialTrendByDimension = async (event: APIGatewayProxyEve
           bucket_label: point.bucketLabel,
           value: point.value,
           posts: point.posts
+        }))
+      }))
+    });
+  } catch (error) {
+    return mapStoreError(error);
+  }
+};
+
+export const getMonitorSocialTopicBreakdown = async (event: APIGatewayProxyEventV2) => {
+  const featureError = ensureFeatureEnabled();
+  if (featureError) return featureError;
+
+  const store = createSocialStore();
+  if (!store) {
+    return json(500, { error: "misconfigured", message: "Database runtime is not configured" });
+  }
+
+  const parsed = parseCommonFilters(event);
+  if ("error" in parsed) return parsed.error;
+
+  const dimension = parseTopicBreakdownDimension(parsed.query.dimension);
+  if (!dimension) {
+    return json(422, {
+      error: "validation_error",
+      message: "dimension must be post_type|channel|account|campaign|strategy|hashtag"
+    });
+  }
+
+  const metric = parseTopicBreakdownMetric(parsed.query.metric);
+  if (!metric) {
+    return json(422, {
+      error: "validation_error",
+      message:
+        "metric must be posts|exposure_total|engagement_total|impressions_total|reach_total|clicks_total|likes_total|comments_total|shares_total|views_total|er_global|ctr|er_impressions|er_reach|view_rate|likes_share|comments_share|shares_share|riesgo_activo|shs"
+    });
+  }
+
+  const topicLimit = parseLimit(parsed.query.topic_limit, 15, 50);
+  if (topicLimit === null) {
+    return json(422, {
+      error: "validation_error",
+      message: "topic_limit must be an integer between 1 and 50"
+    });
+  }
+
+  const segmentLimit = parseLimit(parsed.query.segment_limit, 12, 30);
+  if (segmentLimit === null) {
+    return json(422, {
+      error: "validation_error",
+      message: "segment_limit must be an integer between 1 and 30"
+    });
+  }
+
+  try {
+    const payload = await store.getTopicBreakdown(parsed.filters, dimension, metric, topicLimit, segmentLimit);
+    return json(200, {
+      generated_at: payload.generatedAt.toISOString(),
+      dimension: payload.dimension,
+      metric: payload.metric,
+      topic_limit_applied: payload.topicLimitApplied,
+      segment_limit_applied: payload.segmentLimitApplied,
+      segments_order: payload.segmentsOrder.map((segment) => ({
+        key: segment.key,
+        label: segment.label
+      })),
+      items: payload.items.map((item) => ({
+        topic_key: item.topicKey,
+        topic_label: item.topicLabel,
+        metric_total: item.metricTotal,
+        posts_total: item.postsTotal,
+        segments: item.segments.map((segment) => ({
+          key: segment.key,
+          label: segment.label,
+          metric_value: segment.metricValue,
+          posts: segment.posts
         }))
       }))
     });

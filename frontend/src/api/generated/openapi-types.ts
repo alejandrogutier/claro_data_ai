@@ -887,6 +887,8 @@ export interface paths {
                     strategy?: string;
                     /** @description Hashtag o lista CSV de hashtags (con o sin */
                     hashtag?: string;
+                    /** @description Topic de taxonomia social_topic o lista CSV de topics */
+                    topic?: string;
                     comparison_mode?: components["schemas"]["SocialComparisonMode"];
                     comparison_days?: number;
                 };
@@ -1113,6 +1115,8 @@ export interface paths {
                     strategy?: string;
                     /** @description Hashtag o lista CSV de hashtags (con o sin */
                     hashtag?: string;
+                    /** @description Topic de taxonomia social_topic o lista CSV de topics */
+                    topic?: string;
                     comparison_mode?: components["schemas"]["SocialComparisonMode"];
                     comparison_days?: number;
                 };
@@ -1171,6 +1175,8 @@ export interface paths {
                     strategy?: string;
                     /** @description Hashtag o lista CSV de hashtags (con o sin */
                     hashtag?: string;
+                    /** @description Topic de taxonomia social_topic o lista CSV de topics */
+                    topic?: string;
                     comparison_mode?: components["schemas"]["SocialComparisonMode"];
                     comparison_days?: number;
                     metric?: components["schemas"]["SocialHeatmapMetric"];
@@ -1230,6 +1236,8 @@ export interface paths {
                     strategy?: string;
                     /** @description Hashtag o lista CSV de hashtags (con o sin */
                     hashtag?: string;
+                    /** @description Topic de taxonomia social_topic o lista CSV de topics */
+                    topic?: string;
                     comparison_mode?: components["schemas"]["SocialComparisonMode"];
                     comparison_days?: number;
                     dimension?: components["schemas"]["SocialScatterDimension"];
@@ -1289,6 +1297,8 @@ export interface paths {
                     strategy?: string;
                     /** @description Hashtag o lista CSV de hashtags (con o sin */
                     hashtag?: string;
+                    /** @description Topic de taxonomia social_topic o lista CSV de topics */
+                    topic?: string;
                     sentiment?: components["schemas"]["SocialSentiment"];
                     trend_granularity?: components["schemas"]["SocialTrendGranularity"];
                     comparison_mode?: components["schemas"]["SocialComparisonMode"];
@@ -1352,6 +1362,8 @@ export interface paths {
                     strategy?: string;
                     /** @description Hashtag o lista CSV de hashtags (con o sin */
                     hashtag?: string;
+                    /** @description Topic de taxonomia social_topic o lista CSV de topics */
+                    topic?: string;
                     comparison_mode?: components["schemas"]["SocialComparisonMode"];
                     comparison_days?: number;
                     dimension?: components["schemas"]["SocialErBreakdownDimension"];
@@ -1369,6 +1381,71 @@ export interface paths {
                     };
                     content: {
                         "application/json": components["schemas"]["MonitorSocialErBreakdownResponse"];
+                    };
+                };
+                401: components["responses"]["Unauthorized"];
+                403: components["responses"]["Forbidden"];
+                422: components["responses"]["ValidationError"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/monitor/social/charts/topic-breakdown": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Distribucion por tema con segunda dimension seleccionable */
+        get: {
+            parameters: {
+                query?: {
+                    preset?: components["schemas"]["SocialDatePreset"];
+                    window_days?: 7 | 30 | 90;
+                    from?: string;
+                    to?: string;
+                    /** @description Canal o lista CSV de canales (`facebook,instagram,...`) */
+                    channel?: string;
+                    /** @description Cuenta o lista CSV de cuentas */
+                    account?: string;
+                    /** @description Tipo de post o lista CSV de tipos (`unknown` para vacios) */
+                    post_type?: string;
+                    /** @description Campaña o lista CSV de campañas */
+                    campaign?: string;
+                    /** @description Estrategia o lista CSV de estrategias */
+                    strategy?: string;
+                    /** @description Hashtag o lista CSV de hashtags (con o sin */
+                    hashtag?: string;
+                    /** @description Topic de taxonomia social_topic o lista CSV de topics */
+                    topic?: string;
+                    sentiment?: components["schemas"]["SocialSentiment"];
+                    comparison_mode?: components["schemas"]["SocialComparisonMode"];
+                    comparison_days?: number;
+                    dimension?: components["schemas"]["SocialTopicBreakdownDimension"];
+                    metric?: components["schemas"]["SocialTrendByDimensionMetric"];
+                    topic_limit?: number;
+                    segment_limit?: number;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Dataset de distribucion por tema */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["MonitorSocialTopicBreakdownResponse"];
                     };
                 };
                 401: components["responses"]["Unauthorized"];
@@ -4989,6 +5066,8 @@ export interface components {
         /** @enum {string} */
         SocialScatterDimension: "post_type" | "channel" | "account" | "campaign" | "strategy" | "hashtag";
         /** @enum {string} */
+        SocialTopicBreakdownDimension: "post_type" | "channel" | "account" | "campaign" | "strategy" | "hashtag";
+        /** @enum {string} */
         SocialTrendByDimensionMetric: "posts" | "exposure_total" | "engagement_total" | "impressions_total" | "reach_total" | "clicks_total" | "likes_total" | "comments_total" | "shares_total" | "views_total" | "er_global" | "ctr" | "er_impressions" | "er_reach" | "view_rate" | "likes_share" | "comments_share" | "shares_share" | "riesgo_activo" | "shs";
         /** @enum {string} */
         SocialErBreakdownDimension: "hashtag" | "word" | "post_type" | "publish_frequency" | "weekday";
@@ -5307,6 +5386,7 @@ export interface components {
             campaign: components["schemas"]["MonitorSocialFacetItem"][];
             strategy: components["schemas"]["MonitorSocialFacetItem"][];
             hashtag: components["schemas"]["MonitorSocialFacetItem"][];
+            topic: components["schemas"]["MonitorSocialFacetItem"][];
             sentiment: components["schemas"]["MonitorSocialFacetItem"][];
         };
         MonitorSocialFacetsTotals: {
@@ -5589,6 +5669,32 @@ export interface components {
             metric: components["schemas"]["SocialTrendByDimensionMetric"];
             series_limit_applied: number;
             series: components["schemas"]["MonitorSocialTrendByDimensionSeriesItem"][];
+        };
+        MonitorSocialTopicBreakdownSegment: {
+            key: string;
+            label: string;
+            metric_value: number;
+            posts: number;
+        };
+        MonitorSocialTopicBreakdownItem: {
+            topic_key: string;
+            topic_label: string;
+            metric_total: number;
+            posts_total: number;
+            segments: components["schemas"]["MonitorSocialTopicBreakdownSegment"][];
+        };
+        MonitorSocialTopicBreakdownResponse: {
+            /** Format: date-time */
+            generated_at: string;
+            dimension: components["schemas"]["SocialTopicBreakdownDimension"];
+            metric: components["schemas"]["SocialTrendByDimensionMetric"];
+            topic_limit_applied: number;
+            segment_limit_applied: number;
+            segments_order: {
+                key: string;
+                label: string;
+            }[];
+            items: components["schemas"]["MonitorSocialTopicBreakdownItem"][];
         };
         MonitorSocialErBreakdownItem: {
             label: string;
