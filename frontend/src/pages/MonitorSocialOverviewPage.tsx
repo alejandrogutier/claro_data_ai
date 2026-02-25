@@ -2685,12 +2685,19 @@ export const MonitorSocialOverviewPage = () => {
                           <Line
                             key={series.key}
                             yAxisId="left"
-                            type="monotone"
+                            type="linear"
                             dataKey={series.key}
                             name={series.label}
                             stroke={series.color}
                             strokeWidth={2.4}
-                            dot={false}
+                            connectNulls
+                            dot={(dotProps: { cx?: number; cy?: number; payload?: Record<string, unknown> }) => {
+                              const raw = Number(dotProps.payload?.[series.key] ?? 0);
+                              const hasValue = Number.isFinite(raw) && Math.abs(raw) >= 1e-9;
+                              const cx = Number.isFinite(dotProps.cx) ? Number(dotProps.cx) : 0;
+                              const cy = Number.isFinite(dotProps.cy) ? Number(dotProps.cy) : 0;
+                              return <circle cx={cx} cy={cy} r={hasValue ? 3 : 0} fill={series.color} stroke="#ffffff" strokeWidth={1} />;
+                            }}
                             activeDot={{ r: 4 }}
                           />
                         ))}
