@@ -51,13 +51,14 @@ import { useAuth } from "../auth/AuthContext";
 
 const CHANNEL_OPTIONS: SocialChannel[] = ["facebook", "instagram", "linkedin", "tiktok"];
 const PRESET_OPTIONS: SocialDatePreset[] = ["ytd", "90d", "30d", "y2024", "y2025", "last_quarter", "custom", "all"];
-const TAB_OPTIONS = ["summary", "accounts", "posts", "risk", "etl"] as const;
+const TAB_OPTIONS = ["summary", "accounts", "posts", "risk", "etl", "glossary"] as const;
 const POST_SORT_OPTIONS: SocialPostSort[] = ["published_at_desc", "exposure_desc", "engagement_desc"];
 const ACCOUNT_SORT_OPTIONS: SocialAccountsSort[] = ["riesgo_desc", "er_desc", "exposure_desc", "engagement_desc", "posts_desc", "sov_desc", "account_asc"];
 const FACET_SENTIMENT_OPTIONS = ["positive", "negative", "neutral", "unknown"] as const;
 
 type SocialTab = (typeof TAB_OPTIONS)[number];
 type ScaleMode = "auto" | "linear" | "log";
+type TimeGranularity = "day" | "week" | "month" | "quarter" | "semester";
 type AxisSide = "left" | "right";
 type MonitorSocialUiError = "none" | "permission_denied" | "error_retriable";
 
@@ -150,7 +151,7 @@ const KPI_INFO: Record<string, string> = {
 const METRIC_META: Record<string, { label: string; format: NumberFormatMode }> = {
   posts: { label: "Posts", format: "number" },
   exposure_total: { label: "Exposición", format: "number" },
-  engagement_total: { label: "Interacciones", format: "number" },
+  engagement_total: { label: "Interacciones (L+C+S)", format: "number" },
   impressions_total: { label: "Impresiones", format: "number" },
   reach_total: { label: "Reach", format: "number" },
   clicks_total: { label: "Clicks", format: "number" },
@@ -298,11 +299,25 @@ const SECONDARY_KPI_METRICS: SecondaryKpiMetric[] = [
   "comments_share",
   "shares_share"
 ];
+const TIME_GRANULARITY_OPTIONS: TimeGranularity[] = ["day", "week", "month", "quarter", "semester"];
+const ADDITIVE_METRICS = [
+  "posts",
+  "exposure_total",
+  "engagement_total",
+  "impressions_total",
+  "reach_total",
+  "clicks_total",
+  "likes_total",
+  "comments_total",
+  "shares_total",
+  "views_total"
+];
 
 const formatNumber = (value: number): string => new Intl.NumberFormat("es-CO", { maximumFractionDigits: 0 }).format(value);
 const formatPercent = (value: number): string => `${new Intl.NumberFormat("es-CO", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(value)}%`;
 const formatScore = (value: number): string => new Intl.NumberFormat("es-CO", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(value);
-const formatAxisPercentNoDecimals = (value: number): string => `${new Intl.NumberFormat("es-CO", { maximumFractionDigits: 0 }).format(value)}%`;
+const formatAxisPercentNoDecimals = (value: number): string =>
+  `${new Intl.NumberFormat("es-CO", { minimumFractionDigits: 1, maximumFractionDigits: 1 }).format(value)}%`;
 const formatCompactAxisNumber = (value: number): string => {
   if (!Number.isFinite(value)) return "0";
   const abs = Math.abs(value);
@@ -388,6 +403,14 @@ const toComparisonLabel = (mode: SocialComparisonMode): string => {
   return "Mismo periodo del año pasado";
 };
 
+const toTimeGranularityLabel = (granularity: TimeGranularity): string => {
+  if (granularity === "day") return "Día";
+  if (granularity === "week") return "Semana";
+  if (granularity === "month") return "Mes";
+  if (granularity === "quarter") return "Trimestre";
+  return "Semestre";
+};
+
 const toScatterDimensionLabel = (dimension: SocialScatterDimension): string => {
   if (dimension === "post_type") return "Tipo de post";
   if (dimension === "channel") return "Canal";
@@ -428,6 +451,11 @@ const parseTab = (raw: string | null): SocialTab => {
   return TAB_OPTIONS.includes(value) ? value : "summary";
 };
 
+const parseTimeGranularity = (raw: string | null): TimeGranularity => {
+  const value = (raw ?? "week").trim().toLowerCase() as TimeGranularity;
+  return TIME_GRANULARITY_OPTIONS.includes(value) ? value : "week";
+};
+
 const parseComparisonMode = (raw: string | null): SocialComparisonMode => {
   const value = (raw ?? "same_period_last_year").trim().toLowerCase() as SocialComparisonMode;
   if (value === "weekday_aligned_week" || value === "exact_days" || value === "same_period_last_year") return value;
@@ -458,6 +486,185 @@ const parseIntFromQuery = (raw: string | null, fallback: number, min: number, ma
   const parsed = Number.parseInt(raw, 10);
   if (!Number.isFinite(parsed)) return fallback;
   return Math.min(max, Math.max(min, parsed));
+};
+
+const toApiTrendGranularity = (granularity: TimeGranularity): "day" | "week" | "month" => {
+  if (granularity === "day" || granularity === "week" || granularity === "month") return granularity;
+  return "month";
+};
+
+const roundMetric = (value: number): number => Math.round(value * 100) / 100;
+
+const toDateOnlyUtc = (value: Date): Date => new Date(Date.UTC(value.getUTCFullYear(), value.getUTCMonth(), value.getUTCDate()));
+
+const formatDateOnlyUtc = (value: Date): string => {
+  const year = value.getUTCFullYear();
+  const month = String(value.getUTCMonth() + 1).padStart(2, "0");
+  const day = String(value.getUTCDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+};
+
+const addDaysUtc = (base: Date, days: number): Date => {
+  const next = new Date(base.getTime());
+  next.setUTCDate(next.getUTCDate() + days);
+  return next;
+};
+
+const addMonthsUtc = (base: Date, months: number): Date => {
+  const next = new Date(base.getTime());
+  next.setUTCMonth(next.getUTCMonth() + months);
+  return next;
+};
+
+const parseTrendBucketDate = (bucketStart: string | null | undefined, bucketLabel: string | null | undefined): Date | null => {
+  if (bucketStart) {
+    const parsed = new Date(bucketStart);
+    if (!Number.isNaN(parsed.getTime())) return toDateOnlyUtc(parsed);
+  }
+  if (!bucketLabel) return null;
+  if (/^\d{4}-\d{2}-\d{2}$/u.test(bucketLabel)) {
+    const parsed = new Date(`${bucketLabel}T00:00:00.000Z`);
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+  }
+  if (/^\d{4}-\d{2}$/u.test(bucketLabel)) {
+    const parsed = new Date(`${bucketLabel}-01T00:00:00.000Z`);
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+  }
+  return null;
+};
+
+const toIsoWeekInfo = (value: Date): { isoYear: number; week: number; weekStart: Date } => {
+  const date = toDateOnlyUtc(value);
+  const dayNr = (date.getUTCDay() + 6) % 7;
+  const weekStart = addDaysUtc(date, -dayNr);
+
+  const thursday = addDaysUtc(weekStart, 3);
+  const isoYear = thursday.getUTCFullYear();
+  const week1 = new Date(Date.UTC(isoYear, 0, 4));
+  const week1DayNr = (week1.getUTCDay() + 6) % 7;
+  const week1Monday = addDaysUtc(week1, -week1DayNr);
+  const week = 1 + Math.round((weekStart.getTime() - week1Monday.getTime()) / 604_800_000);
+
+  return { isoYear, week, weekStart };
+};
+
+const toTimeBucketMeta = (value: Date, granularity: TimeGranularity): { key: string; label: string; start: Date; end: Date } => {
+  const date = toDateOnlyUtc(value);
+  if (granularity === "day") {
+    return {
+      key: formatDateOnlyUtc(date),
+      label: formatDateOnlyUtc(date),
+      start: date,
+      end: addDaysUtc(date, 1)
+    };
+  }
+  if (granularity === "week") {
+    const info = toIsoWeekInfo(date);
+    return {
+      key: `${info.isoYear}-W${String(info.week).padStart(2, "0")}`,
+      label: `${info.isoYear}-W${String(info.week).padStart(2, "0")}`,
+      start: info.weekStart,
+      end: addDaysUtc(info.weekStart, 7)
+    };
+  }
+  if (granularity === "month") {
+    const start = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), 1));
+    return {
+      key: `${start.getUTCFullYear()}-${String(start.getUTCMonth() + 1).padStart(2, "0")}`,
+      label: `${start.getUTCFullYear()}-${String(start.getUTCMonth() + 1).padStart(2, "0")}`,
+      start,
+      end: addMonthsUtc(start, 1)
+    };
+  }
+  if (granularity === "quarter") {
+    const quarter = Math.floor(date.getUTCMonth() / 3) + 1;
+    const start = new Date(Date.UTC(date.getUTCFullYear(), (quarter - 1) * 3, 1));
+    return {
+      key: `${start.getUTCFullYear()}-Q${quarter}`,
+      label: `${start.getUTCFullYear()}-Q${quarter}`,
+      start,
+      end: addMonthsUtc(start, 3)
+    };
+  }
+  const semester = date.getUTCMonth() < 6 ? 1 : 2;
+  const start = new Date(Date.UTC(date.getUTCFullYear(), semester === 1 ? 0 : 6, 1));
+  return {
+    key: `${start.getUTCFullYear()}-S${semester}`,
+    label: `${start.getUTCFullYear()}-S${semester}`,
+    start,
+    end: addMonthsUtc(start, 6)
+  };
+};
+
+const aggregateMetricByPosts = (sum: number, weightedSum: number, posts: number, metric: string): number => {
+  if (ADDITIVE_METRICS.includes(metric)) return roundMetric(sum);
+  return roundMetric(weightedSum / Math.max(posts, 1));
+};
+
+const aggregateTrendSeriesRows = <
+  T extends {
+    bucket_start?: string | null;
+    bucket_end?: string | null;
+    bucket_label: string;
+    posts: number;
+    [key: string]: string | number | null | undefined;
+  }
+>(
+  rows: T[],
+  granularity: TimeGranularity,
+  metrics: string[]
+): T[] => {
+  if (granularity !== "quarter" && granularity !== "semester") return rows;
+
+  const byBucket = new Map<
+    string,
+    {
+      label: string;
+      start: Date;
+      end: Date;
+      posts: number;
+      sums: Record<string, number>;
+      weightedSums: Record<string, number>;
+    }
+  >();
+
+  for (const row of rows) {
+    const date = parseTrendBucketDate(row.bucket_start ?? null, row.bucket_label);
+    if (!date) continue;
+    const bucket = toTimeBucketMeta(date, granularity);
+    const current =
+      byBucket.get(bucket.key) ??
+      {
+        label: bucket.label,
+        start: bucket.start,
+        end: bucket.end,
+        posts: 0,
+        sums: {},
+        weightedSums: {}
+      };
+    const posts = Number(row.posts ?? 0);
+    current.posts += posts;
+    for (const metric of metrics) {
+      const value = Number(row[metric] ?? 0);
+      current.sums[metric] = (current.sums[metric] ?? 0) + value;
+      current.weightedSums[metric] = (current.weightedSums[metric] ?? 0) + value * Math.max(posts, 0);
+    }
+    byBucket.set(bucket.key, current);
+  }
+
+  const ordered = Array.from(byBucket.values()).sort((a, b) => a.start.getTime() - b.start.getTime());
+  return ordered.map((item) => {
+    const base: Record<string, string | number | null | undefined> = {
+      bucket_start: item.start.toISOString(),
+      bucket_end: item.end.toISOString(),
+      bucket_label: item.label,
+      posts: roundMetric(item.posts)
+    };
+    for (const metric of metrics) {
+      base[metric] = aggregateMetricByPosts(item.sums[metric] ?? 0, item.weightedSums[metric] ?? 0, item.posts, metric);
+    }
+    return base as T;
+  });
 };
 
 const percentile = (values: number[], p: number): number => {
@@ -510,7 +717,7 @@ const CHANNEL_SERIES_COLORS: Record<SocialChannel, string> = {
   tiktok: "#0f766e"
 };
 
-const DIMENSION_SERIES_COLORS = ["#e30613", "#1d4ed8", "#0f766e", "#f59e0b", "#7c3aed", "#0891b2", "#be123c", "#374151", "#059669", "#ea580c"];
+const DIMENSION_SERIES_COLORS = ["#0072B2", "#E69F00", "#009E73", "#56B4E9", "#D55E00", "#CC79A7", "#F0E442", "#000000", "#999999", "#44AA99"];
 const TOPIC_SEGMENT_COLORS = [
   "#e30613",
   "#2563eb",
@@ -552,14 +759,14 @@ const toDeltaClass = (value: number): string => {
 
 const toPostSortLabel = (value: SocialPostSort): string => {
   if (value === "exposure_desc") return "Exposición desc";
-  if (value === "engagement_desc") return "Engagement desc";
+  if (value === "engagement_desc") return "Interacciones desc";
   return "Fecha desc";
 };
 
 const toAccountsSortLabel = (value: SocialAccountsSort): string => {
   if (value === "er_desc") return "ER desc";
   if (value === "exposure_desc") return "Exposición desc";
-  if (value === "engagement_desc") return "Engagement desc";
+  if (value === "engagement_desc") return "Interacciones desc";
   if (value === "posts_desc") return "Posts desc";
   if (value === "sov_desc") return "SOV desc";
   if (value === "account_asc") return "Cuenta A-Z";
@@ -810,6 +1017,8 @@ export const MonitorSocialOverviewPage = () => {
   const preset = useMemo(() => parsePreset(searchParams.get("preset")), [searchParams]);
   const from = useMemo(() => searchParams.get("from") ?? undefined, [searchParams]);
   const to = useMemo(() => searchParams.get("to") ?? undefined, [searchParams]);
+  const timeGranularity = useMemo(() => parseTimeGranularity(searchParams.get("time_granularity")), [searchParams]);
+  const apiTrendGranularity = useMemo(() => toApiTrendGranularity(timeGranularity), [timeGranularity]);
   const comparisonMode = useMemo(() => parseComparisonMode(searchParams.get("comparison_mode")), [searchParams]);
   const comparisonDays = useMemo(() => {
     const raw = searchParams.get("comparison_days");
@@ -907,6 +1116,7 @@ export const MonitorSocialOverviewPage = () => {
 
   const [topAccountsLeftScaleMode, setTopAccountsLeftScaleMode] = useState<ScaleMode>("auto");
   const [topAccountsRightScaleMode, setTopAccountsRightScaleMode] = useState<ScaleMode>("auto");
+  const [trendByDimensionScaleMode, setTrendByDimensionScaleMode] = useState<ScaleMode>("auto");
   const [breakdownScaleMode, setBreakdownScaleMode] = useState<ScaleMode>("auto");
 
   const [channelSearch, setChannelSearch] = useState("");
@@ -1007,7 +1217,7 @@ export const MonitorSocialOverviewPage = () => {
 
     try {
       const [overviewResponse, runsResponse, etlResponse, targetsResponse] = await Promise.all([
-        client.getMonitorSocialOverview({ ...commonQuery, trend_granularity: "auto" }),
+        client.getMonitorSocialOverview({ ...commonQuery, trend_granularity: apiTrendGranularity }),
         client.listMonitorSocialRuns(20),
         client.getMonitorSocialEtlQuality(20),
         client.getMonitorSocialErTargets({ ...commonQuery, year: 2026 })
@@ -1120,6 +1330,7 @@ export const MonitorSocialOverviewPage = () => {
     try {
       const response = await client.getMonitorSocialTrendByDimension({
         ...commonQuery,
+        trend_granularity: apiTrendGranularity,
         dimension: trendByDimensionDimension,
         metric: trendByDimensionMetric,
         series_limit: 30
@@ -1167,7 +1378,7 @@ export const MonitorSocialOverviewPage = () => {
 
   useEffect(() => {
     void loadCoreDashboard();
-  }, [client, commonQuery, reloadVersion]);
+  }, [client, commonQuery, apiTrendGranularity, reloadVersion]);
 
   useEffect(() => {
     void loadFacets();
@@ -1195,7 +1406,7 @@ export const MonitorSocialOverviewPage = () => {
 
   useEffect(() => {
     void loadTrendByDimension();
-  }, [client, commonQuery, trendByDimensionDimension, trendByDimensionMetric, reloadVersion]);
+  }, [client, commonQuery, trendByDimensionDimension, trendByDimensionMetric, apiTrendGranularity, reloadVersion]);
 
   useEffect(() => {
     void loadTopicBreakdown();
@@ -1490,6 +1701,16 @@ export const MonitorSocialOverviewPage = () => {
     });
   };
 
+  const openPostsByTopic = (topicKey: string) => {
+    const normalized = topicKey.trim().toLowerCase();
+    if (!normalized) return;
+    setQueryPatch({
+      tab: "posts",
+      topic: normalized,
+      accounts_cursor: null
+    });
+  };
+
   const toggleTrendByDimensionSeries = (label: string) => {
     setVisibleTrendByDimensionSeries((current) => {
       const exists = current.includes(label);
@@ -1535,7 +1756,9 @@ export const MonitorSocialOverviewPage = () => {
   const trendSeries = useMemo(() => {
     const raw = normalizedOverview.trend_series;
     if (raw && raw.length > 0) {
-      return raw.map((item) => ({
+      const rows = raw.map((item) => ({
+        bucket_start: typeof item.bucket_start === "string" ? item.bucket_start : null,
+        bucket_end: typeof item.bucket_end === "string" ? item.bucket_end : null,
         bucket_label: String(item.bucket_label ?? ""),
         posts: Number(item.posts ?? 0),
         exposure_total: Number(item.exposure_total ?? 0),
@@ -1558,9 +1781,14 @@ export const MonitorSocialOverviewPage = () => {
         riesgo_activo: Number(item.riesgo_activo ?? 0),
         shs: Number(item.shs ?? 0)
       }));
+      return aggregateTrendSeriesRows(
+        rows,
+        timeGranularity,
+        TREND_METRICS.filter((metric) => metric !== "posts")
+      );
     }
     return [];
-  }, [normalizedOverview]);
+  }, [normalizedOverview, timeGranularity]);
 
   const channelData = useMemo(
     () =>
@@ -1632,10 +1860,24 @@ export const MonitorSocialOverviewPage = () => {
     return Array.from(values).sort((a, b) => a.localeCompare(b));
   }, [facetsData, selectedTopics]);
 
+  const normalizeSearchToken = (value: string): string =>
+    value
+      .trim()
+      .normalize("NFKD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .toLocaleLowerCase("es-CO")
+      .replace(/[^\p{L}\p{N}\s]+/gu, " ")
+      .replace(/\s+/g, " ");
+
   const filterBySearch = (values: string[], term: string): string[] => {
-    const normalized = term.trim().toLowerCase();
-    if (!normalized) return values;
-    return values.filter((item) => item.toLowerCase().includes(normalized));
+    const normalizedTerm = normalizeSearchToken(term);
+    const compactTerm = normalizedTerm.replace(/\s+/g, "");
+    if (!normalizedTerm) return values;
+    return values.filter((item) => {
+      const normalizedItem = normalizeSearchToken(item);
+      const compactItem = normalizedItem.replace(/\s+/g, "");
+      return normalizedItem.includes(normalizedTerm) || compactItem.includes(compactTerm);
+    });
   };
 
   const filteredChannelOptions = useMemo(() => filterBySearch(CHANNEL_OPTIONS, channelSearch), [channelSearch]);
@@ -1743,13 +1985,33 @@ export const MonitorSocialOverviewPage = () => {
         trendByDimensionDimension === "channel" && CHANNEL_OPTIONS.includes(normalized as SocialChannel)
           ? CHANNEL_SERIES_COLORS[normalized as SocialChannel]
           : null;
+      const points = aggregateTrendSeriesRows(
+        (series.points ?? []).map((point) => ({
+          bucket_start: point.bucket_start,
+          bucket_end: point.bucket_end,
+          bucket_label: point.bucket_label,
+          posts: Number(point.posts ?? 0),
+          value: Number(point.value ?? 0)
+        })),
+        timeGranularity,
+        ["value"]
+      );
+      const postsTotal = points.reduce((acc, point) => acc + Number(point.posts ?? 0), 0);
+      const additiveTotal = points.reduce((acc, point) => acc + Number(point.value ?? 0), 0);
+      const weightedTotal = points.reduce((acc, point) => acc + Number(point.value ?? 0) * Math.max(Number(point.posts ?? 0), 0), 0);
+      const metricTotal = ADDITIVE_METRICS.includes(trendByDimensionMetric)
+        ? roundMetric(additiveTotal)
+        : roundMetric(weightedTotal / Math.max(postsTotal, 1));
       return {
         ...series,
+        metric_total: metricTotal,
+        posts_total: postsTotal,
+        points,
         key: `series_${index}`,
         color: channelColor ?? DIMENSION_SERIES_COLORS[index % DIMENSION_SERIES_COLORS.length]
       };
     });
-  }, [trendByDimensionData, trendByDimensionDimension]);
+  }, [trendByDimensionData, trendByDimensionDimension, timeGranularity, trendByDimensionMetric]);
 
   useEffect(() => {
     if (trendByDimensionSeries.length === 0) {
@@ -1822,8 +2084,16 @@ export const MonitorSocialOverviewPage = () => {
     [trendByDimensionAxisValues]
   );
   const trendByDimensionScale = useMemo(
-    () => (trendByDimensionHasNonPositiveValues ? "linear" : resolveScale("auto", trendByDimensionAxisValues)),
-    [trendByDimensionAxisValues, trendByDimensionHasNonPositiveValues]
+    () => {
+      if (trendByDimensionScaleMode === "linear") return "linear";
+      if (trendByDimensionScaleMode === "log") return trendByDimensionHasNonPositiveValues ? "linear" : "log";
+      return trendByDimensionHasNonPositiveValues ? "linear" : resolveScale("auto", trendByDimensionAxisValues);
+    },
+    [trendByDimensionAxisValues, trendByDimensionHasNonPositiveValues, trendByDimensionScaleMode]
+  );
+  const trendByDimensionLogFallback = useMemo(
+    () => trendByDimensionScaleMode === "log" && trendByDimensionHasNonPositiveValues,
+    [trendByDimensionScaleMode, trendByDimensionHasNonPositiveValues]
   );
 
   const topicBreakdownSegments = useMemo(
@@ -1991,6 +2261,65 @@ export const MonitorSocialOverviewPage = () => {
       })),
     [scatterData, scatterXMetric, scatterYMetric]
   );
+
+  const riskSentimentTrendData = useMemo(() => {
+    const rows = (riskData?.sentiment_trend ?? []).map((item) => ({
+      date: String(item.date ?? ""),
+      clasificados: Number(item.clasificados ?? 0),
+      positivos: Number(item.positivos ?? 0),
+      negativos: Number(item.negativos ?? 0),
+      neutrales: Number(item.neutrales ?? 0),
+      sentimiento_neto: Number(item.sentimiento_neto ?? 0),
+      riesgo_activo: Number(item.riesgo_activo ?? 0)
+    }));
+
+    if (timeGranularity === "day") return rows;
+
+    const buckets = new Map<
+      string,
+      {
+        label: string;
+        start: Date;
+        clasificados: number;
+        positivos: number;
+        negativos: number;
+        neutrales: number;
+      }
+    >();
+
+    for (const row of rows) {
+      const parsedDate = /^\d{4}-\d{2}-\d{2}$/u.test(row.date) ? new Date(`${row.date}T00:00:00.000Z`) : new Date(row.date);
+      if (Number.isNaN(parsedDate.getTime())) continue;
+      const bucket = toTimeBucketMeta(parsedDate, timeGranularity);
+      const current =
+        buckets.get(bucket.key) ??
+        {
+          label: bucket.label,
+          start: bucket.start,
+          clasificados: 0,
+          positivos: 0,
+          negativos: 0,
+          neutrales: 0
+        };
+      current.clasificados += row.clasificados;
+      current.positivos += row.positivos;
+      current.negativos += row.negativos;
+      current.neutrales += row.neutrales;
+      buckets.set(bucket.key, current);
+    }
+
+    return Array.from(buckets.values())
+      .sort((a, b) => a.start.getTime() - b.start.getTime())
+      .map((item) => ({
+        date: item.label,
+        clasificados: item.clasificados,
+        positivos: item.positivos,
+        negativos: item.negativos,
+        neutrales: item.neutrales,
+        sentimiento_neto: roundMetric(((item.positivos - item.negativos) / Math.max(item.clasificados, 1)) * 100),
+        riesgo_activo: roundMetric((item.negativos / Math.max(item.clasificados, 1)) * 100)
+      }));
+  }, [riskData, timeGranularity]);
 
   const riskTopChannels = useMemo(
     () =>
@@ -2182,6 +2511,7 @@ export const MonitorSocialOverviewPage = () => {
                 hashtag: null,
                 topic: null,
                 sentiment: null,
+                time_granularity: null,
                 posts_sort: null,
                 accounts_sort: null,
                 accounts_cursor: null,
@@ -2200,7 +2530,7 @@ export const MonitorSocialOverviewPage = () => {
             <summary className="list-none cursor-pointer rounded-xl border border-slate-200 bg-white px-3 py-2 shadow-sm">
               <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Periodo y comparación</p>
               <p className="truncate text-sm font-semibold text-slate-800">
-                {toPresetLabel(preset)} | {toComparisonLabel(comparisonMode)}
+                {toPresetLabel(preset)} | {toComparisonLabel(comparisonMode)} | {toTimeGranularityLabel(timeGranularity)}
               </p>
               <p className="truncate text-xs text-slate-500">
                 {formatDate((normalizedOverview.comparison?.current_window_start ?? normalizedOverview.window_start) as string | undefined)} - {" "}
@@ -2267,6 +2597,20 @@ export const MonitorSocialOverviewPage = () => {
                     onChange={(event) => setQueryPatch({ comparison_days: String(Math.max(1, Number.parseInt(event.target.value || "30", 10))) })}
                     className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
                   />
+                </label>
+                <label className="text-xs font-semibold text-slate-600">
+                  Drill-down temporal
+                  <select
+                    value={timeGranularity}
+                    onChange={(event) => setQueryPatch({ time_granularity: event.target.value as TimeGranularity })}
+                    className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                  >
+                    {TIME_GRANULARITY_OPTIONS.map((option) => (
+                      <option key={option} value={option}>
+                        {toTimeGranularityLabel(option)}
+                      </option>
+                    ))}
+                  </select>
                 </label>
               </div>
             </div>
@@ -2394,6 +2738,7 @@ export const MonitorSocialOverviewPage = () => {
         </div>
 
         <p className="mt-3 text-xs text-slate-500">
+          Drill-down temporal: <strong>{toTimeGranularityLabel(timeGranularity)}</strong> |{" "}
           Ventana activa: {formatDate((normalizedOverview.comparison?.current_window_start ?? normalizedOverview.window_start) as string | undefined)} - {" "}
           {formatDate((normalizedOverview.comparison?.current_window_end ?? normalizedOverview.window_end) as string | undefined)} | período comparado: {" "}
           {formatDate((normalizedOverview.comparison?.previous_window_start ?? "") as string | undefined)} - {" "}
@@ -2409,7 +2754,17 @@ export const MonitorSocialOverviewPage = () => {
             className={`rounded-full px-3 py-1.5 text-sm font-semibold ${tab === option ? "bg-red-700 text-white" : "border border-slate-200 text-slate-700 hover:bg-slate-50"}`}
             onClick={() => setQueryPatch({ tab: option })}
           >
-            {option === "summary" ? "Resumen" : option === "accounts" ? "Cuentas" : option === "posts" ? "Posts" : option === "risk" ? "Riesgo" : "ETL"}
+            {option === "summary"
+              ? "Resumen"
+              : option === "accounts"
+                ? "Cuentas"
+                : option === "posts"
+                  ? "Posts"
+                  : option === "risk"
+                    ? "Riesgo"
+                    : option === "etl"
+                      ? "ETL"
+                      : "Glosario"}
           </button>
         ))}
       </section>
@@ -2719,6 +3074,18 @@ export const MonitorSocialOverviewPage = () => {
                         ))}
                       </select>
                     </label>
+                    <label className="text-xs font-semibold text-slate-600">
+                      Escala
+                      <select
+                        value={trendByDimensionScaleMode}
+                        onChange={(event) => setTrendByDimensionScaleMode(event.target.value as ScaleMode)}
+                        className="ml-2 rounded-md border border-slate-200 px-2 py-1 text-xs"
+                      >
+                        <option value="auto">Auto</option>
+                        <option value="linear">Lineal</option>
+                        <option value="log">Log</option>
+                      </select>
+                    </label>
                     <details className="group relative">
                       <summary className="list-none cursor-pointer rounded-md border border-slate-200 px-2 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50">
                         Series: {visibleTrendByDimensionSeries.length}/{trendByDimensionSeries.length}
@@ -2784,6 +3151,13 @@ export const MonitorSocialOverviewPage = () => {
                         </div>
                       </div>
                     </details>
+                    <span
+                      className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold ${
+                        trendByDimensionScale === "log" ? "border-amber-300 bg-amber-50 text-amber-700" : "border-slate-200 text-slate-500"
+                      }`}
+                    >
+                      Escala {trendByDimensionScale === "log" ? "log" : "lineal"}
+                    </span>
                   </div>
                 </div>
 
@@ -2797,6 +3171,11 @@ export const MonitorSocialOverviewPage = () => {
                 {!loadingTrendByDimension && trendByDimensionSeries.length > 0 && trendByDimensionVisibleSeries.length === 0 ? (
                   <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-10 text-center text-sm text-slate-500">
                     Selecciona al menos una serie para visualizar el gráfico.
+                  </div>
+                ) : null}
+                {trendByDimensionLogFallback ? (
+                  <div className="mb-2 rounded-lg border border-amber-200 bg-amber-50 px-2 py-1 text-xs text-amber-800">
+                    Escala log solicitada, pero hay valores menores o iguales a 0 en la vista actual. Se aplica escala lineal.
                   </div>
                 ) : null}
                 {!loadingTrendByDimension && trendByDimensionVisibleSeries.length > 0 ? (
@@ -2876,6 +3255,7 @@ export const MonitorSocialOverviewPage = () => {
                   <div className="min-w-0">
                     <h3 className="text-base font-semibold text-slate-900">Distribución por tema</h3>
                     <p className="text-xs text-slate-500">{CHART_QUESTION_BY_KEY.topic_breakdown}</p>
+                    <p className="text-[11px] text-slate-500">Haz clic en una barra para ver los posts de ese tema.</p>
                   </div>
                   <div className="flex flex-wrap items-center gap-2">
                     <label className="text-xs font-semibold text-slate-600">
@@ -2994,7 +3374,19 @@ export const MonitorSocialOverviewPage = () => {
                         />
                         <Legend />
                         {topicBreakdownSegments.map((segment) => (
-                          <Bar key={segment.key} dataKey={segment.key} name={segment.label} stackId="topic-stack" fill={segment.color} />
+                          <Bar
+                            key={segment.key}
+                            dataKey={segment.key}
+                            name={segment.label}
+                            stackId="topic-stack"
+                            fill={segment.color}
+                            cursor="pointer"
+                            onClick={(entry: unknown) => {
+                              const payload = (entry as { payload?: { topic_key?: string } }).payload;
+                              const topicKey = payload?.topic_key ?? "";
+                              openPostsByTopic(topicKey);
+                            }}
+                          />
                         ))}
                         {topicBreakdownNormalize100 ? <ReferenceLine x={100} stroke="#94a3b8" strokeDasharray="4 4" /> : null}
                       </BarChart>
@@ -3515,7 +3907,7 @@ export const MonitorSocialOverviewPage = () => {
                   <th className="px-2 py-2">Canales</th>
                   <th className="px-2 py-2">Posts</th>
                   <th className="px-2 py-2">Exposición</th>
-                  <th className="px-2 py-2">Engagement</th>
+                  <th className="px-2 py-2">Interacciones (L+C+S)</th>
                   <th className="px-2 py-2">ER pond.</th>
                   <th className="px-2 py-2">Riesgo</th>
                   <th className="px-2 py-2">Delta exposición</th>
@@ -3631,7 +4023,7 @@ export const MonitorSocialOverviewPage = () => {
                       <th className="px-2 py-2">Post</th>
                       <th className="px-2 py-2">Comentarios (Awario)</th>
                       <th className="px-2 py-2">Exposición</th>
-                      <th className="px-2 py-2">Engagement</th>
+                      <th className="px-2 py-2">Interacciones (L+C+S)</th>
                       <th className="px-2 py-2">ER</th>
                     </tr>
                   </thead>
@@ -3712,7 +4104,7 @@ export const MonitorSocialOverviewPage = () => {
                       <li className="flex items-center justify-between"><span>Confianza</span><strong>{selectedPostDetail.sentiment_confidence === null ? "n/a" : formatScore(selectedPostDetail.sentiment_confidence)}</strong></li>
                       <li className="flex items-center justify-between"><span>Source score</span><strong>{formatScore(selectedPostDetail.source_score)}</strong></li>
                       <li className="flex items-center justify-between"><span>Exposición</span><strong>{formatNumber(selectedPostDetail.exposure)}</strong></li>
-                      <li className="flex items-center justify-between"><span>Engagement</span><strong>{formatNumber(selectedPostDetail.engagement_total)}</strong></li>
+                      <li className="flex items-center justify-between"><span>Interacciones (L+C+S)</span><strong>{formatNumber(selectedPostDetail.engagement_total)}</strong></li>
                       <li className="flex items-center justify-between"><span>Comentarios Awario</span><strong>{formatNumber(selectedPostDetail.awario_comments_count)}</strong></li>
                     </ul>
                     <div className="flex flex-wrap gap-1">
@@ -3741,7 +4133,9 @@ export const MonitorSocialOverviewPage = () => {
           <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
             <div>
               <h3 className="text-base font-semibold text-slate-900">Riesgo</h3>
-              <span className="text-xs text-slate-500">Detección y respuesta con umbrales, hotspots y alertas activas.</span>
+              <span className="text-xs text-slate-500">
+                Detección y respuesta con umbrales, hotspots y alertas activas. Serie: {toTimeGranularityLabel(timeGranularity)}.
+              </span>
             </div>
             <div className="flex flex-wrap items-center gap-2 text-xs">
               <span className={`rounded-full px-2 py-0.5 font-semibold ${riskData?.stale_data ? "bg-amber-100 text-amber-700" : "bg-emerald-100 text-emerald-700"}`}>
@@ -3759,12 +4153,39 @@ export const MonitorSocialOverviewPage = () => {
               <h4 className="mb-2 text-sm font-semibold text-slate-800">Tendencia de riesgo vs sentimiento</h4>
               <div className="h-[280px] w-full">
                 <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={riskData?.sentiment_trend ?? []}>
+                  <LineChart data={riskSentimentTrendData}>
                     <CartesianGrid strokeDasharray="3 3" />
                     <XAxis dataKey="date" />
                     <YAxis yAxisId="left" />
                     <YAxis yAxisId="right" orientation="right" tickFormatter={(value) => formatAxisPercentNoDecimals(Number(value))} />
-                    <Tooltip />
+                    <Tooltip
+                      content={(tooltip: ChartTooltipProps) => {
+                        if (!tooltip.active || !tooltip.payload || tooltip.payload.length === 0) return null;
+                        const row = (tooltip.payload[0]?.payload ?? {}) as {
+                          date?: string;
+                          negativos?: number;
+                          riesgo_activo?: number;
+                          sentimiento_neto?: number;
+                        };
+                        return (
+                          <div className="min-w-[190px] rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs shadow-lg">
+                            <p className="font-semibold text-slate-800">{String(row.date ?? tooltip.label ?? "")}</p>
+                            <p className="mt-1 flex items-center justify-between gap-2">
+                              <span>Negativos</span>
+                              <strong>{formatCompactAxisNumber(Number(row.negativos ?? 0))}</strong>
+                            </p>
+                            <p className="mt-1 flex items-center justify-between gap-2">
+                              <span>Riesgo activo</span>
+                              <strong>{formatAxisPercentNoDecimals(Number(row.riesgo_activo ?? 0))}</strong>
+                            </p>
+                            <p className="mt-1 flex items-center justify-between gap-2">
+                              <span>Sentimiento neto</span>
+                              <strong>{formatAxisPercentNoDecimals(Number(row.sentimiento_neto ?? 0))}</strong>
+                            </p>
+                          </div>
+                        );
+                      }}
+                    />
                     <Legend />
                     <ReferenceLine
                       yAxisId="right"
@@ -3878,6 +4299,81 @@ export const MonitorSocialOverviewPage = () => {
               {runs.length === 0 ? <li className="text-slate-500">Sin corridas.</li> : null}
             </ul>
             <p className="mt-2 text-xs text-slate-500">Última ETL: {formatDateTime(normalizedOverview.last_etl_at ?? null)}</p>
+          </article>
+        </section>
+      ) : null}
+
+      {tab === "glossary" ? (
+        <section className="space-y-3">
+          <article className="rounded-2xl border border-slate-200 bg-white/90 p-4 shadow-panel">
+            <h3 className="text-base font-semibold text-slate-900">Glosario operativo</h3>
+            <p className="mt-1 text-xs text-slate-600">Definiciones usadas en Social Overview para lectura ejecutiva y operación diaria.</p>
+            <div className="mt-3 grid grid-cols-1 gap-3 lg:grid-cols-2">
+              <div className="rounded-xl border border-slate-200 p-3">
+                <h4 className="text-sm font-semibold text-slate-800">Términos clave</h4>
+                <dl className="mt-2 space-y-2 text-xs text-slate-700">
+                  <div>
+                    <dt className="font-semibold text-slate-900">Exposición</dt>
+                    <dd>Volumen visible estimado. Equivale a reach o views según canal, con fallback por disponibilidad de dato.</dd>
+                  </div>
+                  <div>
+                    <dt className="font-semibold text-slate-900">Reach</dt>
+                    <dd>Usuarios únicos potencialmente impactados. Puede venir vacío o en cero según API/plataforma.</dd>
+                  </div>
+                  <div>
+                    <dt className="font-semibold text-slate-900">ER (Engagement Rate)</dt>
+                    <dd>Interacciones frente a una base de exposición (exposición, impresiones o reach).</dd>
+                  </div>
+                  <div>
+                    <dt className="font-semibold text-slate-900">Sentimiento neto</dt>
+                    <dd>Diferencia entre positivos y negativos sobre el total clasificado.</dd>
+                  </div>
+                  <div>
+                    <dt className="font-semibold text-slate-900">Riesgo activo</dt>
+                    <dd>Participación de menciones negativas sobre las menciones clasificadas.</dd>
+                  </div>
+                  <div>
+                    <dt className="font-semibold text-slate-900">SOV interno</dt>
+                    <dd>Participación relativa de cada cuenta dentro del universo social filtrado.</dd>
+                  </div>
+                </dl>
+              </div>
+
+              <div className="rounded-xl border border-slate-200 p-3">
+                <h4 className="text-sm font-semibold text-slate-800">Exposición vs Reach por canal</h4>
+                <ul className="mt-2 space-y-2 text-xs text-slate-700">
+                  <li>
+                    <strong className="text-slate-900">Facebook:</strong> exposición prioriza <code>reach</code>; fallback <code>impressions</code>.
+                  </li>
+                  <li>
+                    <strong className="text-slate-900">Instagram:</strong> exposición prioriza <code>reach</code>; fallback <code>views</code>.
+                  </li>
+                  <li>
+                    <strong className="text-slate-900">LinkedIn:</strong> exposición basada en <code>impressions</code> (reach puede ser 0).
+                  </li>
+                  <li>
+                    <strong className="text-slate-900">TikTok:</strong> exposición basada en <code>views</code> (reach puede ser 0).
+                  </li>
+                </ul>
+              </div>
+            </div>
+          </article>
+
+          <article className="rounded-2xl border border-slate-200 bg-white/90 p-4 shadow-panel">
+            <h3 className="text-base font-semibold text-slate-900">Fórmulas</h3>
+            <div className="mt-3 grid grid-cols-1 gap-3 lg:grid-cols-2">
+              <div className="rounded-xl border border-slate-200 p-3 text-xs text-slate-700">
+                <p><strong className="text-slate-900">ER:</strong> <code>(likes + comments + shares) / exposición * 100</code></p>
+                <p className="mt-2"><strong className="text-slate-900">CTR:</strong> <code>clicks / impressions * 100</code></p>
+                <p className="mt-2"><strong className="text-slate-900">ER reach:</strong> <code>(likes + comments + shares) / reach * 100</code></p>
+                <p className="mt-2"><strong className="text-slate-900">Sentimiento neto:</strong> <code>(positivos - negativos) / clasificados * 100</code></p>
+              </div>
+              <div className="rounded-xl border border-slate-200 p-3 text-xs text-slate-700">
+                <p><strong className="text-slate-900">Riesgo activo:</strong> <code>negativos / clasificados * 100</code></p>
+                <p className="mt-2"><strong className="text-slate-900">SHS:</strong> <code>(reputación * 0.50) + (alcance * 0.25) + (riesgo * 0.25)</code></p>
+                <p className="mt-2"><strong className="text-slate-900">SOV interno:</strong> <code>contribución de la cuenta / total universo filtrado * 100</code></p>
+              </div>
+            </div>
           </article>
         </section>
       ) : null}
