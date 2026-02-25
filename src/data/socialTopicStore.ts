@@ -176,7 +176,10 @@ class SocialTopicStore {
           ci."sourceType" = CAST('social' AS "public"."SourceType")
           AND ci."state" = CAST('active' AS "public"."ContentState")
           AND COALESCE(spm."publishedAt", ci."publishedAt", ci."createdAt") >= :from_ts
-          AND (:to_ts IS NULL OR COALESCE(spm."publishedAt", ci."publishedAt", ci."createdAt") < :to_ts)
+          AND (
+            CAST(:to_ts AS TIMESTAMP) IS NULL
+            OR COALESCE(spm."publishedAt", ci."publishedAt", ci."createdAt") < CAST(:to_ts AS TIMESTAMP)
+          )
           AND NOT EXISTS (
             SELECT 1
             FROM "public"."SocialPostTopicClassification" stc
@@ -437,7 +440,10 @@ class SocialTopicStore {
             ci."sourceType" = CAST('social' AS "public"."SourceType")
             AND ci."state" = CAST('active' AS "public"."ContentState")
             AND COALESCE(spm."publishedAt", ci."publishedAt", ci."createdAt") >= :from_ts
-            AND (:to_ts IS NULL OR COALESCE(spm."publishedAt", ci."publishedAt", ci."createdAt") < :to_ts)
+            AND (
+              CAST(:to_ts AS TIMESTAMP) IS NULL
+              OR COALESCE(spm."publishedAt", ci."publishedAt", ci."createdAt") < CAST(:to_ts AS TIMESTAMP)
+            )
         `,
         [sqlTimestamp("from_ts", input.from), sqlTimestamp("to_ts", input.to)]
       ),
@@ -453,7 +459,10 @@ class SocialTopicStore {
             AND stc."taxonomyVersion" = :taxonomy_version
             AND stc."promptVersion" = :prompt_version
             AND COALESCE(spm."publishedAt", ci."publishedAt", ci."createdAt") >= :from_ts
-            AND (:to_ts IS NULL OR COALESCE(spm."publishedAt", ci."publishedAt", ci."createdAt") < :to_ts)
+            AND (
+              CAST(:to_ts AS TIMESTAMP) IS NULL
+              OR COALESCE(spm."publishedAt", ci."publishedAt", ci."createdAt") < CAST(:to_ts AS TIMESTAMP)
+            )
         `,
         [
           sqlString("taxonomy_version", input.taxonomyVersion),
@@ -481,7 +490,10 @@ class SocialTopicStore {
               AND stc."taxonomyVersion" = :taxonomy_version
               AND stc."promptVersion" = :prompt_version
               AND COALESCE(spm."publishedAt", ci."publishedAt", ci."createdAt") >= :from_ts
-              AND (:to_ts IS NULL OR COALESCE(spm."publishedAt", ci."publishedAt", ci."createdAt") < :to_ts)
+              AND (
+                CAST(:to_ts AS TIMESTAMP) IS NULL
+                OR COALESCE(spm."publishedAt", ci."publishedAt", ci."createdAt") < CAST(:to_ts AS TIMESTAMP)
+              )
           )
           SELECT COUNT(*)::text
           FROM ranked
