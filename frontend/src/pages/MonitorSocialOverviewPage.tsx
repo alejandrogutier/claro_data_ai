@@ -312,6 +312,7 @@ const ADDITIVE_METRICS = [
   "shares_total",
   "views_total"
 ];
+const LOG_SCALE_FLOOR = 0.01;
 
 const formatNumber = (value: number): string => new Intl.NumberFormat("es-CO", { maximumFractionDigits: 0 }).format(value);
 const formatPercent = (value: number): string => `${new Intl.NumberFormat("es-CO", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(value)}%`;
@@ -691,10 +692,15 @@ const resolveScale = (mode: ScaleMode, values: number[]): "linear" | "log" => {
 const resolveAxisDomain = (scale: "linear" | "log", values: number[]): [number, "auto"] => {
   if (scale === "log") {
     const positives = values.filter((value) => Number.isFinite(value) && value > 0);
-    const minPositive = positives.length > 0 ? Math.max(Math.min(...positives), 0.01) : 0.01;
+    const minPositive = positives.length > 0 ? Math.max(Math.min(...positives), LOG_SCALE_FLOOR) : LOG_SCALE_FLOOR;
     return [minPositive, "auto"];
   }
   return [0, "auto"];
+};
+
+const toLogSafeValue = (value: number): number => {
+  if (!Number.isFinite(value) || value <= 0) return LOG_SCALE_FLOOR;
+  return value;
 };
 
 const CHART_QUESTION_BY_KEY: Record<string, string> = {
@@ -2041,6 +2047,7 @@ export const MonitorSocialOverviewPage = () => {
 
   const trendByDimensionChartData = useMemo(() => {
     if (trendByDimensionSeries.length === 0) return [];
+    const useLogSafeValues = trendByDimensionScaleMode === "log";
     const buckets = new Map<
       string,
       {
@@ -2069,11 +2076,18 @@ export const MonitorSocialOverviewPage = () => {
         bucket_label: current?.bucketLabel ?? `Bucket ${index + 1}`
       };
       for (const series of trendByDimensionSeries) {
-        row[series.key] = current && Object.prototype.hasOwnProperty.call(current.values, series.key) ? current.values[series.key] : null;
+        if (current && Object.prototype.hasOwnProperty.call(current.values, series.key)) {
+          const rawValue = Number(current.values[series.key] ?? 0);
+          row[`raw_${series.key}`] = rawValue;
+          row[series.key] = useLogSafeValues ? toLogSafeValue(rawValue) : rawValue;
+        } else {
+          row[`raw_${series.key}`] = null;
+          row[series.key] = null;
+        }
       }
       return row;
     });
-  }, [trendByDimensionSeries]);
+  }, [trendByDimensionSeries, trendByDimensionScaleMode]);
 
   const trendByDimensionAxisValues = useMemo(
     () => trendByDimensionVisibleSeries.flatMap((series) => series.points.map((point) => Number(point.value ?? 0))),
@@ -2086,12 +2100,12 @@ export const MonitorSocialOverviewPage = () => {
   const trendByDimensionScale = useMemo(
     () => {
       if (trendByDimensionScaleMode === "linear") return "linear";
-      if (trendByDimensionScaleMode === "log") return trendByDimensionHasNonPositiveValues ? "linear" : "log";
+      if (trendByDimensionScaleMode === "log") return "log";
       return trendByDimensionHasNonPositiveValues ? "linear" : resolveScale("auto", trendByDimensionAxisValues);
     },
     [trendByDimensionAxisValues, trendByDimensionHasNonPositiveValues, trendByDimensionScaleMode]
   );
-  const trendByDimensionLogFallback = useMemo(
+  const trendByDimensionLogAdjustedValues = useMemo(
     () => trendByDimensionScaleMode === "log" && trendByDimensionHasNonPositiveValues,
     [trendByDimensionScaleMode, trendByDimensionHasNonPositiveValues]
   );
@@ -2492,7 +2506,24 @@ export const MonitorSocialOverviewPage = () => {
 
       <section className="rounded-2xl border border-slate-200 bg-white/90 p-4 shadow-panel">
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-          <h3 className="text-base font-semibold text-slate-900">Filtros inteligentes</h3>
+          <div className="flex flex-wrap items-center gap-2">
+            <h3 className="text-base font-semibold text-slate-900">Filtros inteligentes</h3>
+            <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Drill-down temporal</span>
+            <div className="flex flex-wrap items-center gap-1">
+              {TIME_GRANULARITY_OPTIONS.map((option) => (
+                <button
+                  key={option}
+                  type="button"
+                  onClick={() => setQueryPatch({ time_granularity: option })}
+                  className={`rounded-full border px-2 py-1 text-xs font-semibold ${
+                    timeGranularity === option ? "border-red-600 bg-red-600 text-white" : "border-slate-200 text-slate-700 hover:bg-slate-50"
+                  }`}
+                >
+                  {toTimeGranularityLabel(option)}
+                </button>
+              ))}
+            </div>
+          </div>
           <button
             className="rounded-md border border-slate-200 px-2 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50"
             type="button"
@@ -3173,9 +3204,9 @@ export const MonitorSocialOverviewPage = () => {
                     Selecciona al menos una serie para visualizar el gráfico.
                   </div>
                 ) : null}
-                {trendByDimensionLogFallback ? (
+                {trendByDimensionLogAdjustedValues ? (
                   <div className="mb-2 rounded-lg border border-amber-200 bg-amber-50 px-2 py-1 text-xs text-amber-800">
-                    Escala log solicitada, pero hay valores menores o iguales a 0 en la vista actual. Se aplica escala lineal.
+                    Escala log activa: los valores menores o iguales a 0 se muestran con un piso técnico de {LOG_SCALE_FLOOR}.
                   </div>
                 ) : null}
                 {!loadingTrendByDimension && trendByDimensionVisibleSeries.length > 0 ? (
@@ -3200,10 +3231,11 @@ export const MonitorSocialOverviewPage = () => {
                               .map((item) => {
                                 const key = String(item.dataKey);
                                 const series = trendByDimensionSeriesByKey.get(key);
+                                const rawValue = Number(((item.payload ?? {}) as Record<string, unknown>)[`raw_${key}`] ?? item.value ?? 0);
                                 return {
                                   key,
                                   label: series?.label ?? key,
-                                  value: formatChartMetricValue(trendByDimensionMetric, Number(item.value ?? 0)),
+                                  value: formatChartMetricValue(trendByDimensionMetric, rawValue),
                                   color: series?.color ?? item.color ?? "#334155"
                                 };
                               });
