@@ -1198,6 +1198,7 @@ resource "aws_apigatewayv2_route" "private_routes" {
     "GET /v1/monitor/social/charts/heatmap",
     "GET /v1/monitor/social/charts/scatter",
     "GET /v1/monitor/social/charts/trend-by-dimension",
+    "GET /v1/monitor/social/charts/topic-breakdown",
     "GET /v1/monitor/social/charts/er-breakdown",
     "GET /v1/monitor/social/targets/er",
     "PATCH /v1/monitor/social/targets/er",
