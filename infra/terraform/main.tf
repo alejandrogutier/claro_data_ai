@@ -879,7 +879,7 @@ resource "aws_lambda_function" "classification_worker" {
       DB_SECRET_ARN                 = data.aws_secretsmanager_secret.database.arn
       DB_NAME                       = var.db_name
       BEDROCK_MODEL_ID              = "us.anthropic.claude-haiku-4-5-20251001-v1:0"
-      CLASSIFICATION_PROMPT_VERSION = "classification-v1"
+      CLASSIFICATION_PROMPT_VERSION = "classification-v2"
     }
   }
 }
@@ -905,7 +905,7 @@ resource "aws_lambda_function" "classification_scheduler" {
       DB_NAME                        = var.db_name
       BEDROCK_MODEL_ID               = "us.anthropic.claude-haiku-4-5-20251001-v1:0"
       CLASSIFICATION_QUEUE_URL       = aws_sqs_queue.classification_generation.url
-      CLASSIFICATION_PROMPT_VERSION  = "classification-v1"
+      CLASSIFICATION_PROMPT_VERSION  = "classification-v2"
       CLASSIFICATION_WINDOW_DAYS     = "7"
       CLASSIFICATION_SCHEDULER_LIMIT = "120"
     }
