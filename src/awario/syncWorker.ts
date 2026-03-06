@@ -234,6 +234,26 @@ const processSyncMessage = async (
       }
 
       await store.markAwarioHistoricalCompleted(bindingId, metrics, requestId);
+
+      console.log(
+        JSON.stringify({
+          level: "info",
+          message: "awario_sync_completed",
+          request_id: requestId,
+          run_id: runId,
+          binding_id: bindingId,
+          mode,
+          fetched: metrics.fetched,
+          linked: metrics.linked,
+          persisted: metrics.persisted,
+          deduped: metrics.deduped,
+          feed_persisted: metrics.feed_persisted,
+          feed_deduped: metrics.feed_deduped,
+          skipped_unlinked: metrics.skipped_unlinked,
+          pages_processed: result.pagesProcessed,
+          completed: result.completed
+        })
+      );
       return;
     }
 
@@ -285,6 +305,27 @@ const processSyncMessage = async (
     }
 
     await store.markAwarioIncrementalCompleted(bindingId, metrics, requestId);
+
+    console.log(
+      JSON.stringify({
+        level: "info",
+        message: "awario_sync_completed",
+        request_id: requestId,
+        run_id: runId,
+        binding_id: bindingId,
+        mode,
+        fetched: metrics.fetched,
+        linked: metrics.linked,
+        persisted: metrics.persisted,
+        deduped: metrics.deduped,
+        feed_persisted: metrics.feed_persisted,
+        feed_deduped: metrics.feed_deduped,
+        skipped_unlinked: metrics.skipped_unlinked,
+        pages_processed: result.pagesProcessed,
+        window_start: windowStart.toISOString(),
+        window_end: windowEnd.toISOString()
+      })
+    );
   } catch (error) {
     await store.markAwarioSyncFailed(bindingId, mode, (error as Error).message, requestId);
     throw error;

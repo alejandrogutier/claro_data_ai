@@ -690,7 +690,7 @@ resource "aws_lambda_function" "api" {
       AWARIO_BACKFILL_PAGES_PER_INVOCATION    = "20"
       AWARIO_BACKFILL_MAX_PAGES_TOTAL         = "5000"
       AWARIO_INCREMENTAL_PAGES_PER_INVOCATION = "10"
-      AWARIO_INCREMENTAL_OVERLAP_MINUTES      = "30"
+      AWARIO_INCREMENTAL_OVERLAP_MINUTES      = "1440"
       REPORT_CONFIDENCE_THRESHOLD             = tostring(var.report_confidence_threshold)
       REPORT_DEFAULT_TIMEZONE                 = var.report_default_timezone
       REPORT_EMAIL_SENDER                     = var.ses_sender_email
@@ -1032,7 +1032,7 @@ resource "aws_lambda_function" "awario_sync_worker" {
       AWARIO_BACKFILL_PAGES_PER_INVOCATION    = "20"
       AWARIO_BACKFILL_MAX_PAGES_TOTAL         = "5000"
       AWARIO_INCREMENTAL_PAGES_PER_INVOCATION = "10"
-      AWARIO_INCREMENTAL_OVERLAP_MINUTES      = "30"
+      AWARIO_INCREMENTAL_OVERLAP_MINUTES      = "1440"
     }
   }
 }
