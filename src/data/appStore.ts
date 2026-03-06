@@ -119,6 +119,9 @@ type FeedRecord = {
   rawPayloadS3Key: string | null;
   categoria: string | null;
   sentimiento: string | null;
+  etiquetas: string[];
+  confianza: number | null;
+  classificationResumen: string | null;
   createdAt: Date;
   updatedAt: Date;
   awarioAlertId: string | null;
@@ -448,6 +451,9 @@ const parseFeedRow = (row: SqlRow): FeedRecord | null => {
   const sentimiento = fieldString(row, 20);
   const awarioAlertId = fieldString(row, 21);
   const firstSeenAt = fieldDate(row, 22) ?? createdAt;
+  const etiquetasRaw = fieldString(row, 23);
+  const confianzaRaw = fieldString(row, 24);
+  const classificationResumen = fieldString(row, 25);
 
   if (!id || !sourceType || !provider || !state || !title || !canonicalUrl || !createdAt || !updatedAt || !firstSeenAt) {
     return null;
@@ -455,6 +461,16 @@ const parseFeedRow = (row: SqlRow): FeedRecord | null => {
 
   const normalizedCanonicalUrl = canonicalizeUrl(canonicalUrl) ?? canonicalUrl;
   const sourceScore = Number.parseFloat(sourceScoreRaw);
+
+  let etiquetas: string[] = [];
+  if (etiquetasRaw) {
+    try {
+      const parsed = JSON.parse(etiquetasRaw) as unknown;
+      if (Array.isArray(parsed)) etiquetas = parsed.filter((v: unknown) => typeof v === "string");
+    } catch { /* ignore malformed etiquetas JSON */ }
+  }
+
+  const confianzaParsed = confianzaRaw ? Number.parseFloat(confianzaRaw) : null;
 
   return {
     id,
@@ -476,6 +492,9 @@ const parseFeedRow = (row: SqlRow): FeedRecord | null => {
     rawPayloadS3Key,
     categoria,
     sentimiento,
+    etiquetas,
+    confianza: confianzaParsed !== null && Number.isFinite(confianzaParsed) ? confianzaParsed : null,
+    classificationResumen,
     createdAt,
     updatedAt,
     awarioAlertId,
@@ -1042,10 +1061,13 @@ class AppStore {
             cls."categoria",
             cls."sentimiento",
             NULL::text,
-            COALESCE(ci."createdAt", NOW())
+            COALESCE(ci."createdAt", NOW()),
+            cls."etiquetas",
+            cls."confianza",
+            cls."resumen"
           FROM "public"."ContentItem" ci
           LEFT JOIN LATERAL (
-            SELECT c."categoria", c."sentimiento"
+            SELECT c."categoria", c."sentimiento", c."etiquetas"::text, c."confianza"::text, (c."metadata" ->> 'resumen')::text AS "resumen"
             FROM "public"."Classification" c
             WHERE c."contentItemId" = ci."id"
             ORDER BY c."isOverride" DESC, c."createdAt" DESC
@@ -1112,7 +1134,10 @@ class AppStore {
                   NULL::text,
                   NULL::text,
                   afi."awarioAlertId",
-                  afi."firstSeenAt"
+                  afi."firstSeenAt",
+                  NULL::text,
+                  NULL::text,
+                  NULL::text
                 FROM "public"."AwarioMentionFeedItem" afi
                 WHERE
                   afi."termId" = CAST(:term_id AS UUID)

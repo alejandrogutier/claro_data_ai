@@ -39,6 +39,9 @@ const toApiContent = (item: FeedRecord) => ({
   raw_payload_s3_key: item.rawPayloadS3Key,
   categoria: item.categoria,
   sentimiento: item.sentimiento,
+  etiquetas: item.etiquetas,
+  confianza: item.confianza,
+  classification_resumen: item.classificationResumen,
   created_at: item.createdAt.toISOString(),
   updated_at: item.updatedAt.toISOString()
 });
@@ -125,12 +128,17 @@ export const getNewsFeed = async (event: APIGatewayProxyEventV2) => {
     tags: parseTagFilterValues(query.tag, query.tags)
   };
 
+  const sentimientoFilter = query.sentimiento?.trim().toLowerCase() || undefined;
+  const categoriaFilter = query.categoria?.trim().toLowerCase() || undefined;
+
   const hasOriginFiltering = Boolean(
     originFilters.origin || originFilters.medium || (originFilters.tags?.length ?? 0) > 0
   );
+  const hasClassificationFiltering = Boolean(sentimientoFilter || categoriaFilter);
+  const hasAnyFiltering = hasOriginFiltering || hasClassificationFiltering;
 
   try {
-    if (!hasOriginFiltering) {
+    if (!hasAnyFiltering) {
       const page = await store.listNewsFeed(termId, limit, query.cursor);
       return json(200, {
         term_id: termId,
@@ -157,17 +165,21 @@ export const getNewsFeed = async (event: APIGatewayProxyEventV2) => {
       nextCursor = page.nextCursor;
 
       for (const item of page.items) {
-        const matches = matchesOriginFilters(
-          deriveOriginFields({
-            sourceType: item.sourceType,
-            provider: item.provider,
-            sourceName: item.sourceName,
-            channel: item.sourceName,
-            awarioAlertId: item.awarioAlertId
-          }),
-          originFilters
-        );
-        if (!matches) continue;
+        if (hasOriginFiltering) {
+          const matches = matchesOriginFilters(
+            deriveOriginFields({
+              sourceType: item.sourceType,
+              provider: item.provider,
+              sourceName: item.sourceName,
+              channel: item.sourceName,
+              awarioAlertId: item.awarioAlertId
+            }),
+            originFilters
+          );
+          if (!matches) continue;
+        }
+        if (sentimientoFilter && item.sentimiento?.toLowerCase() !== sentimientoFilter) continue;
+        if (categoriaFilter && item.categoria?.toLowerCase() !== categoriaFilter) continue;
         if (filtered.length < limit) {
           filtered.push(item);
         }

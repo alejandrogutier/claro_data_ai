@@ -652,6 +652,10 @@ export interface paths {
                     medium?: string;
                     /** @description Tag individual o lista CSV (`origin:news,provider:newsapi`) */
                     tag?: string;
+                    /** @description Filtrar por sentimiento (positivo|neutro|negativo) */
+                    sentimiento?: string;
+                    /** @description Filtrar por categoría AI asignada */
+                    categoria?: string;
                 };
                 header?: never;
                 path?: never;
@@ -4610,6 +4614,9 @@ export interface components {
             raw_payload_s3_key?: string;
             categoria?: string;
             sentimiento?: string;
+            etiquetas?: string[];
+            confianza?: number;
+            classification_resumen?: string | null;
         };
         Classification: {
             /** Format: uuid */
@@ -5098,8 +5105,11 @@ export interface components {
         MonitorSocialKpis: {
             posts: number;
             exposure_total: number;
+            /** @description Interacciones visibles oficiales (likes + comments + shares). */
             engagement_total: number;
+            /** @description Impresiones agregadas. Puede ser 0 en canales sin soporte nativo de impresiones. */
             impressions_total?: number;
+            /** @description Reach agregado. Puede ser 0 en canales sin soporte nativo de reach. */
             reach_total?: number;
             clicks_total?: number;
             likes_total?: number;
@@ -5107,8 +5117,11 @@ export interface components {
             shares_total?: number;
             views_total?: number;
             er_global: number;
+            /** @description Click Through Rate estricto = clicks_total / impressions_total * 100. Si impressions_total es 0, retorna 0. */
             ctr?: number;
+            /** @description Engagement Rate por impresiones estricto = engagement_total / impressions_total * 100. Si impressions_total es 0, retorna 0. */
             er_impressions?: number;
+            /** @description Engagement Rate por reach estricto = engagement_total / reach_total * 100. Si reach_total es 0, retorna 0. */
             er_reach?: number;
             view_rate?: number;
             likes_share?: number;
@@ -5526,8 +5539,11 @@ export interface components {
             sentiment_raw: string | null;
             sentiment_confidence: number | null;
             exposure: number;
+            /** @description Interacciones visibles oficiales (likes + comments + shares). */
             engagement_total: number;
+            /** @description Impresiones del post. Puede ser 0 en canales sin soporte nativo de impresiones. */
             impressions: number;
+            /** @description Reach del post. Puede ser 0 en canales sin soporte nativo de reach. */
             reach: number;
             clicks: number;
             likes: number;

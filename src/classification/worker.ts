@@ -10,7 +10,7 @@ const MAX_BEDROCK_ATTEMPTS = 3;
 const MAX_CONTENT_CHARS = 9000;
 
 const bedrock = new AWS.BedrockRuntime({ region: env.awsRegion });
-let promptTemplateCache: string | null = null;
+const promptTemplateCache = new Map<string, string>();
 
 type ClassificationTriggerType = "manual" | "scheduled";
 
@@ -197,12 +197,15 @@ const validateOutput = (
   return { categoria, sentimiento, etiquetas: deduped, confianza: confianzaRaw, resumen };
 };
 
-const loadPromptTemplate = async (): Promise<string> => {
-  if (promptTemplateCache) return promptTemplateCache;
+const loadPromptTemplate = async (version: string): Promise<string> => {
+  const cached = promptTemplateCache.get(version);
+  if (cached) return cached;
 
-  const promptPath = path.resolve(__dirname, "../prompts/classification/v1.md");
+  // version format: "classification-v1" → file "v1.md", "classification-v2" → "v2.md"
+  const filename = version.replace(/^classification-/, "v") + ".md";
+  const promptPath = path.resolve(__dirname, `../prompts/classification/${filename}`);
   const content = await readFile(promptPath, "utf8");
-  promptTemplateCache = content;
+  promptTemplateCache.set(version, content);
   return content;
 };
 
@@ -213,7 +216,7 @@ const truncate = (value: string | null | undefined, maxChars: number): string =>
   return sliced;
 };
 
-const buildPrompt = async (input: {
+const buildPrompt = async (version: string, input: {
   sourceType: string;
   provider: string;
   language: string | null;
@@ -221,7 +224,7 @@ const buildPrompt = async (input: {
   summary: string | null;
   content: string | null;
 }): Promise<string> => {
-  const template = await loadPromptTemplate();
+  const template = await loadPromptTemplate(version);
   return template
     .replaceAll("{{source_type}}", truncate(input.sourceType, 40))
     .replaceAll("{{provider}}", truncate(input.provider, 60))
@@ -307,7 +310,7 @@ const processContentItem = async (message: Required<Pick<ClassificationMessage, 
     return;
   }
 
-  const prompt = await buildPrompt({
+  const prompt = await buildPrompt(promptVersion, {
     sourceType: content.sourceType,
     provider: content.provider,
     language: content.language,

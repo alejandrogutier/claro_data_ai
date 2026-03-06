@@ -675,6 +675,8 @@ export class ApiClient {
       origin?: OriginType;
       medium?: string;
       tag?: string;
+      sentimiento?: string;
+      categoria?: string;
     } = {}
   ): Promise<NewsFeedResponse> {
     return this.request<NewsFeedResponse>("/v1/feed/news", {

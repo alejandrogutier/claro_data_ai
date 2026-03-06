@@ -27,6 +27,26 @@ const readStoredViewMode = (scope: TermScope): FeedViewMode => {
   return stored === "cards" ? "cards" : "table";
 };
 
+const sentimentConfig = (value: string | undefined): { label: string; className: string } => {
+  switch (value) {
+    case "positivo": return { label: "Positivo", className: "sentiment-pill sentiment-positive" };
+    case "negativo": return { label: "Negativo", className: "sentiment-pill sentiment-negative" };
+    case "neutro": return { label: "Neutro", className: "sentiment-pill sentiment-neutral" };
+    default: return { label: "—", className: "sentiment-pill sentiment-unknown" };
+  }
+};
+
+const relativeDate = (iso: string | null | undefined): string | null => {
+  if (!iso) return null;
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return null;
+  const diffH = (Date.now() - d.getTime()) / 3600000;
+  if (diffH < 1) return `hace ${Math.max(1, Math.round(diffH * 60))} min`;
+  if (diffH < 24) return `hace ${Math.round(diffH)}h`;
+  if (diffH < 48) return "ayer";
+  return null;
+};
+
 const extractDomain = (rawUrl: string): string => {
   try {
     const parsed = new URL(rawUrl);
@@ -79,6 +99,8 @@ export const MonitorFeedPage = ({ scope, title, subtitle }: MonitorFeedPageProps
   const [originFilter, setOriginFilter] = useState<OriginType | "all">("all");
   const [mediumFilter, setMediumFilter] = useState("");
   const [tagFilter, setTagFilter] = useState("");
+  const [sentimientoFilter, setSentimientoFilter] = useState("");
+  const [categoriaFilter, setCategoriaFilter] = useState("");
   const [viewMode, setViewMode] = useState<FeedViewMode>(() => readStoredViewMode(scope));
   const [expandedRows, setExpandedRows] = useState<Record<string, boolean>>({});
 
@@ -89,7 +111,7 @@ export const MonitorFeedPage = ({ scope, title, subtitle }: MonitorFeedPageProps
 
   const isSelectedQueryBlocked = selectedQuery?.awario_link_status !== "linked";
 
-  const hasActiveFilters = originFilter !== "all" || mediumFilter.trim().length > 0 || tagFilter.trim().length > 0;
+  const hasActiveFilters = originFilter !== "all" || mediumFilter.trim().length > 0 || tagFilter.trim().length > 0 || sentimientoFilter.trim().length > 0 || categoriaFilter.trim().length > 0;
 
   useEffect(() => {
     setViewMode(readStoredViewMode(scope));
@@ -133,7 +155,9 @@ export const MonitorFeedPage = ({ scope, title, subtitle }: MonitorFeedPageProps
         cursor,
         origin: originFilter === "all" ? undefined : originFilter,
         medium: mediumFilter.trim() || undefined,
-        tag: tagFilter.trim() || undefined
+        tag: tagFilter.trim() || undefined,
+        sentimiento: sentimientoFilter.trim() || undefined,
+        categoria: categoriaFilter.trim() || undefined
       });
 
       setItems((current) => (options.append ? [...current, ...(response.items ?? [])] : response.items ?? []));
@@ -192,7 +216,7 @@ export const MonitorFeedPage = ({ scope, title, subtitle }: MonitorFeedPageProps
 
   useEffect(() => {
     void loadFeed({ append: false });
-  }, [selectedQueryId, originFilter, mediumFilter, tagFilter]);
+  }, [selectedQueryId, originFilter, mediumFilter, tagFilter, sentimientoFilter, categoriaFilter]);
 
   const onToggleRow = (itemId: string) => {
     setExpandedRows((current) => ({ ...current, [itemId]: !current[itemId] }));
@@ -202,6 +226,8 @@ export const MonitorFeedPage = ({ scope, title, subtitle }: MonitorFeedPageProps
     setOriginFilter("all");
     setMediumFilter("");
     setTagFilter("");
+    setSentimientoFilter("");
+    setCategoriaFilter("");
   };
 
   return (
@@ -262,6 +288,25 @@ export const MonitorFeedPage = ({ scope, title, subtitle }: MonitorFeedPageProps
               value={tagFilter}
               onChange={(event) => setTagFilter(event.target.value)}
               placeholder="origin:awario, medium:web"
+            />
+          </label>
+
+          <label>
+            Sentimiento
+            <select value={sentimientoFilter} onChange={(event) => setSentimientoFilter(event.target.value)}>
+              <option value="">Todos</option>
+              <option value="positivo">Positivo</option>
+              <option value="neutro">Neutro</option>
+              <option value="negativo">Negativo</option>
+            </select>
+          </label>
+
+          <label>
+            Categoría
+            <input
+              value={categoriaFilter}
+              onChange={(event) => setCategoriaFilter(event.target.value)}
+              placeholder="regulacion, competencia"
             />
           </label>
         </div>
@@ -338,7 +383,7 @@ export const MonitorFeedPage = ({ scope, title, subtitle }: MonitorFeedPageProps
                   <th>Origen</th>
                   <th>Medio</th>
                   <th>Fuente</th>
-                  <th>Vínculo</th>
+                  <th>Sentimiento</th>
                   <th>Acción</th>
                 </tr>
               </thead>
@@ -347,16 +392,19 @@ export const MonitorFeedPage = ({ scope, title, subtitle }: MonitorFeedPageProps
                   const date = formatFeedDate(item);
                   const domain = extractDomain(item.canonical_url);
                   const isExpanded = Boolean(expandedRows[item.id]);
+                  const rel = relativeDate(item.published_at ?? item.created_at);
+                  const sent = sentimentConfig(item.sentimiento);
 
                   return [
                     <tr key={`${item.id}-main`}>
                       <td>
-                        <strong>{date.value}</strong>
-                        <small>{date.label}</small>
+                        <strong>{rel ?? date.value}</strong>
+                        <small>{rel ? date.value : date.label}</small>
                       </td>
                       <td>
                         <strong>{item.title}</strong>
                         <small>{domain}</small>
+                        {item.categoria ? <small className="monitor-feed-categoria-label">{item.categoria}</small> : null}
                       </td>
                       <td>
                         <span className={`origin-chip origin-chip-${item.origin}`}>{item.origin}</span>
@@ -364,9 +412,7 @@ export const MonitorFeedPage = ({ scope, title, subtitle }: MonitorFeedPageProps
                       <td>{item.medium ?? "-"}</td>
                       <td>{item.provider}</td>
                       <td>
-                        <span className={`origin-chip ${isSelectedQueryBlocked ? "monitor-feed-chip-warning" : ""}`}>
-                          {isSelectedQueryBlocked ? "missing_awario" : `linked:${selectedQuery?.awario_sync_state ?? "-"}`}
-                        </span>
+                        <span className={sent.className}>{sent.label}</span>
                       </td>
                       <td>
                         <div className="monitor-feed-table-actions">
@@ -382,13 +428,25 @@ export const MonitorFeedPage = ({ scope, title, subtitle }: MonitorFeedPageProps
                     isExpanded ? (
                       <tr key={`${item.id}-detail`} className="monitor-feed-detail-row">
                         <td colSpan={7}>
-                          <p>{truncate(item.summary ?? item.content, 420) || "Sin resumen disponible."}</p>
-                          <div className="origin-chip-row">
-                            {item.tags.map((tag) => (
-                              <span className="origin-chip" key={`${item.id}-${tag}`}>
-                                {tag}
-                              </span>
-                            ))}
+                          <div className="monitor-feed-detail-grid">
+                            <div className="monitor-feed-detail-classification">
+                              <span className={sent.className}>{sent.label}</span>
+                              {item.categoria ? <span className="origin-chip origin-chip-categoria">{item.categoria}</span> : null}
+                              {item.confianza != null ? <span className="origin-chip">confianza: {Math.round(item.confianza * 100)}%</span> : null}
+                            </div>
+                            <p>{truncate(item.classification_resumen ?? item.summary ?? item.content, 600) || "Sin resumen disponible."}</p>
+                            <div className="origin-chip-row">
+                              {(item.etiquetas ?? []).map((etiqueta) => (
+                                <span className="origin-chip origin-chip-categoria" key={`${item.id}-etq-${etiqueta}`}>
+                                  {etiqueta}
+                                </span>
+                              ))}
+                              {item.tags.map((tag) => (
+                                <span className="origin-chip" key={`${item.id}-${tag}`}>
+                                  {tag}
+                                </span>
+                              ))}
+                            </div>
                           </div>
                         </td>
                       </tr>
@@ -405,22 +463,29 @@ export const MonitorFeedPage = ({ scope, title, subtitle }: MonitorFeedPageProps
         <div className="feed-grid monitor-feed-card-grid">
           {items.map((item) => {
             const date = formatFeedDate(item);
-            const summaryText = truncate(item.summary ?? item.content, 220) || "Sin resumen disponible.";
-            const domain = extractDomain(item.canonical_url);
+            const summaryText = truncate(item.classification_resumen ?? item.summary ?? item.content, 220) || "Sin resumen disponible.";
+            const rel = relativeDate(item.published_at ?? item.created_at);
+            const sent = sentimentConfig(item.sentimiento);
 
             return (
               <article className="feed-card monitor-feed-card" key={item.id}>
+                {item.image_url ? (
+                  <img className="monitor-feed-card-thumb" src={item.image_url} alt="" loading="lazy" />
+                ) : null}
+
                 <div className="monitor-feed-card-meta-row">
                   <span className={`origin-chip origin-chip-${item.origin}`}>{item.origin}</span>
+                  <span className={sent.className}>{sent.label}</span>
+                  {item.categoria ? <span className="origin-chip origin-chip-categoria">{item.categoria}</span> : null}
                   {shouldShowMediumChip(item) ? <span className="origin-chip">medio:{item.medium}</span> : null}
-                  <span className="origin-chip">dominio:{domain}</span>
                 </div>
 
-                <h3>{item.title}</h3>
+                <h3 className="monitor-feed-card-title">{item.title}</h3>
                 <p className="feed-date">
-                  {date.label}: {date.value}
+                  {rel ?? `${date.label}: ${date.value}`}
+                  {rel ? <small style={{ marginLeft: 6, opacity: 0.7 }}>{date.value}</small> : null}
                 </p>
-                <p>{summaryText}</p>
+                <p className="monitor-feed-card-summary">{summaryText}</p>
 
                 <div className="monitor-feed-card-footer">
                   <span className="feed-provider">{item.provider}</span>

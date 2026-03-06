@@ -510,6 +510,16 @@ paths:
           schema:
             type: string
           description: Tag individual o lista CSV (`origin:news,provider:newsapi`)
+        - name: sentimiento
+          in: query
+          schema:
+            type: string
+          description: Filtrar por sentimiento (positivo|neutro|negativo)
+        - name: categoria
+          in: query
+          schema:
+            type: string
+          description: Filtrar por categoría AI asignada
       responses:
         '200':
           description: Feed unificado paginado para la query
@@ -4186,6 +4196,17 @@ components:
           type: string
         sentimiento:
           type: string
+        etiquetas:
+          type: array
+          items:
+            type: string
+        confianza:
+          type: number
+          minimum: 0
+          maximum: 1
+        classification_resumen:
+          type: string
+          nullable: true
     Classification:
       type: object
       required: [id, content_item_id, categoria, sentimiento, prompt_version, model_id, created_at]
@@ -5196,10 +5217,13 @@ components:
           type: number
         engagement_total:
           type: number
+          description: Interacciones visibles oficiales (likes + comments + shares).
         impressions_total:
           type: number
+          description: Impresiones agregadas. Puede ser 0 en canales sin soporte nativo de impresiones.
         reach_total:
           type: number
+          description: Reach agregado. Puede ser 0 en canales sin soporte nativo de reach.
         clicks_total:
           type: number
         likes_total:
@@ -5214,10 +5238,13 @@ components:
           type: number
         ctr:
           type: number
+          description: Click Through Rate estricto = clicks_total / impressions_total * 100. Si impressions_total es 0, retorna 0.
         er_impressions:
           type: number
+          description: Engagement Rate por impresiones estricto = engagement_total / impressions_total * 100. Si impressions_total es 0, retorna 0.
         er_reach:
           type: number
+          description: Engagement Rate por reach estricto = engagement_total / reach_total * 100. Si reach_total es 0, retorna 0.
         view_rate:
           type: number
         likes_share:
@@ -6170,10 +6197,13 @@ components:
           type: number
         engagement_total:
           type: number
+          description: Interacciones visibles oficiales (likes + comments + shares).
         impressions:
           type: number
+          description: Impresiones del post. Puede ser 0 en canales sin soporte nativo de impresiones.
         reach:
           type: number
+          description: Reach del post. Puede ser 0 en canales sin soporte nativo de reach.
         clicks:
           type: number
         likes:
