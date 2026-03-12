@@ -3712,6 +3712,268 @@ class SocialStore {
     }
   }
 
+  async upsertSocialPostFast(input: SocialPostUpsertInput): Promise<{ contentItemId: string; metricId: string }> {
+    const canonicalUrl = `social://${input.channel}/${input.externalPostId}`;
+    const titleSource = (input.text ?? "").trim();
+    const title = titleSource ? titleSource.slice(0, 180) : `${input.channel} post ${input.externalPostId}`;
+    const summary = titleSource ? titleSource.slice(0, 500) : null;
+    const content = titleSource || null;
+    const sourceScore = clamp(input.sourceScore ?? 0.5, 0, 1);
+
+    const response = await this.rds.execute(
+      `
+        WITH ci AS (
+          INSERT INTO "public"."ContentItem"
+            ("id", "sourceType", "termId", "provider", "sourceName", "sourceId", "state", "title", "summary", "content", "canonicalUrl", "imageUrl", "language", "category", "publishedAt", "sourceScore", "rawPayloadS3Key", "metadata", "createdAt", "updatedAt")
+          VALUES
+            (CAST(:ci_id AS UUID), CAST('social' AS "public"."SourceType"), NULL, :provider, :source_name, :source_id, CAST('active' AS "public"."ContentState"), :title, :summary, :content, :canonical_url, :image_url, 'es', NULL, :published_at, CAST(:source_score AS DECIMAL(3,2)), :raw_payload_s3_key, CAST(:ci_metadata AS JSONB), NOW(), NOW())
+          ON CONFLICT ("canonicalUrl") DO UPDATE SET
+            "sourceType" = CAST('social' AS "public"."SourceType"),
+            "provider" = EXCLUDED."provider",
+            "sourceName" = EXCLUDED."sourceName",
+            "sourceId" = EXCLUDED."sourceId",
+            "state" = CAST('active' AS "public"."ContentState"),
+            "title" = EXCLUDED."title",
+            "summary" = EXCLUDED."summary",
+            "content" = EXCLUDED."content",
+            "imageUrl" = EXCLUDED."imageUrl",
+            "language" = EXCLUDED."language",
+            "publishedAt" = EXCLUDED."publishedAt",
+            "sourceScore" = EXCLUDED."sourceScore",
+            "rawPayloadS3Key" = EXCLUDED."rawPayloadS3Key",
+            "metadata" = EXCLUDED."metadata",
+            "updatedAt" = NOW()
+          RETURNING "id"
+        ),
+        spm AS (
+          INSERT INTO "public"."SocialPostMetric"
+            ("id", "contentItemId", "channel", "accountName", "externalPostId", "postUrl", "postType", "campaignTaxonomyId", "publishedAt", "exposure", "engagementTotal", "impressions", "reach", "clicks", "likes", "comments", "shares", "views", "diagnostics", "createdAt", "updatedAt")
+          SELECT
+            CAST(:spm_id AS UUID), ci."id", :channel, :account_name, :external_post_id, :post_url, :post_type, CAST(:campaign_taxonomy_id AS UUID), :spm_published_at::timestamp, CAST(:exposure AS DECIMAL(18,2)), CAST(:engagement_total AS DECIMAL(18,2)), CAST(:impressions AS DECIMAL(18,2)), CAST(:reach AS DECIMAL(18,2)), CAST(:clicks AS DECIMAL(18,2)), CAST(:likes AS DECIMAL(18,2)), CAST(:comments AS DECIMAL(18,2)), CAST(:shares AS DECIMAL(18,2)), CAST(:views AS DECIMAL(18,2)), CAST(:diagnostics AS JSONB), NOW(), NOW()
+          FROM ci
+          ON CONFLICT ("channel", "externalPostId") DO UPDATE SET
+            "accountName" = EXCLUDED."accountName",
+            "postUrl" = EXCLUDED."postUrl",
+            "postType" = EXCLUDED."postType",
+            "campaignTaxonomyId" = EXCLUDED."campaignTaxonomyId",
+            "publishedAt" = EXCLUDED."publishedAt",
+            "exposure" = EXCLUDED."exposure",
+            "engagementTotal" = EXCLUDED."engagementTotal",
+            "impressions" = EXCLUDED."impressions",
+            "reach" = EXCLUDED."reach",
+            "clicks" = EXCLUDED."clicks",
+            "likes" = EXCLUDED."likes",
+            "comments" = EXCLUDED."comments",
+            "shares" = EXCLUDED."shares",
+            "views" = EXCLUDED."views",
+            "diagnostics" = EXCLUDED."diagnostics",
+            "updatedAt" = NOW()
+          RETURNING "id"
+        )
+        SELECT ci."id"::text AS ci_id, spm."id"::text AS spm_id FROM ci CROSS JOIN spm
+      `,
+      [
+        sqlUuid("ci_id", randomUUID()),
+        sqlString("provider", input.channel),
+        sqlString("source_name", input.accountName),
+        sqlString("source_id", input.externalPostId),
+        sqlString("title", title),
+        sqlString("summary", summary),
+        sqlString("content", content),
+        sqlString("canonical_url", canonicalUrl),
+        sqlString("image_url", input.imageUrl ?? null),
+        sqlTimestamp("published_at", input.publishedAt ?? null),
+        sqlString("source_score", sourceScore.toFixed(2)),
+        sqlString("raw_payload_s3_key", input.rawPayloadS3Key ?? null),
+        sqlJson("ci_metadata", {
+          channel: input.channel,
+          account_name: input.accountName,
+          external_post_id: input.externalPostId,
+          post_type: input.postType ?? null
+        }),
+        sqlUuid("spm_id", randomUUID()),
+        sqlString("channel", input.channel),
+        sqlString("account_name", input.accountName),
+        sqlString("external_post_id", input.externalPostId),
+        sqlString("post_url", canonicalUrl),
+        sqlString("post_type", input.postType ?? null),
+        sqlUuid("campaign_taxonomy_id", input.campaignTaxonomyId ?? null),
+        sqlTimestamp("spm_published_at", input.publishedAt ?? null),
+        sqlString("exposure", String(Math.max(0, input.exposure))),
+        sqlString("engagement_total", String(Math.max(0, input.engagementTotal))),
+        sqlString("impressions", String(Math.max(0, input.impressions ?? 0))),
+        sqlString("reach", String(Math.max(0, input.reach ?? 0))),
+        sqlString("clicks", String(Math.max(0, input.clicks ?? 0))),
+        sqlString("likes", String(Math.max(0, input.likes ?? 0))),
+        sqlString("comments", String(Math.max(0, input.comments ?? 0))),
+        sqlString("shares", String(Math.max(0, input.shares ?? 0))),
+        sqlString("views", String(Math.max(0, input.views ?? 0))),
+        sqlJson("diagnostics", input.diagnostics ?? {})
+      ]
+    );
+
+    const contentItemId = fieldString(response.records?.[0], 0);
+    const metricId = fieldString(response.records?.[0], 1);
+    if (!contentItemId || !metricId) {
+      throw new Error("social_post_cte_upsert_failed");
+    }
+
+    // Only process hashtags if non-empty (skip for new-format posts without text)
+    const hashtags = input.hashtags ?? [];
+    if (hashtags.length > 0) {
+      const tx = await this.rds.beginTransaction();
+      try {
+        await this.replaceMetricHashtags(metricId, hashtags, tx);
+        await this.rds.commitTransaction(tx);
+      } catch {
+        await this.rds.rollbackTransaction(tx).catch(() => undefined);
+        // Non-fatal: hashtags are supplementary
+      }
+    }
+
+    return { contentItemId, metricId };
+  }
+
+  async batchLoadPostMetricsByChannel(
+    channel: SocialChannel
+  ): Promise<Map<string, { socialPostMetricId: string; contentItemId: string }>> {
+    const map = new Map<string, { socialPostMetricId: string; contentItemId: string }>();
+    let offset = 0;
+    const batchSize = 5000;
+
+    while (true) {
+      const res = await this.rds.execute(
+        `
+          SELECT "id"::text, "contentItemId"::text, "externalPostId"
+          FROM "public"."SocialPostMetric"
+          WHERE "channel" = :channel
+          ORDER BY "id"
+          LIMIT :batch_size OFFSET :offset
+        `,
+        [
+          sqlString("channel", channel),
+          sqlLong("batch_size", batchSize),
+          sqlLong("offset", offset)
+        ]
+      );
+
+      const rows = res.records ?? [];
+      if (rows.length === 0) break;
+
+      for (const row of rows) {
+        const id = fieldString(row, 0);
+        const contentItemId = fieldString(row, 1);
+        const externalPostId = fieldString(row, 2);
+        if (id && contentItemId && externalPostId) {
+          map.set(externalPostId, { socialPostMetricId: id, contentItemId });
+        }
+      }
+
+      offset += batchSize;
+      if (rows.length < batchSize) break;
+    }
+
+    return map;
+  }
+
+  async batchInsertDataslayerComments(
+    comments: Array<{
+      socialPostMetricId: string;
+      channel: string;
+      parentExternalPostId: string;
+      dataslayerHash: string;
+      authorName: string | null;
+      publishedAt: Date | null;
+      text: string;
+    }>
+  ): Promise<{ inserted: number; deduped: number }> {
+    if (comments.length === 0) return { inserted: 0, deduped: 0 };
+
+    const sql = `
+      INSERT INTO "public"."SocialPostComment"
+        ("id", "socialPostMetricId", "dataslayerHash", "channel", "parentExternalPostId", "authorName", "publishedAt", "text", "sentiment", "sentimentSource", "isSpam", "relatedToPostText", "needsReview", "createdAt", "updatedAt")
+      VALUES
+        (CAST(:id AS UUID), CAST(:social_post_metric_id AS UUID), :dataslayer_hash, :channel, :parent_external_post_id, :author_name, :published_at, :text, 'unknown', 'dataslayer', false, false, false, NOW(), NOW())
+      ON CONFLICT ("dataslayerHash") WHERE "dataslayerHash" IS NOT NULL DO NOTHING
+    `;
+
+    const parameterSets = comments.map((c) => [
+      sqlUuid("id", randomUUID()),
+      sqlUuid("social_post_metric_id", c.socialPostMetricId),
+      sqlString("dataslayer_hash", c.dataslayerHash),
+      sqlString("channel", c.channel),
+      sqlString("parent_external_post_id", c.parentExternalPostId),
+      sqlString("author_name", c.authorName),
+      sqlTimestamp("published_at", c.publishedAt),
+      sqlString("text", c.text)
+    ]);
+
+    await this.rds.batchExecute(sql, parameterSets, 100);
+
+    // batchExecuteStatement doesn't tell us which rows were inserted vs conflicted
+    // Return total as inserted; actual dedup count is unknown but acceptable for metrics
+    return { inserted: comments.length, deduped: 0 };
+  }
+
+  async batchUpsertPageDailyMetrics(
+    metrics: PageDailyMetricUpsertInput[]
+  ): Promise<number> {
+    if (metrics.length === 0) return 0;
+
+    const sql = `
+      INSERT INTO "public"."SocialPageDailyMetric"
+        ("id", "date", "channel", "accountName", "followers", "newFollowers", "unfollows",
+         "pageReach", "pageViews", "postReach", "profileVisits",
+         "desktopViews", "mobileViews", "engagements", "engagementRate",
+         "profileLikes", "videoCount", "createdAt", "updatedAt")
+      VALUES
+        (CAST(:id AS UUID), CAST(:date AS DATE), :channel, :account_name,
+         :followers, :new_followers, :unfollows, :page_reach, :page_views,
+         CAST(:post_reach AS INTEGER), CAST(:profile_visits AS INTEGER),
+         CAST(:desktop_views AS INTEGER), CAST(:mobile_views AS INTEGER),
+         CAST(:engagements AS INTEGER), CAST(:engagement_rate AS DECIMAL(9,4)),
+         CAST(:profile_likes AS INTEGER), CAST(:video_count AS INTEGER), NOW(), NOW())
+      ON CONFLICT ("date", "channel", "accountName") DO UPDATE SET
+        "followers" = EXCLUDED."followers",
+        "newFollowers" = EXCLUDED."newFollowers",
+        "unfollows" = EXCLUDED."unfollows",
+        "pageReach" = EXCLUDED."pageReach",
+        "pageViews" = EXCLUDED."pageViews",
+        "postReach" = COALESCE(EXCLUDED."postReach", "SocialPageDailyMetric"."postReach"),
+        "profileVisits" = COALESCE(EXCLUDED."profileVisits", "SocialPageDailyMetric"."profileVisits"),
+        "desktopViews" = COALESCE(EXCLUDED."desktopViews", "SocialPageDailyMetric"."desktopViews"),
+        "mobileViews" = COALESCE(EXCLUDED."mobileViews", "SocialPageDailyMetric"."mobileViews"),
+        "engagements" = COALESCE(EXCLUDED."engagements", "SocialPageDailyMetric"."engagements"),
+        "engagementRate" = COALESCE(EXCLUDED."engagementRate", "SocialPageDailyMetric"."engagementRate"),
+        "profileLikes" = COALESCE(EXCLUDED."profileLikes", "SocialPageDailyMetric"."profileLikes"),
+        "videoCount" = COALESCE(EXCLUDED."videoCount", "SocialPageDailyMetric"."videoCount"),
+        "updatedAt" = NOW()
+    `;
+
+    const parameterSets = metrics.map((m) => [
+      sqlUuid("id", randomUUID()),
+      sqlTimestamp("date", m.date),
+      sqlString("channel", m.channel),
+      sqlString("account_name", m.accountName),
+      sqlLong("followers", m.followers),
+      sqlLong("new_followers", m.newFollowers),
+      sqlLong("unfollows", m.unfollows),
+      sqlLong("page_reach", m.pageReach),
+      sqlLong("page_views", m.pageViews),
+      sqlString("post_reach", m.postReach == null ? null : String(Math.floor(m.postReach))),
+      sqlString("profile_visits", m.profileVisits == null ? null : String(Math.floor(m.profileVisits))),
+      sqlString("desktop_views", m.desktopViews == null ? null : String(Math.floor(m.desktopViews))),
+      sqlString("mobile_views", m.mobileViews == null ? null : String(Math.floor(m.mobileViews))),
+      sqlString("engagements", m.engagements == null ? null : String(Math.floor(m.engagements))),
+      sqlString("engagement_rate", m.engagementRate == null ? null : String(m.engagementRate)),
+      sqlString("profile_likes", m.profileLikes == null ? null : String(Math.floor(m.profileLikes))),
+      sqlString("video_count", m.videoCount == null ? null : String(Math.floor(m.videoCount)))
+    ]);
+
+    await this.rds.batchExecute(sql, parameterSets, 100);
+    return metrics.length;
+  }
+
   async upsertSentimentClassification(input: {
     contentItemId: string;
     sentimiento: "positivo" | "negativo" | "neutro" | "unknown";

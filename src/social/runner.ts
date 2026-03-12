@@ -901,7 +901,7 @@ export const runSocialSync = async (input: SocialSyncInput): Promise<SocialSyncO
           continue;
         }
 
-        const persisted = await store.upsertSocialPost({
+        const persisted = await store.upsertSocialPostFast({
           channel: normalized.channel,
           accountName: normalized.accountName,
           externalPostId: normalized.externalPostId,
@@ -997,6 +997,10 @@ export const runSocialSync = async (input: SocialSyncInput): Promise<SocialSyncO
     let commentsOrphaned = 0;
 
     const commentObjects = objects.filter((o) => detectFileType(o.key) === "comments" && o.size > 0);
+
+    // Pre-load post metric IDs per channel to avoid per-comment lookups
+    const postMetricCaches = new Map<SocialChannel, Map<string, { socialPostMetricId: string; contentItemId: string }>>();
+
     for (const commentObj of commentObjects) {
       const commentChannel = detectChannelFromKey(commentObj.key);
       if (!commentChannel) continue;
@@ -1011,17 +1015,35 @@ export const runSocialSync = async (input: SocialSyncInput): Promise<SocialSyncO
         }));
       if (alreadyProcessedComment) continue;
 
+      // Load post metrics cache for this channel (once per channel)
+      if (!postMetricCaches.has(commentChannel)) {
+        postMetricCaches.set(commentChannel, await store.batchLoadPostMetricsByChannel(commentChannel));
+      }
+      const postMetricMap = postMetricCaches.get(commentChannel)!;
+
       const commentBody = await fetchObjectBody(bucket, commentObj.key);
 
       // LinkedIn comments: semicolon-delimited, Latin-1 (already re-encoded to UTF-8 by S3)
       const isLkSemicolon = commentChannel === "linkedin" && commentBody.includes(";Cuenta;");
       const commentRows = isLkSemicolon ? parseSemicolonCsv(commentBody) : parseCsv(commentBody);
 
+      // Parse and collect all valid comments for batch insert
+      const commentBatch: Array<{
+        socialPostMetricId: string;
+        channel: string;
+        parentExternalPostId: string;
+        dataslayerHash: string;
+        authorName: string | null;
+        publishedAt: Date | null;
+        text: string;
+        contentItemId: string;
+      }> = [];
+
       for (const crow of commentRows) {
         let parentPostId: string | null = null;
         let commentText: string | null = null;
         let commentDate: Date | null = null;
-        let authorName: string | null = null;
+        const authorName: string | null = null;
 
         if (commentChannel === "facebook") {
           parentPostId = crow["Post ID"]?.trim() ?? null;
@@ -1039,32 +1061,37 @@ export const runSocialSync = async (input: SocialSyncInput): Promise<SocialSyncO
 
         if (!parentPostId || !commentText) continue;
 
-        const hashInput = `${commentChannel}:${parentPostId}:${commentText}:${commentDate?.toISOString() ?? ""}`;
-        const dataslayerHash = createHash("sha256").update(hashInput).digest("hex");
-
-        const postMetric = await store.findSocialPostMetricByExternalId(commentChannel, parentPostId);
+        const postMetric = postMetricMap.get(parentPostId);
         if (!postMetric) {
           commentsOrphaned += 1;
           continue;
         }
 
-        const result = await store.upsertDataslayerComment({
+        const hashInput = `${commentChannel}:${parentPostId}:${commentText}:${commentDate?.toISOString() ?? ""}`;
+        const dataslayerHash = createHash("sha256").update(hashInput).digest("hex");
+
+        commentBatch.push({
           socialPostMetricId: postMetric.socialPostMetricId,
           channel: commentChannel,
           parentExternalPostId: parentPostId,
           dataslayerHash,
           authorName,
           publishedAt: commentDate,
-          text: commentText
+          text: commentText,
+          contentItemId: postMetric.contentItemId
         });
+      }
 
-        if (result.status === "persisted") {
-          commentsIngested += 1;
-          if (queueClassification && env.classificationQueueUrl) {
-            classificationContentIds.add(postMetric.contentItemId);
+      // Batch insert all comments for this file
+      if (commentBatch.length > 0) {
+        const result = await store.batchInsertDataslayerComments(commentBatch);
+        commentsIngested += result.inserted;
+        commentsDeduped += result.deduped;
+
+        if (queueClassification && env.classificationQueueUrl) {
+          for (const c of commentBatch) {
+            classificationContentIds.add(c.contentItemId);
           }
-        } else {
-          commentsDeduped += 1;
         }
       }
 
@@ -1115,6 +1142,26 @@ export const runSocialSync = async (input: SocialSyncInput): Promise<SocialSyncO
 
       const pageBody = await fetchObjectBody(bucket, pageObj.key);
       const pageRows = parseCsv(pageBody);
+
+      // Collect all page metrics for batch insert
+      const pageBatch: Array<{
+        date: Date;
+        channel: SocialChannel;
+        accountName: string;
+        followers: number;
+        newFollowers: number;
+        unfollows: number;
+        pageReach: number;
+        pageViews: number;
+        postReach: number | null;
+        profileVisits: number | null;
+        desktopViews: number | null;
+        mobileViews: number | null;
+        engagements: number | null;
+        engagementRate: number | null;
+        profileLikes: number | null;
+        videoCount: number | null;
+      }> = [];
 
       for (const prow of pageRows) {
         const dateStr = prow["Date"]?.trim();
@@ -1173,7 +1220,7 @@ export const runSocialSync = async (input: SocialSyncInput): Promise<SocialSyncO
 
         if (!accountName) continue;
 
-        await store.upsertPageDailyMetric({
+        pageBatch.push({
           date,
           channel: pageChannel,
           accountName,
@@ -1191,8 +1238,11 @@ export const runSocialSync = async (input: SocialSyncInput): Promise<SocialSyncO
           profileLikes,
           videoCount
         });
+      }
 
-        pageMetricsIngested += 1;
+      // Batch upsert all page metrics for this file
+      if (pageBatch.length > 0) {
+        pageMetricsIngested += await store.batchUpsertPageDailyMetrics(pageBatch);
       }
 
       await store.markObjectProcessed({
