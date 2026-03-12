@@ -1,6 +1,6 @@
 -- CreateTable
 CREATE TABLE "SocialPageDailyMetric" (
-    "id" UUID NOT NULL DEFAULT uuid_generate_v4(),
+    "id" UUID NOT NULL DEFAULT gen_random_uuid(),
     "date" DATE NOT NULL,
     "channel" TEXT NOT NULL,
     "accountName" TEXT NOT NULL,
