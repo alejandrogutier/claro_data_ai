@@ -285,6 +285,7 @@ model SocialPostMetric {
   externalPostId   String
   postUrl          String
   postType         String?
+  isReply          Boolean    @default(false)
   campaignTaxonomyId String?   @db.Uuid
   publishedAt      DateTime?
   exposure         Decimal    @default(0) @db.Decimal(18, 2)

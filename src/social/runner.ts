@@ -61,6 +61,7 @@ type NormalizedSocialRow = {
   externalPostId: string;
   postUrl: string;
   postType: string | null;
+  isReply: boolean;
   publishedAt: Date | null;
   text: string | null;
   imageUrl: string | null;
@@ -462,6 +463,7 @@ const normalizeRow = (
         externalPostId,
         postUrl,
         postType: "reel",
+        isReply: false,
         publishedAt: toDate(row["Date"]),
         text: null,
         imageUrl: normalizeText(row["Post image URL"], 2048),
@@ -514,6 +516,7 @@ const normalizeRow = (
       externalPostId,
       postUrl,
       postType: normalizeText(row["Post type"], 120),
+      isReply: false,
       publishedAt: toDate(row["Date"]),
       text,
       imageUrl: normalizeText(row["Post image URL"], 2048),
@@ -573,6 +576,7 @@ const normalizeRow = (
       externalPostId,
       postUrl,
       postType: normalizeText(row["Media type"], 120),
+      isReply: false,
       publishedAt: toDate(row["Date"]),
       text,
       imageUrl: extractImageFormula(row["Media Image"]) ?? normalizeText(row["Media URL"], 2048),
@@ -623,6 +627,7 @@ const normalizeRow = (
       externalPostId,
       postUrl,
       postType: normalizeText(row["Post content type"], 120),
+      isReply: false,
       publishedAt: toDate(row["Date"]),
       text,
       imageUrl: normalizeText(row["Content image URL"], 2048),
@@ -665,13 +670,15 @@ const normalizeRow = (
     const views = toNumber(row["Video total views"]);
     const engagementSourceTotal = toNumber(row["Engagements"]);
     const engagementTotal = likes + comments + shares;
+    const isReply = row["Tweet is reply"]?.trim().toLowerCase() === "true";
 
     return {
       channel,
       accountName,
       externalPostId,
       postUrl,
-      postType: "tweet",
+      postType: isReply ? "reply" : "tweet",
+      isReply,
       publishedAt: toDate(row["Tweet creation date"] ?? row["Date"]),
       text,
       imageUrl: null,
@@ -719,6 +726,7 @@ const normalizeRow = (
     externalPostId,
     postUrl,
     postType: "video",
+    isReply: false,
     publishedAt: toDate(row["Date created"]),
     text,
     imageUrl: normalizeText(row["Cover image URL"], 2048),
@@ -963,6 +971,20 @@ export const runSocialSync = async (input: SocialSyncInput): Promise<SocialSyncO
           continue;
         }
 
+        // Replies are persisted (text is useful for classification) but with zeroed metrics
+        // so they don't inflate engagement dashboards
+        if (normalized.isReply) {
+          normalized.exposure = 0;
+          normalized.impressions = 0;
+          normalized.reach = 0;
+          normalized.likes = 0;
+          normalized.comments = 0;
+          normalized.shares = 0;
+          normalized.views = 0;
+          normalized.clicks = 0;
+          normalized.engagementTotal = 0;
+        }
+
         updateChannelStats(channelStats, normalized);
 
         if (alreadyProcessed) {
@@ -975,6 +997,7 @@ export const runSocialSync = async (input: SocialSyncInput): Promise<SocialSyncO
           externalPostId: normalized.externalPostId,
           postUrl: normalized.postUrl,
           postType: normalized.postType,
+          isReply: normalized.isReply,
           publishedAt: normalized.publishedAt,
           text: normalized.text,
           imageUrl: normalized.imageUrl,
@@ -1093,6 +1116,20 @@ export const runSocialSync = async (input: SocialSyncInput): Promise<SocialSyncO
       }
       const postMetricMap = postMetricCaches.get(commentChannel)!;
 
+      // Fix 2A: Build a suffix→metric map for FB reels whose externalPostId
+      // is stored as a bare numeric suffix (no PageID_ prefix).
+      // Comment CSVs reference the full "PageID_PostID" format, so the
+      // direct lookup fails for reels.  This index lets us fall back to
+      // matching the suffix part.
+      const suffixMap = new Map<string, { socialPostMetricId: string; contentItemId: string }>();
+      if (commentChannel === "facebook") {
+        for (const [extId, val] of postMetricMap) {
+          if (!extId.includes("_")) {
+            suffixMap.set(extId, val);
+          }
+        }
+      }
+
       const commentBody = await fetchObjectBody(bucket, commentObj.key);
 
       // LinkedIn comments: semicolon-delimited, Latin-1 (already re-encoded to UTF-8 by S3)
@@ -1129,11 +1166,22 @@ export const runSocialSync = async (input: SocialSyncInput): Promise<SocialSyncO
           parentPostId = crow["Post ID"]?.trim() ?? null;
           commentText = normalizeText(crow["Cometarios"] ?? crow["Comentarios"]);
           commentDate = toDate(crow["Date"]);
+        } else if (commentChannel === "x") {
+          // Fix 3A: X/Twitter comment parsing (preventive — when Dataslayer
+          // starts exporting X comments, the system will process them)
+          parentPostId = crow["Tweet ID"]?.trim() ?? null;
+          commentText = normalizeText(crow["Tweet text"] ?? crow["Comment text"]);
+          commentDate = toDate(crow["Tweet creation date"] ?? crow["Date"]);
         }
 
         if (!parentPostId || !commentText) continue;
 
-        const postMetric = postMetricMap.get(parentPostId);
+        // Fix 2B: Fallback suffix lookup for FB reels
+        let postMetric = postMetricMap.get(parentPostId);
+        if (!postMetric && commentChannel === "facebook" && parentPostId.includes("_")) {
+          const suffix = parentPostId.split("_").pop()!;
+          postMetric = suffixMap.get(suffix) ?? postMetricMap.get(suffix);
+        }
         if (!postMetric) {
           commentsOrphaned += 1;
           if (!orphanSamples.has(commentChannel)) orphanSamples.set(commentChannel, new Set());
@@ -1157,14 +1205,27 @@ export const runSocialSync = async (input: SocialSyncInput): Promise<SocialSyncO
         });
       }
 
+      // Fix 4B: In-memory dedup by dataslayerHash before batch insert.
+      // The SQL already has ON CONFLICT ("dataslayerHash") DO NOTHING, but
+      // deduping in memory avoids sending duplicates to the DB and gives
+      // accurate commentsDeduped metrics.
+      const seenHashes = new Set<string>();
+      const dedupedBatch = commentBatch.filter((c) => {
+        if (seenHashes.has(c.dataslayerHash)) return false;
+        seenHashes.add(c.dataslayerHash);
+        return true;
+      });
+      const inMemoryDupes = commentBatch.length - dedupedBatch.length;
+      commentsDeduped += inMemoryDupes;
+
       // Batch insert all comments for this file
-      if (commentBatch.length > 0) {
-        const result = await store.batchInsertDataslayerComments(commentBatch);
+      if (dedupedBatch.length > 0) {
+        const result = await store.batchInsertDataslayerComments(dedupedBatch);
         commentsIngested += result.inserted;
         commentsDeduped += result.deduped;
 
         if (queueClassification && env.classificationQueueUrl) {
-          for (const c of commentBatch) {
+          for (const c of dedupedBatch) {
             classificationContentIds.add(c.contentItemId);
           }
         }

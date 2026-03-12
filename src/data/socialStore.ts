@@ -91,6 +91,7 @@ type SocialPostUpsertInput = {
   externalPostId: string;
   postUrl: string;
   postType?: string | null;
+  isReply?: boolean;
   publishedAt?: Date | null;
   text?: string | null;
   imageUrl?: string | null;
@@ -2704,7 +2705,8 @@ class SocialStore {
       `COALESCE(spm."publishedAt", ci."publishedAt", ci."createdAt") >= :window_start`,
       `COALESCE(spm."publishedAt", ci."publishedAt", ci."createdAt") < :window_end`,
       `ci."sourceType" = CAST('social' AS "public"."SourceType")`,
-      `ci."state" = CAST('active' AS "public"."ContentState")`
+      `ci."state" = CAST('active' AS "public"."ContentState")`,
+      `spm."isReply" = FALSE`
     ];
     const params: SqlParameter[] = [sqlTimestamp("window_start", windowStart), sqlTimestamp("window_end", windowEnd)];
 
@@ -3789,15 +3791,16 @@ class SocialStore {
         ),
         spm AS (
           INSERT INTO "public"."SocialPostMetric"
-            ("id", "contentItemId", "channel", "accountName", "externalPostId", "postUrl", "postType", "campaignTaxonomyId", "publishedAt", "exposure", "engagementTotal", "impressions", "reach", "clicks", "likes", "comments", "shares", "views", "saves", "avgWatchTimeMs", "totalWatchTimeMs", "diagnostics", "createdAt", "updatedAt")
+            ("id", "contentItemId", "channel", "accountName", "externalPostId", "postUrl", "postType", "isReply", "campaignTaxonomyId", "publishedAt", "exposure", "engagementTotal", "impressions", "reach", "clicks", "likes", "comments", "shares", "views", "saves", "avgWatchTimeMs", "totalWatchTimeMs", "diagnostics", "createdAt", "updatedAt")
           SELECT
-            CAST(:spm_id AS UUID), ci."id", :channel, :account_name, :external_post_id, :post_url, :post_type, CAST(:campaign_taxonomy_id AS UUID), :spm_published_at::timestamp, CAST(:exposure AS DECIMAL(18,2)), CAST(:engagement_total AS DECIMAL(18,2)), CAST(:impressions AS DECIMAL(18,2)), CAST(:reach AS DECIMAL(18,2)), CAST(:clicks AS DECIMAL(18,2)), CAST(:likes AS DECIMAL(18,2)), CAST(:comments AS DECIMAL(18,2)), CAST(:shares AS DECIMAL(18,2)), CAST(:views AS DECIMAL(18,2)), CAST(:saves AS DECIMAL(18,2)), CAST(:avg_watch_time_ms AS INTEGER), CAST(:total_watch_time_ms AS BIGINT), CAST(:diagnostics AS JSONB), NOW(), NOW()
+            CAST(:spm_id AS UUID), ci."id", :channel, :account_name, :external_post_id, :post_url, :post_type, CAST(:is_reply AS BOOLEAN), CAST(:campaign_taxonomy_id AS UUID), :spm_published_at::timestamp, CAST(:exposure AS DECIMAL(18,2)), CAST(:engagement_total AS DECIMAL(18,2)), CAST(:impressions AS DECIMAL(18,2)), CAST(:reach AS DECIMAL(18,2)), CAST(:clicks AS DECIMAL(18,2)), CAST(:likes AS DECIMAL(18,2)), CAST(:comments AS DECIMAL(18,2)), CAST(:shares AS DECIMAL(18,2)), CAST(:views AS DECIMAL(18,2)), CAST(:saves AS DECIMAL(18,2)), CAST(:avg_watch_time_ms AS INTEGER), CAST(:total_watch_time_ms AS BIGINT), CAST(:diagnostics AS JSONB), NOW(), NOW()
           FROM ci
           ON CONFLICT ("channel", "externalPostId") DO UPDATE SET
             "contentItemId" = (SELECT "id" FROM ci),
             "accountName" = EXCLUDED."accountName",
             "postUrl" = EXCLUDED."postUrl",
             "postType" = EXCLUDED."postType",
+            "isReply" = EXCLUDED."isReply",
             "campaignTaxonomyId" = EXCLUDED."campaignTaxonomyId",
             "publishedAt" = EXCLUDED."publishedAt",
             "exposure" = EXCLUDED."exposure",
@@ -3843,6 +3846,7 @@ class SocialStore {
         sqlString("external_post_id", input.externalPostId),
         sqlString("post_url", input.postUrl),
         sqlString("post_type", input.postType ?? null),
+        sqlBoolean("is_reply", input.isReply ?? false),
         sqlUuid("campaign_taxonomy_id", input.campaignTaxonomyId ?? null),
         sqlTimestamp("spm_published_at", input.publishedAt ?? null),
         sqlString("exposure", String(Math.max(0, input.exposure))),
@@ -6603,7 +6607,10 @@ class SocialStore {
   async getDbStatsByChannel(input: { from?: Date; to?: Date } = {}): Promise<
     Record<SocialChannel, { rows: number; minDate: Date | null; maxDate: Date | null }>
   > {
-    const conditions = [`ci."sourceType" = CAST('social' AS "public"."SourceType")`];
+    const conditions = [
+      `ci."sourceType" = CAST('social' AS "public"."SourceType")`,
+      `spm."isReply" = FALSE`
+    ];
     const params: SqlParameter[] = [];
 
     if (input.from) {
@@ -6744,6 +6751,7 @@ class SocialStore {
         ) cls ON TRUE
         WHERE
           ci."sourceType" = CAST('social' AS "public"."SourceType")
+          AND spm."isReply" = FALSE
           AND COALESCE(spm."publishedAt", ci."publishedAt", ci."createdAt") >= :from_date
           AND COALESCE(spm."publishedAt", ci."publishedAt", ci."createdAt") < :to_date
           ${channelFilter}
