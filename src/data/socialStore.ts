@@ -4056,7 +4056,7 @@ class SocialStore {
       VALUES
         (CAST(:id AS UUID), CAST(:date AS DATE), :channel, :account_name,
          :story_views, :story_reach, :story_follows, :story_shares,
-         :story_replies, :story_total_actions, CAST(:story_completion_rate AS DECIMAL(5,4)),
+         :story_replies, :story_total_actions, CAST(:story_completion_rate AS DECIMAL(8,4)),
          NOW(), NOW())
       ON CONFLICT ("date", "channel", "accountName") DO UPDATE SET
         "storyViews" = EXCLUDED."storyViews",
