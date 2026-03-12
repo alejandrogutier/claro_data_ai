@@ -1272,7 +1272,7 @@ export const MonitorSocialOverviewPage = () => {
           cursor: accountsCursor
         }),
         client.getMonitorSocialPageMetrics({
-          channels: commonQuery.channels
+          channels: commonQuery.channel as string | undefined
         })
       ]);
       setAccountsData(response);
