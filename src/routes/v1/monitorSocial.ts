@@ -73,7 +73,7 @@ type PatchSocialCommentBody = {
 
 const lambda = new AWS.Lambda({ region: env.awsRegion });
 
-const CHANNELS: SocialChannel[] = ["facebook", "instagram", "linkedin", "tiktok"];
+const CHANNELS: SocialChannel[] = ["facebook", "instagram", "linkedin", "tiktok", "x"];
 const SORTS: SortMode[] = ["published_at_desc", "exposure_desc", "engagement_desc"];
 const ACCOUNT_SORTS: SocialAccountsSortMode[] = ["er_desc", "exposure_desc", "engagement_desc", "posts_desc", "riesgo_desc", "sov_desc", "account_asc"];
 const PRESETS: SocialDatePreset[] = ["all", "y2024", "y2025", "ytd", "90d", "30d", "7d", "last_quarter", "custom"];
@@ -838,6 +838,31 @@ export const getMonitorSocialAccounts = async (event: APIGatewayProxyEventV2) =>
         has_next: response.hasNext
       }
     });
+  } catch (error) {
+    return mapStoreError(error);
+  }
+};
+
+export const getMonitorSocialPageMetrics = async (event: APIGatewayProxyEventV2) => {
+  const featureError = ensureFeatureEnabled();
+  if (featureError) return featureError;
+
+  const store = createSocialStore();
+  if (!store) {
+    return json(500, { error: "misconfigured", message: "Database runtime is not configured" });
+  }
+
+  const qs = event.queryStringParameters ?? {};
+  const channels = parseChannels(qs.channels);
+  if (channels === null) {
+    return json(400, { error: "invalid_channels", message: "Invalid channels filter" });
+  }
+
+  try {
+    const items = await store.getLatestPageMetrics({
+      channels: channels ?? undefined
+    });
+    return json(200, { items });
   } catch (error) {
     return mapStoreError(error);
   }

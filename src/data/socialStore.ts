@@ -22,7 +22,7 @@ const ACTIVE_INCIDENT_STATUSES = ["open", "acknowledged", "in_progress"] as cons
 
 type TriggerType = "scheduled" | "manual";
 type RunStatus = "queued" | "running" | "completed" | "failed";
-type SocialChannel = "facebook" | "instagram" | "linkedin" | "tiktok";
+type SocialChannel = "facebook" | "instagram" | "linkedin" | "tiktok" | "x";
 type SocialDatePreset = "all" | "y2024" | "y2025" | "ytd" | "90d" | "30d" | "7d" | "last_quarter" | "custom";
 type SocialTrendGranularity = "auto" | "day" | "week" | "month";
 type SortMode = "published_at_desc" | "exposure_desc" | "engagement_desc";
@@ -40,7 +40,7 @@ type SocialScatterDimension = "post_type" | "channel" | "account" | "campaign" |
 type SocialTopicBreakdownDimension = "post_type" | "channel" | "account" | "campaign" | "strategy" | "hashtag";
 type SocialErBreakdownDimension = "hashtag" | "word" | "post_type" | "publish_frequency" | "weekday";
 type ReconciliationStatus = "ok" | "warning" | "error" | "unknown";
-type SocialPhase = "ingest" | "classify" | "aggregate" | "reconcile" | "alerts";
+type SocialPhase = "ingest" | "ingest_comments" | "ingest_pages" | "classify" | "aggregate" | "reconcile" | "alerts";
 type SocialPhaseState = "pending" | "running" | "completed" | "failed" | "skipped";
 type IncidentSeverity = "SEV1" | "SEV2" | "SEV3" | "SEV4";
 type IncidentStatus = "open" | "acknowledged" | "in_progress" | "resolved" | "dismissed";
@@ -247,6 +247,35 @@ type SocialPostCommentUpsertInput = {
   needsReview?: boolean;
   confidence?: number | null;
   rawPayload?: Record<string, unknown>;
+};
+
+type DataslayerCommentUpsertInput = {
+  socialPostMetricId: string;
+  channel: SocialChannel;
+  parentExternalPostId: string;
+  dataslayerHash: string;
+  authorName?: string | null;
+  publishedAt?: Date | null;
+  text?: string | null;
+};
+
+type PageDailyMetricUpsertInput = {
+  date: Date;
+  channel: SocialChannel;
+  accountName: string;
+  followers: number;
+  newFollowers: number;
+  unfollows: number;
+  pageReach: number;
+  pageViews: number;
+  postReach?: number | null;
+  profileVisits?: number | null;
+  desktopViews?: number | null;
+  mobileViews?: number | null;
+  engagements?: number | null;
+  engagementRate?: number | null;
+  profileLikes?: number | null;
+  videoCount?: number | null;
 };
 
 type AwarioMentionFeedItemUpsertInput = {
@@ -1109,15 +1138,53 @@ const extractHashtagsFromText = (value: string): string[] =>
 const normalizeAccountToken = (value: string): string =>
   value
     .trim()
-    .normalize("NFKC")
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
     .toLocaleLowerCase("es-CO")
     .replace(/^@+/u, "")
-    .replace(/\s+/g, " ");
+    .replace(/[^\p{L}\p{N}\s]+/gu, " ")
+    .replace(/\s+/g, " ")
+    .trim();
 
 const CANONICAL_ACCOUNT_GROUPS: Array<{ canonical: string; aliases: string[] }> = [
   { canonical: "Claro Colombia", aliases: ["Claro Colombia", "clarocolombia"] },
-  { canonical: "Claro Empresas", aliases: ["Claro Empresas", "claroempresasco"] }
+  {
+    canonical: "Claro Empresas",
+    aliases: ["Claro Empresas", "Claro Empresas Co", "claro empresas co", "claroempresasco", "claroempresas"]
+  },
+  {
+    canonical: "Claro música",
+    aliases: ["Claro música", "Claro musica", "claro musica", "claromusica", "ClaroMusicaCo", "claro musica co", "claromusicaco"]
+  },
+  {
+    canonical: "Claro Gaming",
+    aliases: ["Claro Gaming", "ClaroGamingCo", "claro gaming", "clarogaming", "clarogamingco"]
+  }
 ];
+
+const ACCOUNT_SQL_NORMALIZED_EXPR = `LOWER(
+  BTRIM(
+    REGEXP_REPLACE(
+      REGEXP_REPLACE(
+        REGEXP_REPLACE(
+          TRANSLATE(
+            COALESCE(spm."accountName", ''),
+            'ÁÀÂÄÃáàâäãÉÈÊËéèêëÍÌÎÏíìîïÓÒÔÖÕóòôöõÚÙÛÜúùûüÑñÇç',
+            'AAAAAaaaaaEEEEeeeeIIIIiiiiOOOOOoooooUUUUuuuuNnCc'
+          ),
+          '^@+',
+          ''
+        ),
+        '[^[:alnum:][:space:]]+',
+        ' ',
+        'g'
+      ),
+      '[[:space:]]+',
+      ' ',
+      'g'
+    )
+  )
+)`;
 
 const ACCOUNT_CANONICAL_BY_KEY = new Map<string, string>();
 const ACCOUNT_GROUP_TOKENS_BY_KEY = new Map<string, string[]>();
@@ -1179,10 +1246,12 @@ const clamp = (value: number, min: number, max: number): number => {
 
 const roundMetric = (value: number): number => Math.round(value * 100) / 100;
 
-const SOCIAL_PHASES: SocialPhase[] = ["ingest", "classify", "aggregate", "reconcile", "alerts"];
+const SOCIAL_PHASES: SocialPhase[] = ["ingest", "ingest_comments", "ingest_pages", "classify", "aggregate", "reconcile", "alerts"];
 
 const buildDefaultPhaseStatus = (): SocialPhaseStatusRecord => ({
   ingest: { status: "pending" },
+  ingest_comments: { status: "pending" },
+  ingest_pages: { status: "pending" },
   classify: { status: "pending" },
   aggregate: { status: "pending" },
   reconcile: { status: "pending" },
@@ -1253,17 +1322,6 @@ const calculateRiesgoActivo = (negativos: number, classifiedItems: number): numb
 const calculateErGlobal = (engagementTotal: number, exposureTotal: number): number =>
   (engagementTotal / Math.max(exposureTotal, 1)) * 100;
 
-const calculateDenomCtr = (input: { impressions: number; reach: number; exposure: number }): number => {
-  if (input.impressions > 0) return input.impressions;
-  if (input.reach > 0) return input.reach;
-  return input.exposure;
-};
-
-const calculateDenomReach = (input: { reach: number; exposure: number }): number => {
-  if (input.reach > 0) return input.reach;
-  return input.exposure;
-};
-
 const calculateDerivedMetrics = (input: {
   exposure: number;
   engagementTotal: number;
@@ -1275,14 +1333,14 @@ const calculateDerivedMetrics = (input: {
   shares: number;
   views: number;
 }): SocialDerivedMetrics => {
-  const denomCtr = calculateDenomCtr({ impressions: input.impressions, reach: input.reach, exposure: input.exposure });
-  const denomReach = calculateDenomReach({ reach: input.reach, exposure: input.exposure });
+  const denomImpressions = input.impressions > 0 ? input.impressions : 0;
+  const denomReach = input.reach > 0 ? input.reach : 0;
   const interactionBase = input.likes + input.comments + input.shares;
 
   return {
-    ctr: (input.clicks / Math.max(denomCtr, 1)) * 100,
-    erImpressions: (input.engagementTotal / Math.max(denomCtr, 1)) * 100,
-    erReach: (input.engagementTotal / Math.max(denomReach, 1)) * 100,
+    ctr: denomImpressions > 0 ? (input.clicks / denomImpressions) * 100 : 0,
+    erImpressions: denomImpressions > 0 ? (input.engagementTotal / denomImpressions) * 100 : 0,
+    erReach: denomReach > 0 ? (input.engagementTotal / denomReach) * 100 : 0,
     viewRate: (input.views / Math.max(input.exposure, 1)) * 100,
     likesShare: (input.likes / Math.max(interactionBase, 1)) * 100,
     commentsShare: (input.comments / Math.max(interactionBase, 1)) * 100,
@@ -1515,7 +1573,7 @@ const parseErTargetRow = (row: SqlRow | undefined): SocialErTargetRecord | null 
   const year = fieldLong(row, 1);
   const channelRaw = fieldString(row, 2);
   const channel =
-    channelRaw === "facebook" || channelRaw === "instagram" || channelRaw === "linkedin" || channelRaw === "tiktok"
+    channelRaw === "facebook" || channelRaw === "instagram" || channelRaw === "linkedin" || channelRaw === "tiktok" || channelRaw === "x"
       ? channelRaw
       : null;
   const baselineEr = parseDecimal(fieldString(row, 3), 0);
@@ -1552,7 +1610,7 @@ const parseReconciliationSnapshotRow = (row: SqlRow | undefined): SocialReconcil
   const runId = fieldString(row, 1);
   const channelRaw = fieldString(row, 2);
   const channel =
-    channelRaw === "facebook" || channelRaw === "instagram" || channelRaw === "linkedin" || channelRaw === "tiktok"
+    channelRaw === "facebook" || channelRaw === "instagram" || channelRaw === "linkedin" || channelRaw === "tiktok" || channelRaw === "x"
       ? channelRaw
       : null;
   const s3Rows = parseDecimal(fieldString(row, 3), 0);
@@ -2242,7 +2300,7 @@ const toBogotaWeekday = (value: Date): number => {
   return raw === 0 ? 7 : raw;
 };
 
-const SOCIAL_CHANNELS: SocialChannel[] = ["facebook", "instagram", "linkedin", "tiktok"];
+const SOCIAL_CHANNELS: SocialChannel[] = ["facebook", "instagram", "linkedin", "tiktok", "x"];
 
 const addDays = (value: Date, days: number): Date => new Date(value.getTime() + days * 86_400_000);
 
@@ -2656,9 +2714,7 @@ class SocialStore {
 
     if (accountValues.length > 0) {
       const placeholders = accountValues.map((_, index) => `:account_name_${index}`);
-      conditions.push(
-        `LOWER(REGEXP_REPLACE(REGEXP_REPLACE(TRIM(COALESCE(spm."accountName", '')), '^@+', ''), '\\s+', ' ', 'g')) IN (${placeholders.join(", ")})`
-      );
+      conditions.push(`${ACCOUNT_SQL_NORMALIZED_EXPR} IN (${placeholders.join(", ")})`);
       for (const [index, value] of accountValues.entries()) {
         params.push(sqlString(`account_name_${index}`, value));
       }
@@ -4114,6 +4170,159 @@ class SocialStore {
     );
 
     return { status: "persisted", id };
+  }
+
+  async findSocialPostMetricByExternalId(
+    channel: SocialChannel,
+    externalPostId: string
+  ): Promise<{ socialPostMetricId: string; contentItemId: string } | null> {
+    const res = await this.rds.execute(
+      `
+        SELECT spm."id"::text, spm."contentItemId"::text
+        FROM "public"."SocialPostMetric" spm
+        WHERE spm."channel" = :channel AND spm."externalPostId" = :external_post_id
+        LIMIT 1
+      `,
+      [sqlString("channel", channel), sqlString("external_post_id", externalPostId)]
+    );
+    const id = fieldString(res.records?.[0], 0);
+    const contentItemId = fieldString(res.records?.[0], 1);
+    if (!id || !contentItemId) return null;
+    return { socialPostMetricId: id, contentItemId };
+  }
+
+  async upsertDataslayerComment(
+    input: DataslayerCommentUpsertInput
+  ): Promise<{ status: "persisted" | "deduped"; id: string }> {
+    if (!isUuid(input.socialPostMetricId)) {
+      throw new AppStoreError("validation", "Invalid social post metric id");
+    }
+    if (!input.dataslayerHash?.trim()) {
+      throw new AppStoreError("validation", "dataslayerHash is required");
+    }
+
+    const existingRes = await this.rds.execute(
+      `
+        SELECT "id"::text
+        FROM "public"."SocialPostComment"
+        WHERE "dataslayerHash" = :dataslayer_hash
+        LIMIT 1
+      `,
+      [sqlString("dataslayer_hash", input.dataslayerHash.trim())]
+    );
+    const existingId = fieldString(existingRes.records?.[0], 0);
+    if (existingId) {
+      return { status: "deduped", id: existingId };
+    }
+
+    const id = randomUUID();
+    await this.rds.execute(
+      `
+        INSERT INTO "public"."SocialPostComment"
+          (
+            "id",
+            "socialPostMetricId",
+            "dataslayerHash",
+            "channel",
+            "parentExternalPostId",
+            "authorName",
+            "publishedAt",
+            "text",
+            "sentiment",
+            "sentimentSource",
+            "isSpam",
+            "relatedToPostText",
+            "needsReview",
+            "createdAt",
+            "updatedAt"
+          )
+        VALUES
+          (
+            CAST(:id AS UUID),
+            CAST(:social_post_metric_id AS UUID),
+            :dataslayer_hash,
+            :channel,
+            :parent_external_post_id,
+            :author_name,
+            :published_at,
+            :text,
+            'unknown',
+            'dataslayer',
+            false,
+            false,
+            false,
+            NOW(),
+            NOW()
+          )
+      `,
+      [
+        sqlUuid("id", id),
+        sqlUuid("social_post_metric_id", input.socialPostMetricId),
+        sqlString("dataslayer_hash", input.dataslayerHash.trim()),
+        sqlString("channel", input.channel),
+        sqlString("parent_external_post_id", input.parentExternalPostId),
+        sqlString("author_name", input.authorName ?? null),
+        sqlTimestamp("published_at", input.publishedAt ?? null),
+        sqlString("text", input.text ?? null)
+      ]
+    );
+
+    return { status: "persisted", id };
+  }
+
+  async upsertPageDailyMetric(input: PageDailyMetricUpsertInput): Promise<{ status: "persisted" | "updated" }> {
+    const id = randomUUID();
+    await this.rds.execute(
+      `
+        INSERT INTO "public"."SocialPageDailyMetric"
+          ("id", "date", "channel", "accountName", "followers", "newFollowers", "unfollows",
+           "pageReach", "pageViews", "postReach", "profileVisits",
+           "desktopViews", "mobileViews", "engagements", "engagementRate",
+           "profileLikes", "videoCount", "createdAt", "updatedAt")
+        VALUES
+          (CAST(:id AS UUID), CAST(:date AS DATE), :channel, :account_name,
+           :followers, :new_followers, :unfollows, :page_reach, :page_views,
+           CAST(:post_reach AS INTEGER), CAST(:profile_visits AS INTEGER),
+           CAST(:desktop_views AS INTEGER), CAST(:mobile_views AS INTEGER),
+           CAST(:engagements AS INTEGER), CAST(:engagement_rate AS DECIMAL(9,4)),
+           CAST(:profile_likes AS INTEGER), CAST(:video_count AS INTEGER), NOW(), NOW())
+        ON CONFLICT ("date", "channel", "accountName") DO UPDATE SET
+          "followers" = EXCLUDED."followers",
+          "newFollowers" = EXCLUDED."newFollowers",
+          "unfollows" = EXCLUDED."unfollows",
+          "pageReach" = EXCLUDED."pageReach",
+          "pageViews" = EXCLUDED."pageViews",
+          "postReach" = COALESCE(EXCLUDED."postReach", "SocialPageDailyMetric"."postReach"),
+          "profileVisits" = COALESCE(EXCLUDED."profileVisits", "SocialPageDailyMetric"."profileVisits"),
+          "desktopViews" = COALESCE(EXCLUDED."desktopViews", "SocialPageDailyMetric"."desktopViews"),
+          "mobileViews" = COALESCE(EXCLUDED."mobileViews", "SocialPageDailyMetric"."mobileViews"),
+          "engagements" = COALESCE(EXCLUDED."engagements", "SocialPageDailyMetric"."engagements"),
+          "engagementRate" = COALESCE(EXCLUDED."engagementRate", "SocialPageDailyMetric"."engagementRate"),
+          "profileLikes" = COALESCE(EXCLUDED."profileLikes", "SocialPageDailyMetric"."profileLikes"),
+          "videoCount" = COALESCE(EXCLUDED."videoCount", "SocialPageDailyMetric"."videoCount"),
+          "updatedAt" = NOW()
+      `,
+      [
+        sqlUuid("id", id),
+        sqlTimestamp("date", input.date),
+        sqlString("channel", input.channel),
+        sqlString("account_name", input.accountName),
+        sqlLong("followers", input.followers),
+        sqlLong("new_followers", input.newFollowers),
+        sqlLong("unfollows", input.unfollows),
+        sqlLong("page_reach", input.pageReach),
+        sqlLong("page_views", input.pageViews),
+        sqlString("post_reach", input.postReach == null ? null : String(Math.floor(input.postReach))),
+        sqlString("profile_visits", input.profileVisits == null ? null : String(Math.floor(input.profileVisits))),
+        sqlString("desktop_views", input.desktopViews == null ? null : String(Math.floor(input.desktopViews))),
+        sqlString("mobile_views", input.mobileViews == null ? null : String(Math.floor(input.mobileViews))),
+        sqlString("engagements", input.engagements == null ? null : String(Math.floor(input.engagements))),
+        sqlString("engagement_rate", input.engagementRate == null ? null : String(input.engagementRate)),
+        sqlString("profile_likes", input.profileLikes == null ? null : String(Math.floor(input.profileLikes))),
+        sqlString("video_count", input.videoCount == null ? null : String(Math.floor(input.videoCount)))
+      ]
+    );
+    return { status: "persisted" };
   }
 
   async upsertAwarioMentionFeedItem(
@@ -6052,7 +6261,8 @@ class SocialStore {
       facebook: { rows: 0, minDate: null, maxDate: null },
       instagram: { rows: 0, minDate: null, maxDate: null },
       linkedin: { rows: 0, minDate: null, maxDate: null },
-      tiktok: { rows: 0, minDate: null, maxDate: null }
+      tiktok: { rows: 0, minDate: null, maxDate: null },
+      x: { rows: 0, minDate: null, maxDate: null }
     };
 
     for (const row of response.records ?? []) {
@@ -6065,6 +6275,66 @@ class SocialStore {
       };
     }
     return seed;
+  }
+
+  async getLatestPageMetrics(input: {
+    channels?: SocialChannel[];
+    from?: Date;
+    to?: Date;
+  }): Promise<Array<{
+    channel: string;
+    accountName: string;
+    latestDate: Date;
+    followers: number;
+    newFollowers: number;
+    pageReach: number;
+    pageViews: number;
+  }>> {
+    const conditions = ["1=1"];
+    const params: SqlParameter[] = [];
+
+    if (input.channels && input.channels.length > 0) {
+      const placeholders = input.channels.map((_, i) => `:ch_${i}`);
+      conditions.push(`"channel" IN (${placeholders.join(", ")})`);
+      for (const [i, ch] of input.channels.entries()) {
+        params.push(sqlString(`ch_${i}`, ch));
+      }
+    }
+    if (input.from) {
+      conditions.push(`"date" >= CAST(:from_date AS DATE)`);
+      params.push(sqlTimestamp("from_date", input.from));
+    }
+    if (input.to) {
+      conditions.push(`"date" <= CAST(:to_date AS DATE)`);
+      params.push(sqlTimestamp("to_date", input.to));
+    }
+
+    const response = await this.rds.execute(
+      `
+        SELECT DISTINCT ON ("channel", "accountName")
+          "channel",
+          "accountName",
+          "date"::text,
+          "followers",
+          "newFollowers",
+          "pageReach",
+          "pageViews"
+        FROM "public"."SocialPageDailyMetric"
+        WHERE ${conditions.join(" AND ")}
+        ORDER BY "channel", "accountName", "date" DESC
+      `,
+      params
+    );
+
+    return (response.records ?? []).map((row) => ({
+      channel: fieldString(row, 0) ?? "",
+      accountName: fieldString(row, 1) ?? "",
+      latestDate: fieldDate(row, 2) ?? new Date(),
+      followers: fieldLong(row, 3) ?? 0,
+      newFollowers: fieldLong(row, 4) ?? 0,
+      pageReach: fieldLong(row, 5) ?? 0,
+      pageViews: fieldLong(row, 6) ?? 0
+    }));
   }
 
   async rebuildAccountDailyAggregates(input: { from: Date; to: Date; channels?: SocialChannel[] }): Promise<number> {
@@ -6316,6 +6586,8 @@ export type {
   SocialPostsPage,
   AwarioMentionFeedItemUpsertInput,
   SocialPostCommentUpsertInput,
+  DataslayerCommentUpsertInput,
+  PageDailyMetricUpsertInput,
   SocialPostUpsertInput,
   SocialRiskRecord,
   SocialRunsPage,

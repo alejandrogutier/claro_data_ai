@@ -1,8 +1,10 @@
+import { createHash } from "crypto";
 import AWS from "aws-sdk";
 import { env } from "../config/env";
 import {
   createSocialStore,
   type SocialChannel,
+  type SocialPhase,
   type SocialReconciliationSnapshotInput,
   type TriggerType
 } from "../data/socialStore";
@@ -80,13 +82,14 @@ type ChannelS3Stats = {
   maxDate: Date | null;
 };
 
-const CHANNELS: SocialChannel[] = ["facebook", "instagram", "linkedin", "tiktok"];
+const CHANNELS: SocialChannel[] = ["facebook", "instagram", "linkedin", "tiktok", "x"];
 
 const buildEmptyChannelStats = (): Record<SocialChannel, ChannelS3Stats> => ({
   facebook: { rows: 0, minDate: null, maxDate: null },
   instagram: { rows: 0, minDate: null, maxDate: null },
   linkedin: { rows: 0, minDate: null, maxDate: null },
-  tiktok: { rows: 0, minDate: null, maxDate: null }
+  tiktok: { rows: 0, minDate: null, maxDate: null },
+  x: { rows: 0, minDate: null, maxDate: null }
 });
 
 const sleep = async (ms: number): Promise<void> =>
@@ -350,32 +353,124 @@ const parseCsv = (content: string): CsvRecord[] => {
   return records;
 };
 
+const parseSemicolonCsv = (content: string): CsvRecord[] => {
+  const lines = content.split("\n").filter((line) => line.trim().length > 0);
+  if (lines.length === 0) return [];
+  const header = (lines[0] ?? "").split(";").map((item) => item.trim());
+  const records: CsvRecord[] = [];
+  for (const line of lines.slice(1)) {
+    const fields = line.split(";");
+    if (fields.every((item) => !item.trim())) continue;
+    const record: CsvRecord = {};
+    for (let i = 0; i < header.length; i += 1) {
+      const key = header[i] ?? `column_${i}`;
+      record[key] = fields[i]?.trim() ?? "";
+    }
+    records.push(record);
+  }
+  return records;
+};
+
 const detectChannelFromKey = (key: string): SocialChannel | null => {
   if (key.includes("/fb/")) return "facebook";
   if (key.includes("/ig/")) return "instagram";
   if (key.includes("/lk/")) return "linkedin";
   if (key.includes("/tiktok/")) return "tiktok";
+  if (key.includes("/x/")) return "x";
   return null;
 };
 
-const normalizeRow = (channel: SocialChannel, row: CsvRecord, rowIndex: number, objectKey: string): NormalizedSocialRow | null => {
+type DataslayerFileType = "post" | "post_legacy" | "comments" | "page" | "reels" | "storie" | "text";
+
+const detectFileType = (key: string): DataslayerFileType => {
+  if (key.includes("/comments/")) return "comments";
+  if (key.includes("/page/")) return "page";
+  if (key.includes("/reels/")) return "reels";
+  if (key.includes("/storie/")) return "storie";
+  if (key.includes("/text/")) return "text";
+  if (key.includes("/post/")) return "post";
+  return "post_legacy";
+};
+
+const isPostFile = (fileType: DataslayerFileType): boolean =>
+  fileType === "post" || fileType === "post_legacy" || fileType === "reels";
+
+const X_ACCOUNT_NORMALIZATION: Record<string, string> = {
+  ClaroColombiaOficial: "Claro Colombia",
+  "Clarovideo Colombia": "Claro Video",
+  "Claro Musica - AdBid": "Claro Musica CO",
+  "K Music": "Claro Musica CO"
+};
+
+const normalizeRow = (
+  channel: SocialChannel,
+  row: CsvRecord,
+  rowIndex: number,
+  objectKey: string,
+  fileType: DataslayerFileType,
+  tweetTextLookup?: Map<string, string>
+): NormalizedSocialRow | null => {
   if (channel === "facebook") {
+    if (fileType === "reels") {
+      const externalPostId = row["Post ID"]?.trim();
+      const accountName = row["Page name"]?.trim();
+      if (!externalPostId || !accountName) return null;
+      const postUrl = normalizeUrl(row["Link to post"], `social://facebook/${externalPostId}`);
+      const reach = toNumber(row["Total reach"]);
+      const impressions = toNumber(row["Reels Unique Impressions"]) || toNumber(row["Total impressions"]);
+      const views = toNumber(row["Reels play count"]);
+      const exposure = reach > 0 ? reach : views;
+      const likes = toNumber(row["Reels likes"]);
+      const comments = toNumber(row["Reels Comments"]);
+      const shares = toNumber(row["Reels Shares"]);
+      const engagementTotal = likes + comments + shares;
+
+      return {
+        channel,
+        accountName,
+        externalPostId,
+        postUrl,
+        postType: "reel",
+        publishedAt: toDate(row["Date"]),
+        text: null,
+        imageUrl: null,
+        exposure,
+        engagementTotal,
+        impressions,
+        reach,
+        clicks: 0,
+        likes,
+        comments,
+        shares,
+        views,
+        diagnostics: {
+          object_key: objectKey,
+          row_index: rowIndex + 1,
+          file_type: "reels"
+        },
+        hashtags: []
+      };
+    }
+
     const externalPostId = row["Post ID"]?.trim();
     const accountName = row["Page name"]?.trim();
     if (!externalPostId || !accountName) return null;
-    const text = normalizeText(row["Post message"] ?? row["Post description"] ?? row["Post name"]);
+
+    const isNewFormat = "Total reach" in row || "Today" in row;
+    const text = isNewFormat ? null : normalizeText(row["Post message"] ?? row["Post description"] ?? row["Post name"]);
     const hashtags = mergeHashtags(extractHashtags(text), extractHashtagsFromColumns(row));
     const postUrl = normalizeUrl(row["Link to post"], `social://facebook/${externalPostId}`);
-    const reach = toNumber(row["Organic post reach"]);
-    const impressions = toNumber(row["Organic impressions"]);
+
+    const reach = isNewFormat ? toNumber(row["Total reach"]) : toNumber(row["Organic post reach"]);
+    const impressions = isNewFormat ? toNumber(row["Total impressions"]) : toNumber(row["Organic impressions"]);
     const exposure = reach > 0 ? reach : impressions;
     const likes = toNumber(row["Post likes"]);
     const comments = toNumber(row["Post comments"]);
     const shares = toNumber(row["Post shares"]);
-    const clicks = toNumber(row["Clicks"]) + toNumber(row["Post link clicks"]) + toNumber(row["Post other clicks"]);
-    const views = toNumber(row["Organic video views"]) + toNumber(row["Post video plays"]) + toNumber(row["Total video views"]);
-    const engagementTotalRaw = toNumber(row["Post engagements"]);
-    const engagementTotal = engagementTotalRaw > 0 ? engagementTotalRaw : likes + comments + shares;
+    const clicks = isNewFormat ? 0 : toNumber(row["Clicks"]) + toNumber(row["Post link clicks"]) + toNumber(row["Post other clicks"]);
+    const views = isNewFormat ? 0 : toNumber(row["Organic video views"]) + toNumber(row["Post video plays"]) + toNumber(row["Total video views"]);
+    const engagementSourceTotal = isNewFormat ? toNumber(row["Total post reactions"]) : toNumber(row["Post engagements"]);
+    const engagementTotal = likes + comments + shares;
 
     return {
       channel,
@@ -385,7 +480,7 @@ const normalizeRow = (channel: SocialChannel, row: CsvRecord, rowIndex: number, 
       postType: normalizeText(row["Post type"], 120),
       publishedAt: toDate(row["Date"]),
       text,
-      imageUrl: normalizeText(row["Post image URL"], 2048),
+      imageUrl: isNewFormat ? null : normalizeText(row["Post image URL"], 2048),
       exposure,
       engagementTotal,
       impressions,
@@ -395,27 +490,35 @@ const normalizeRow = (channel: SocialChannel, row: CsvRecord, rowIndex: number, 
       comments,
       shares,
       views,
-      diagnostics: { object_key: objectKey, row_index: rowIndex + 1 },
+      diagnostics: {
+        object_key: objectKey,
+        row_index: rowIndex + 1,
+        engagement_source_total: engagementSourceTotal,
+        engagement_source_field: isNewFormat ? "Total post reactions" : "Post engagements",
+        format: isNewFormat ? "new" : "legacy"
+      },
       hashtags
     };
   }
 
   if (channel === "instagram") {
     const externalPostId = row["Media ID"]?.trim();
-    const accountName = row["Username"]?.trim();
+    const accountName = (row["Username"] ?? row["Name"])?.trim();
     if (!externalPostId || !accountName) return null;
-    const text = normalizeText(row["Media caption"]);
+
+    const isNewFormat = "Today" in row || "Media unique saves" in row;
+    const text = isNewFormat ? null : normalizeText(row["Media caption"]);
     const hashtags = mergeHashtags(extractHashtags(text), extractHashtagsFromColumns(row));
     const postUrl = normalizeUrl(row["Media permalink"] ?? row["Media URL"], `social://instagram/${externalPostId}`);
     const reach = toNumber(row["Media reach"]);
-    const views = toNumber(row["Media views"]);
+    const views = Math.max(toNumber(row["Media views"]), toNumber(row["Reel views"]));
     const exposure = reach > 0 ? reach : views;
     const likes = toNumber(row["Media likes"]);
     const comments = toNumber(row["Media comments"]);
     const shares = toNumber(row["Media shares"]);
-    const clicks = toNumber(row["Media profile visits"]);
-    const engagementTotalRaw = toNumber(row["Media total interactions"]);
-    const engagementTotal = engagementTotalRaw > 0 ? engagementTotalRaw : likes + comments + shares;
+    const clicks = isNewFormat ? 0 : toNumber(row["Media profile visits"]);
+    const engagementSourceTotal = toNumber(row["Media total interactions"]);
+    const engagementTotal = likes + comments + shares;
 
     return {
       channel,
@@ -435,7 +538,13 @@ const normalizeRow = (channel: SocialChannel, row: CsvRecord, rowIndex: number, 
       comments,
       shares,
       views,
-      diagnostics: { object_key: objectKey, row_index: rowIndex + 1 },
+      diagnostics: {
+        object_key: objectKey,
+        row_index: rowIndex + 1,
+        engagement_source_total: engagementSourceTotal,
+        engagement_source_field: "Media total interactions",
+        format: isNewFormat ? "new" : "legacy"
+      },
       hashtags
     };
   }
@@ -453,8 +562,8 @@ const normalizeRow = (channel: SocialChannel, row: CsvRecord, rowIndex: number, 
     const shares = toNumber(row["Total shares"]);
     const clicks = toNumber(row["Total clicks"]);
     const views = toNumber(row["Total video views"]);
-    const engagementTotalRaw = toNumber(row["Total engagements"]);
-    const engagementTotal = engagementTotalRaw > 0 ? engagementTotalRaw : likes + comments + shares;
+    const engagementSourceTotal = toNumber(row["Total engagements"]);
+    const engagementTotal = likes + comments + shares;
 
     return {
       channel,
@@ -474,23 +583,77 @@ const normalizeRow = (channel: SocialChannel, row: CsvRecord, rowIndex: number, 
       comments,
       shares,
       views,
-      diagnostics: { object_key: objectKey, row_index: rowIndex + 1 },
+      diagnostics: {
+        object_key: objectKey,
+        row_index: rowIndex + 1,
+        engagement_source_total: engagementSourceTotal,
+        engagement_source_field: "Total engagements"
+      },
       hashtags
     };
   }
 
+  if (channel === "x") {
+    const externalPostId = row["Tweet ID"]?.trim();
+    let accountName = row["Account name"]?.trim() ?? row["Profile name"]?.trim();
+    if (!externalPostId || !accountName) return null;
+    accountName = X_ACCOUNT_NORMALIZATION[accountName] ?? accountName;
+    const tweetText = tweetTextLookup?.get(externalPostId) ?? null;
+    const text = normalizeText(row["Tweet text"] ?? tweetText);
+    const hashtags = mergeHashtags(extractHashtags(text), extractHashtagsFromColumns(row));
+    const postUrl = normalizeUrl(row["Tweet URL"], `social://x/${externalPostId}`);
+    const impressions = toNumber(row["Impressions"]);
+    const likes = toNumber(row["Likes"]) || toNumber(row["Total likes"]);
+    const comments = toNumber(row["Replies"]);
+    const shares = toNumber(row["Retweets"]) || toNumber(row["Total retweets"]);
+    const clicks = toNumber(row["Clicks"]) + toNumber(row["URL clicks"]);
+    const views = toNumber(row["Video total views"]);
+    const engagementSourceTotal = toNumber(row["Engagements"]);
+    const engagementTotal = likes + comments + shares;
+
+    return {
+      channel,
+      accountName,
+      externalPostId,
+      postUrl,
+      postType: "tweet",
+      publishedAt: toDate(row["Tweet creation date"] ?? row["Date"]),
+      text,
+      imageUrl: null,
+      exposure: impressions,
+      engagementTotal,
+      impressions,
+      reach: 0,
+      clicks,
+      likes,
+      comments,
+      shares,
+      views,
+      diagnostics: {
+        object_key: objectKey,
+        row_index: rowIndex + 1,
+        engagement_source_total: engagementSourceTotal,
+        engagement_source_field: "Engagements",
+        format: fileType === "post" ? "new" : "legacy"
+      },
+      hashtags
+    };
+  }
+
+  // tiktok (default)
   const externalPostId = row["Video ID"]?.trim();
   const accountName = row["Account nickname"]?.trim();
   if (!externalPostId || !accountName) return null;
-  const text = normalizeText(row["Title"]);
+  const isNewFormat = "Date today" in row && !("Title" in row);
+  const text = isNewFormat ? null : normalizeText(row["Title"]);
   const hashtags = mergeHashtags(extractHashtags(text), extractHashtagsFromColumns(row));
   const postUrl = normalizeUrl(row["Share URL"], `social://tiktok/${externalPostId}`);
   const views = toNumber(row["Video Views"]);
   const likes = toNumber(row["Likes"]);
   const comments = toNumber(row["Comments"]);
   const shares = toNumber(row["Shares"]);
-  const engagementTotalRaw = toNumber(row["Total Engagement"]);
-  const engagementTotal = engagementTotalRaw > 0 ? engagementTotalRaw : likes + comments + shares;
+  const engagementSourceTotal = toNumber(row["Total Engagement"]);
+  const engagementTotal = likes + comments + shares;
 
   return {
     channel,
@@ -510,7 +673,13 @@ const normalizeRow = (channel: SocialChannel, row: CsvRecord, rowIndex: number, 
     comments,
     shares,
     views,
-    diagnostics: { object_key: objectKey, row_index: rowIndex + 1 },
+    diagnostics: {
+      object_key: objectKey,
+      row_index: rowIndex + 1,
+      engagement_source_total: engagementSourceTotal,
+      engagement_source_field: "Total Engagement",
+      format: isNewFormat ? "new" : "legacy"
+    },
     hashtags
   };
 };
@@ -669,6 +838,19 @@ export const runSocialSync = async (input: SocialSyncInput): Promise<SocialSyncO
     const channelStats = buildEmptyChannelStats();
     const touchedChannels = new Set<SocialChannel>();
 
+    // Pre-load X tweet text lookup from text/ file
+    const tweetTextLookup = new Map<string, string>();
+    const textObjects = objects.filter((o) => o.key.includes("/x/") && detectFileType(o.key) === "text" && o.size > 0);
+    for (const textObj of textObjects) {
+      const textBody = await fetchObjectBody(bucket, textObj.key);
+      const textRows = parseCsv(textBody);
+      for (const tr of textRows) {
+        const tweetId = tr["Tweet ID"]?.trim();
+        const tweetText = tr["Tweet text"]?.trim();
+        if (tweetId && tweetText) tweetTextLookup.set(tweetId, tweetText);
+      }
+    }
+
     for (const object of objects) {
       if (object.key !== object.key.trim()) {
         anomalousObjectKeys += 1;
@@ -676,6 +858,14 @@ export const runSocialSync = async (input: SocialSyncInput): Promise<SocialSyncO
 
       const channel = detectChannelFromKey(object.key);
       if (!channel || object.size <= 0) {
+        objectsSkipped += 1;
+        continue;
+      }
+
+      const fileType = detectFileType(object.key);
+
+      // Only process post files in the ingest phase; comments/page/storie/text handled separately
+      if (!isPostFile(fileType)) {
         objectsSkipped += 1;
         continue;
       }
@@ -699,7 +889,7 @@ export const runSocialSync = async (input: SocialSyncInput): Promise<SocialSyncO
 
       for (let idx = 0; idx < csvRows.length; idx += 1) {
         const row = csvRows[idx] ?? {};
-        const normalized = normalizeRow(channel, row, idx, object.key);
+        const normalized = normalizeRow(channel, row, idx, object.key, fileType, tweetTextLookup);
         if (!normalized) {
           malformedRows += 1;
           continue;
@@ -790,6 +980,236 @@ export const runSocialSync = async (input: SocialSyncInput): Promise<SocialSyncO
         objects_discovered: objectsDiscovered,
         objects_processed: objectsProcessed,
         objects_skipped: objectsSkipped
+      },
+      metrics: phaseMetrics()
+    });
+
+    // --- Ingest Dataslayer comments ---
+    await store.updateSyncRunPhase({
+      runId: run.id,
+      phase: "ingest_comments",
+      state: "running",
+      metrics: phaseMetrics()
+    });
+
+    let commentsIngested = 0;
+    let commentsDeduped = 0;
+    let commentsOrphaned = 0;
+
+    const commentObjects = objects.filter((o) => detectFileType(o.key) === "comments" && o.size > 0);
+    for (const commentObj of commentObjects) {
+      const commentChannel = detectChannelFromKey(commentObj.key);
+      if (!commentChannel) continue;
+
+      const alreadyProcessedComment =
+        !input.force &&
+        (await store.isObjectProcessed({
+          bucket,
+          objectKey: commentObj.key,
+          eTag: commentObj.eTag,
+          lastModified: commentObj.lastModified
+        }));
+      if (alreadyProcessedComment) continue;
+
+      const commentBody = await fetchObjectBody(bucket, commentObj.key);
+
+      // LinkedIn comments: semicolon-delimited, Latin-1 (already re-encoded to UTF-8 by S3)
+      const isLkSemicolon = commentChannel === "linkedin" && commentBody.includes(";Cuenta;");
+      const commentRows = isLkSemicolon ? parseSemicolonCsv(commentBody) : parseCsv(commentBody);
+
+      for (const crow of commentRows) {
+        let parentPostId: string | null = null;
+        let commentText: string | null = null;
+        let commentDate: Date | null = null;
+        let authorName: string | null = null;
+
+        if (commentChannel === "facebook") {
+          parentPostId = crow["Post ID"]?.trim() ?? null;
+          commentText = normalizeText(crow["Post comment text"]);
+          commentDate = toDate(crow["Date"]);
+        } else if (commentChannel === "instagram") {
+          parentPostId = crow["Media ID"]?.trim() ?? null;
+          commentText = normalizeText(crow["Comment Text"]);
+          commentDate = toDate(crow["Date"]);
+        } else if (commentChannel === "linkedin") {
+          parentPostId = crow["Post ID"]?.trim() ?? null;
+          commentText = normalizeText(crow["Cometarios"] ?? crow["Comentarios"]);
+          commentDate = toDate(crow["Date"]);
+        }
+
+        if (!parentPostId || !commentText) continue;
+
+        const hashInput = `${commentChannel}:${parentPostId}:${commentText}:${commentDate?.toISOString() ?? ""}`;
+        const dataslayerHash = createHash("sha256").update(hashInput).digest("hex");
+
+        const postMetric = await store.findSocialPostMetricByExternalId(commentChannel, parentPostId);
+        if (!postMetric) {
+          commentsOrphaned += 1;
+          continue;
+        }
+
+        const result = await store.upsertDataslayerComment({
+          socialPostMetricId: postMetric.socialPostMetricId,
+          channel: commentChannel,
+          parentExternalPostId: parentPostId,
+          dataslayerHash,
+          authorName,
+          publishedAt: commentDate,
+          text: commentText
+        });
+
+        if (result.status === "persisted") {
+          commentsIngested += 1;
+          if (queueClassification && env.classificationQueueUrl) {
+            classificationContentIds.add(postMetric.contentItemId);
+          }
+        } else {
+          commentsDeduped += 1;
+        }
+      }
+
+      await store.markObjectProcessed({
+        runId: run.id,
+        bucket,
+        objectKey: commentObj.key,
+        eTag: commentObj.eTag,
+        lastModified: commentObj.lastModified
+      });
+    }
+
+    await store.updateSyncRunPhase({
+      runId: run.id,
+      phase: "ingest_comments",
+      state: "completed",
+      details: {
+        comments_ingested: commentsIngested,
+        comments_deduped: commentsDeduped,
+        comments_orphaned: commentsOrphaned
+      },
+      metrics: phaseMetrics()
+    });
+
+    // --- Ingest page-level metrics ---
+    await store.updateSyncRunPhase({
+      runId: run.id,
+      phase: "ingest_pages",
+      state: "running",
+      metrics: phaseMetrics()
+    });
+
+    let pageMetricsIngested = 0;
+    const pageObjects = objects.filter((o) => detectFileType(o.key) === "page" && o.size > 0);
+    for (const pageObj of pageObjects) {
+      const pageChannel = detectChannelFromKey(pageObj.key);
+      if (!pageChannel) continue;
+
+      const alreadyProcessedPage =
+        !input.force &&
+        (await store.isObjectProcessed({
+          bucket,
+          objectKey: pageObj.key,
+          eTag: pageObj.eTag,
+          lastModified: pageObj.lastModified
+        }));
+      if (alreadyProcessedPage) continue;
+
+      const pageBody = await fetchObjectBody(bucket, pageObj.key);
+      const pageRows = parseCsv(pageBody);
+
+      for (const prow of pageRows) {
+        const dateStr = prow["Date"]?.trim();
+        const date = toDate(dateStr);
+        if (!date) continue;
+
+        let accountName: string | null = null;
+        let followers = 0;
+        let newFollowers = 0;
+        let unfollows = 0;
+        let pageReach = 0;
+        let pageViews = 0;
+        let postReach: number | null = null;
+        let profileVisits: number | null = null;
+        let desktopViews: number | null = null;
+        let mobileViews: number | null = null;
+        let engagementsVal: number | null = null;
+        let engagementRate: number | null = null;
+        let profileLikes: number | null = null;
+        let videoCount: number | null = null;
+
+        if (pageChannel === "facebook") {
+          accountName = prow["Page name"]?.trim() ?? null;
+          followers = toNumber(prow["Page followers"]);
+          newFollowers = toNumber(prow["New followers"]);
+          unfollows = toNumber(prow["New unfollows"]);
+          pageReach = toNumber(prow["Total reach"]);
+          postReach = toNumber(prow["Total reach of Page's posts"]) || null;
+          profileVisits = toNumber(prow["People visiting your page"]) || null;
+        } else if (pageChannel === "instagram") {
+          accountName = prow["Name"]?.trim() ?? null;
+          followers = toNumber(prow["Current Followers"]);
+          newFollowers = toNumber(prow["New Followers"]);
+          pageReach = toNumber(prow["Profile Reach"]);
+        } else if (pageChannel === "linkedin") {
+          accountName = "Claro Colombia";
+          followers = toNumber(prow["Followers"]);
+          newFollowers = toNumber(prow["New followers"]);
+          pageViews = toNumber(prow["Page views"]);
+          desktopViews = toNumber(prow["Desktop page views"]) || null;
+          mobileViews = toNumber(prow["Mobile page views"]) || null;
+          engagementsVal = toNumber(prow["Engagements"]) || null;
+          const erRaw = prow["Engagement rate"]?.trim();
+          engagementRate = erRaw ? parseFloat(erRaw.replace(",", ".").replace("%", "")) : null;
+        } else if (pageChannel === "tiktok") {
+          accountName = prow["Account nickname"]?.trim() ?? null;
+          followers = toNumber(prow["Followers"]);
+          profileLikes = toNumber(prow["Profile Like count"]) || null;
+          videoCount = toNumber(prow["Video count"]) || null;
+        } else if (pageChannel === "x") {
+          let rawName = prow["Account name"]?.trim() ?? null;
+          if (rawName) rawName = X_ACCOUNT_NORMALIZATION[rawName] ?? rawName;
+          accountName = rawName;
+          followers = toNumber(prow["Followers"]);
+        }
+
+        if (!accountName) continue;
+
+        await store.upsertPageDailyMetric({
+          date,
+          channel: pageChannel,
+          accountName,
+          followers,
+          newFollowers,
+          unfollows,
+          pageReach,
+          pageViews,
+          postReach,
+          profileVisits,
+          desktopViews,
+          mobileViews,
+          engagements: engagementsVal,
+          engagementRate,
+          profileLikes,
+          videoCount
+        });
+
+        pageMetricsIngested += 1;
+      }
+
+      await store.markObjectProcessed({
+        runId: run.id,
+        bucket,
+        objectKey: pageObj.key,
+        eTag: pageObj.eTag,
+        lastModified: pageObj.lastModified
+      });
+    }
+
+    await store.updateSyncRunPhase({
+      runId: run.id,
+      phase: "ingest_pages",
+      state: "completed",
+      details: {
+        page_metrics_ingested: pageMetricsIngested
       },
       metrics: phaseMetrics()
     });

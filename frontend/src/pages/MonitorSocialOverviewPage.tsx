@@ -49,7 +49,7 @@ import { ApiError } from "../api/client";
 import { useApiClient } from "../api/useApiClient";
 import { useAuth } from "../auth/AuthContext";
 
-const CHANNEL_OPTIONS: SocialChannel[] = ["facebook", "instagram", "linkedin", "tiktok"];
+const CHANNEL_OPTIONS: SocialChannel[] = ["facebook", "instagram", "linkedin", "tiktok", "x"];
 const PRESET_OPTIONS: SocialDatePreset[] = ["ytd", "90d", "30d", "y2024", "y2025", "last_quarter", "custom", "all"];
 const TAB_OPTIONS = ["summary", "accounts", "posts", "risk", "etl", "glossary"] as const;
 const POST_SORT_OPTIONS: SocialPostSort[] = ["published_at_desc", "exposure_desc", "engagement_desc"];
@@ -383,6 +383,7 @@ const toChannelLabel = (channel: SocialChannel): string => {
   if (channel === "facebook") return "Facebook";
   if (channel === "instagram") return "Instagram";
   if (channel === "linkedin") return "LinkedIn";
+  if (channel === "x") return "X";
   return "TikTok";
 };
 
@@ -720,7 +721,8 @@ const CHANNEL_SERIES_COLORS: Record<SocialChannel, string> = {
   facebook: "#1d4ed8",
   instagram: "#c026d3",
   linkedin: "#0369a1",
-  tiktok: "#0f766e"
+  tiktok: "#0f766e",
+  x: "#1d1d1b"
 };
 
 const DIMENSION_SERIES_COLORS = ["#0072B2", "#E69F00", "#009E73", "#56B4E9", "#D55E00", "#CC79A7", "#F0E442", "#000000", "#999999", "#44AA99"];
@@ -1064,6 +1066,7 @@ export const MonitorSocialOverviewPage = () => {
   const [overview, setOverview] = useState<MonitorSocialOverviewResponse | null>(null);
   const [facetsData, setFacetsData] = useState<MonitorSocialFacetsResponse | null>(null);
   const [accountsData, setAccountsData] = useState<MonitorSocialAccountsResponse | null>(null);
+  const [pageMetricsData, setPageMetricsData] = useState<Map<string, { followers: number; newFollowers: number; pageReach: number; pageViews: number }>>(new Map());
   const [riskData, setRiskData] = useState<MonitorSocialRiskResponse | null>(null);
   const [etlData, setEtlData] = useState<MonitorSocialEtlQualityResponse | null>(null);
   const [runs, setRuns] = useState<MonitorSocialRunItem[]>([]);
@@ -1259,15 +1262,29 @@ export const MonitorSocialOverviewPage = () => {
   const loadAccounts = async () => {
     setLoadingAccounts(true);
     try {
-      const response = await client.getMonitorSocialAccounts({
-        ...commonQuery,
-        min_posts: minPosts,
-        min_exposure: minExposure,
-        sort: accountsSort,
-        limit: accountsLimit,
-        cursor: accountsCursor
-      });
+      const [response, pageRes] = await Promise.all([
+        client.getMonitorSocialAccounts({
+          ...commonQuery,
+          min_posts: minPosts,
+          min_exposure: minExposure,
+          sort: accountsSort,
+          limit: accountsLimit,
+          cursor: accountsCursor
+        }),
+        client.getMonitorSocialPageMetrics({
+          channels: commonQuery.channels
+        })
+      ]);
       setAccountsData(response);
+      const pm = new Map<string, { followers: number; newFollowers: number; pageReach: number; pageViews: number }>();
+      for (const item of pageRes.items) {
+        const key = `${item.channel}:${item.accountName}`;
+        const existing = pm.get(key);
+        if (!existing || item.followers > existing.followers) {
+          pm.set(key, { followers: item.followers, newFollowers: item.newFollowers, pageReach: item.pageReach, pageViews: item.pageViews });
+        }
+      }
+      setPageMetricsData(pm);
     } catch (requestError) {
       applyRequestError(requestError);
       setAccountsData(null);
@@ -3932,11 +3949,13 @@ export const MonitorSocialOverviewPage = () => {
           </p>
 
           <div className="overflow-x-auto">
-            <table className="min-w-[1320px] w-full border-collapse text-sm">
+            <table className="min-w-[1520px] w-full border-collapse text-sm">
               <thead>
                 <tr className="border-b border-slate-200 text-left text-xs uppercase tracking-wide text-slate-500">
                   <th className="px-2 py-2">Cuenta</th>
                   <th className="px-2 py-2">Canales</th>
+                  <th className="px-2 py-2">Followers</th>
+                  <th className="px-2 py-2">Page Reach</th>
                   <th className="px-2 py-2">Posts</th>
                   <th className="px-2 py-2">Exposición</th>
                   <th className="px-2 py-2">Interacciones (L+C+S)</th>
@@ -3955,6 +3974,12 @@ export const MonitorSocialOverviewPage = () => {
                   <tr key={item.account_name} className="border-b border-slate-100">
                     <td className="px-2 py-2">{item.account_name}</td>
                     <td className="px-2 py-2">{item.channel_mix.map((ch) => toChannelLabel(ch)).join(", ")}</td>
+                    <td className="px-2 py-2">
+                      {formatNumber(item.channel_mix.reduce((sum, ch) => sum + (pageMetricsData.get(`${ch}:${item.account_name}`)?.followers ?? 0), 0))}
+                    </td>
+                    <td className="px-2 py-2">
+                      {formatNumber(item.channel_mix.reduce((sum, ch) => sum + (pageMetricsData.get(`${ch}:${item.account_name}`)?.pageReach ?? 0), 0))}
+                    </td>
                     <td className="px-2 py-2">{formatNumber(item.posts)}</td>
                     <td className="px-2 py-2">{formatNumber(item.exposure_total)}</td>
                     <td className="px-2 py-2">{formatNumber(item.engagement_total)}</td>

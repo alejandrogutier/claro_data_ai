@@ -736,6 +736,10 @@ export class ApiClient {
     return this.request<MonitorSocialAccountsResponse>("/v1/monitor/social/accounts", { query });
   }
 
+  getMonitorSocialPageMetrics(query: { channels?: string } = {}): Promise<{ items: Array<{ channel: string; accountName: string; latestDate: string; followers: number; newFollowers: number; pageReach: number; pageViews: number }> }> {
+    return this.request("/v1/monitor/social/page-metrics", { query });
+  }
+
   getMonitorSocialFacets(query: MonitorSocialQuery = {}): Promise<MonitorSocialFacetsResponse> {
     return this.request<MonitorSocialFacetsResponse>("/v1/monitor/social/facets", { query });
   }

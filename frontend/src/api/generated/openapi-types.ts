@@ -5061,7 +5061,7 @@ export interface components {
             diagnostics: components["schemas"]["MonitorDiagnostics"];
         };
         /** @enum {string} */
-        SocialChannel: "facebook" | "instagram" | "linkedin" | "tiktok";
+        SocialChannel: "facebook" | "instagram" | "linkedin" | "tiktok" | "x";
         /** @enum {string} */
         SocialSentiment: "positive" | "negative" | "neutral" | "unknown";
         /** @enum {string} */

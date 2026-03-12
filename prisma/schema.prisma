@@ -315,8 +315,9 @@ model SocialPostMetric {
 model SocialPostComment {
   id                     String           @id @default(uuid()) @db.Uuid
   socialPostMetricId     String           @db.Uuid
-  awarioMentionId        String           @unique
-  awarioAlertId          String
+  awarioMentionId        String?          @unique
+  awarioAlertId          String?
+  dataslayerHash         String?          @unique
   channel                String
   parentExternalPostId   String
   externalCommentId      String?
@@ -327,7 +328,7 @@ model SocialPostComment {
   publishedAt            DateTime?
   text                   String?
   sentiment              String           @default("unknown")
-  sentimentSource        String           @default("awario")
+  sentimentSource        String           @default("unknown")
   isSpam                 Boolean          @default(false)
   relatedToPostText      Boolean          @default(false)
   needsReview            Boolean          @default(false)
@@ -401,6 +402,31 @@ model SocialAccountDailyAggregate {
   @@unique([date, channel, accountName])
   @@index([date, channel])
   @@index([accountName, date])
+}
+
+model SocialPageDailyMetric {
+  id             String    @id @default(uuid()) @db.Uuid
+  date           DateTime  @db.Date
+  channel        String
+  accountName    String
+  followers      Int       @default(0)
+  newFollowers   Int       @default(0)
+  unfollows      Int       @default(0)
+  pageReach      Int       @default(0)
+  pageViews      Int       @default(0)
+  postReach      Int?
+  profileVisits  Int?
+  desktopViews   Int?
+  mobileViews    Int?
+  engagements    Int?
+  engagementRate Decimal?  @db.Decimal(9, 4)
+  profileLikes   Int?
+  videoCount     Int?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@unique([date, channel, accountName])
+  @@index([channel, date])
 }
 
 model SocialDashboardSetting {

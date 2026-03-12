@@ -5091,7 +5091,7 @@ components:
           $ref: '#/components/schemas/MonitorDiagnostics'
     SocialChannel:
       type: string
-      enum: [facebook, instagram, linkedin, tiktok]
+      enum: [facebook, instagram, linkedin, tiktok, x]
     SocialSentiment:
       type: string
       enum: [positive, negative, neutral, unknown]

@@ -40,6 +40,7 @@ import {
   getMonitorSocialErBreakdown,
   getMonitorSocialErTargets,
   getMonitorSocialAccounts,
+  getMonitorSocialPageMetrics,
   getMonitorSocialFacets,
   getMonitorSocialEtlQuality,
   getMonitorSocialExportXlsx,
@@ -289,6 +290,7 @@ export const main = async (event: APIGatewayProxyEventV2) => {
   if (key === "GET /v1/monitor/social/overview") return getMonitorSocialOverview(event);
   if (key === "GET /v1/monitor/social/facets") return getMonitorSocialFacets(event);
   if (key === "GET /v1/monitor/social/accounts") return getMonitorSocialAccounts(event);
+  if (key === "GET /v1/monitor/social/page-metrics") return getMonitorSocialPageMetrics(event);
   if (key === "GET /v1/monitor/social/posts") return listMonitorSocialPosts(event);
   if (key.match(/^GET \/v1\/monitor\/social\/posts\/[^/]+\/comments$/)) return listMonitorSocialPostComments(event);
   if (key.match(/^PATCH \/v1\/monitor\/social\/comments\/[^/]+$/)) return patchMonitorSocialComment(event);
