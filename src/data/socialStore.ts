@@ -3579,7 +3579,7 @@ class SocialStore {
   }
 
   async upsertSocialPost(input: SocialPostUpsertInput): Promise<{ contentItemId: string }> {
-    const canonicalUrl = input.postUrl.trim() || `social://${input.channel}/${input.externalPostId}`;
+    const canonicalUrl = `social://${input.channel}/${input.externalPostId}`;
     const titleSource = (input.text ?? "").trim();
     const title = titleSource ? titleSource.slice(0, 180) : `${input.channel} post ${input.externalPostId}`;
     const summary = titleSource ? titleSource.slice(0, 500) : null;
@@ -3647,7 +3647,6 @@ class SocialStore {
           VALUES
             (CAST(:id AS UUID), CAST(:content_item_id AS UUID), :channel, :account_name, :external_post_id, :post_url, :post_type, CAST(:campaign_taxonomy_id AS UUID), :published_at, CAST(:exposure AS DECIMAL(18,2)), CAST(:engagement_total AS DECIMAL(18,2)), CAST(:impressions AS DECIMAL(18,2)), CAST(:reach AS DECIMAL(18,2)), CAST(:clicks AS DECIMAL(18,2)), CAST(:likes AS DECIMAL(18,2)), CAST(:comments AS DECIMAL(18,2)), CAST(:shares AS DECIMAL(18,2)), CAST(:views AS DECIMAL(18,2)), CAST(:diagnostics AS JSONB), NOW(), NOW())
           ON CONFLICT ("channel", "externalPostId") DO UPDATE SET
-            "contentItemId" = EXCLUDED."contentItemId",
             "accountName" = EXCLUDED."accountName",
             "postUrl" = EXCLUDED."postUrl",
             "postType" = EXCLUDED."postType",

@@ -980,7 +980,7 @@ resource "aws_lambda_function" "social_scheduler" {
   filename         = var.lambda_package_path
   source_code_hash = filebase64sha256(var.lambda_package_path)
 
-  timeout                        = 300
+  timeout                        = 900
   memory_size                    = 1024
   reserved_concurrent_executions = 1
 
