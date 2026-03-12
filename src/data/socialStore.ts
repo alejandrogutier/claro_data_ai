@@ -3894,7 +3894,7 @@ class SocialStore {
         ("id", "socialPostMetricId", "dataslayerHash", "channel", "parentExternalPostId", "authorName", "publishedAt", "text", "sentiment", "sentimentSource", "isSpam", "relatedToPostText", "needsReview", "createdAt", "updatedAt")
       VALUES
         (CAST(:id AS UUID), CAST(:social_post_metric_id AS UUID), :dataslayer_hash, :channel, :parent_external_post_id, :author_name, :published_at, :text, 'unknown', 'dataslayer', false, false, false, NOW(), NOW())
-      ON CONFLICT ("dataslayerHash") WHERE "dataslayerHash" IS NOT NULL DO NOTHING
+      ON CONFLICT ("dataslayerHash") DO NOTHING
     `;
 
     const parameterSets = comments.map((c) => [
