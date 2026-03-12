@@ -1191,6 +1191,7 @@ resource "aws_apigatewayv2_route" "private_routes" {
     "GET /v1/monitor/social/overview",
     "GET /v1/monitor/social/facets",
     "GET /v1/monitor/social/accounts",
+    "GET /v1/monitor/social/page-metrics",
     "GET /v1/monitor/social/posts",
     "GET /v1/monitor/social/posts/{post_id}/comments",
     "PATCH /v1/monitor/social/comments/{comment_id}",
