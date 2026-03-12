@@ -15,7 +15,7 @@ CREATE TABLE IF NOT EXISTS "SocialStoryDailyMetric" (
     "storyShares" INTEGER NOT NULL DEFAULT 0,
     "storyReplies" INTEGER NOT NULL DEFAULT 0,
     "storyTotalActions" INTEGER NOT NULL DEFAULT 0,
-    "storyCompletionRate" DECIMAL(5,4),
+    "storyCompletionRate" DECIMAL(8,4),
     "createdAt" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 

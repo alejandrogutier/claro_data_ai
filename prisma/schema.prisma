@@ -443,7 +443,7 @@ model SocialStoryDailyMetric {
   storyShares         Int      @default(0)
   storyReplies        Int      @default(0)
   storyTotalActions   Int      @default(0)
-  storyCompletionRate Decimal? @db.Decimal(5, 4)
+  storyCompletionRate Decimal? @db.Decimal(8, 4)
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
 
