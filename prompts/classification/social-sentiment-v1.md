@@ -72,6 +72,7 @@ Valor entre 0.0 y 1.0:
 - Si el texto del post es muy corto o ambiguo, usar confianza baja y sentimiento "neutro".
 - La categoría DEBE ser exactamente una de las 38 listadas arriba (usar el nombre tal cual).
 - Los posts son de las cuentas oficiales de Claro Colombia, por lo que el sentimiento suele ser positivo o neutro (son contenido propio de la marca).
+- Si se incluye una imagen del post, analiza su contenido visual para complementar la clasificación. La imagen puede revelar branding, productos, eventos o contexto que el texto solo no captura. Si no hay imagen, clasifica solo con base en el texto.
 
 ## Output esperado
 ```json
@@ -91,3 +92,4 @@ Valor entre 0.0 y 1.0:
 - título del post: {{title}}
 - resumen existente: {{summary}}
 - texto del post: {{content}}
+- imagen del post: {{image_url}}

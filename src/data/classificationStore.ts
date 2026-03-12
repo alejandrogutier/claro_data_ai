@@ -15,6 +15,7 @@ export type ContentForClassificationPrompt = {
   content: string | null;
   publishedAt: Date | null;
   createdAt: Date;
+  imageUrl: string | null;
 };
 
 export type UpsertAutoClassificationInput = {
@@ -96,7 +97,8 @@ class ClassificationStore {
           ci."summary",
           ci."content",
           ci."publishedAt",
-          ci."createdAt"
+          ci."createdAt",
+          ci."imageUrl"
         FROM "public"."ContentItem" ci
         WHERE ci."id" = CAST(:content_item_id AS UUID)
         LIMIT 1
@@ -114,6 +116,7 @@ class ClassificationStore {
     const content = fieldString(row, 6);
     const publishedAt = fieldDate(row, 7);
     const createdAt = fieldDate(row, 8);
+    const imageUrl = fieldString(row, 9);
 
     if (!id || !sourceType || !provider || !title) return null;
 
@@ -128,7 +131,8 @@ class ClassificationStore {
       summary,
       content,
       publishedAt: publishedAt && !Number.isNaN(publishedAt.getTime()) ? publishedAt : null,
-      createdAt
+      createdAt,
+      imageUrl
     };
   }
 

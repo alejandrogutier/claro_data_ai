@@ -73,6 +73,9 @@ type NormalizedSocialRow = {
   comments: number;
   shares: number;
   views: number;
+  saves: number;
+  avgWatchTimeMs: number;
+  totalWatchTimeMs: number;
   diagnostics: Record<string, unknown>;
   hashtags: string[];
 };
@@ -415,6 +418,18 @@ const X_ACCOUNT_NORMALIZATION: Record<string, string> = {
   "K Music": "Claro Música CO"
 };
 
+const extractImageFormula = (value: string | undefined, maxLen = 2048): string | null => {
+  if (!value) return null;
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  const formulaMatch = trimmed.match(/^=IMAGE\("([^"]+)"\)/i);
+  if (formulaMatch) {
+    const url = (formulaMatch[1] ?? "").trim();
+    return url.length > maxLen ? url.slice(0, maxLen) : url || null;
+  }
+  return trimmed.startsWith("http") ? (trimmed.length > maxLen ? trimmed.slice(0, maxLen) : trimmed) : null;
+};
+
 const normalizeRow = (
   channel: SocialChannel,
   row: CsvRecord,
@@ -438,6 +453,9 @@ const normalizeRow = (
       const shares = toNumber(row["Reels Shares"]);
       const engagementTotal = likes + comments + shares;
 
+      const avgWatchTimeMs = toNumber(row["Reels average video time watched"]);
+      const totalWatchTimeMs = toNumber(row["Reels total view time"]);
+
       return {
         channel,
         accountName,
@@ -446,7 +464,7 @@ const normalizeRow = (
         postType: "reel",
         publishedAt: toDate(row["Date"]),
         text: null,
-        imageUrl: null,
+        imageUrl: normalizeText(row["Post image URL"], 2048),
         exposure,
         engagementTotal,
         impressions,
@@ -456,10 +474,15 @@ const normalizeRow = (
         comments,
         shares,
         views,
+        saves: 0,
+        avgWatchTimeMs,
+        totalWatchTimeMs,
         diagnostics: {
           object_key: objectKey,
           row_index: rowIndex + 1,
-          file_type: "reels"
+          file_type: "reels",
+          reels_avg_watch_time: avgWatchTimeMs || undefined,
+          reels_total_view_time: totalWatchTimeMs || undefined
         },
         hashtags: []
       };
@@ -493,7 +516,7 @@ const normalizeRow = (
       postType: normalizeText(row["Post type"], 120),
       publishedAt: toDate(row["Date"]),
       text,
-      imageUrl: isNewFormat ? null : normalizeText(row["Post image URL"], 2048),
+      imageUrl: normalizeText(row["Post image URL"], 2048),
       exposure,
       engagementTotal,
       impressions,
@@ -503,6 +526,9 @@ const normalizeRow = (
       comments,
       shares,
       views,
+      saves: 0,
+      avgWatchTimeMs: 0,
+      totalWatchTimeMs: 0,
       diagnostics: {
         object_key: objectKey,
         row_index: rowIndex + 1,
@@ -523,15 +549,23 @@ const normalizeRow = (
     const text = normalizeText(row["Media caption"]);
     const hashtags = mergeHashtags(extractHashtags(text), extractHashtagsFromColumns(row));
     const postUrl = normalizeUrl(row["Media permalink"] ?? row["Media URL"], `social://instagram/${externalPostId}`);
-    const reach = toNumber(row["Media reach"]);
-    const views = Math.max(toNumber(row["Media views"]), toNumber(row["Reel views"]));
+    const reelReach = toNumber(row["Reel reach"]);
+    const reach = reelReach > 0 ? reelReach : toNumber(row["Media reach"]);
+    const reelViews = toNumber(row["Reel views"]);
+    const views = reelViews > 0 ? reelViews : toNumber(row["Media views"]);
     const exposure = reach > 0 ? reach : views;
-    const likes = toNumber(row["Media likes"]);
-    const comments = toNumber(row["Media comments"]);
-    const shares = toNumber(row["Media shares"]);
+    const reelLikes = toNumber(row["Reel likes"]);
+    const likes = reelLikes > 0 ? reelLikes : toNumber(row["Media likes"]);
+    const reelComments = toNumber(row["Reel comments"]);
+    const comments = reelComments > 0 ? reelComments : toNumber(row["Media comments"]);
+    const reelShares = toNumber(row["Reel shared times"]);
+    const shares = reelShares > 0 ? reelShares : toNumber(row["Media shares"]);
     const clicks = isNewFormat ? 0 : toNumber(row["Media profile visits"]);
-    const engagementSourceTotal = toNumber(row["Media total interactions"]);
+    const engagementSourceTotal = toNumber(row["Reel total interactions"]) || toNumber(row["Media total interactions"]);
     const engagementTotal = likes + comments + shares;
+    const saves = toNumber(row["Reel saved times"]) || toNumber(row["Media unique saves"]);
+    const avgWatchTimeMs = toNumber(row["Reel average watch time"]);
+    const totalWatchTimeMs = toNumber(row["Reel total video view time"]);
 
     return {
       channel,
@@ -541,7 +575,7 @@ const normalizeRow = (
       postType: normalizeText(row["Media type"], 120),
       publishedAt: toDate(row["Date"]),
       text,
-      imageUrl: normalizeText(row["Media URL"], 2048),
+      imageUrl: extractImageFormula(row["Media Image"]) ?? normalizeText(row["Media URL"], 2048),
       exposure,
       engagementTotal,
       impressions: 0,
@@ -551,12 +585,17 @@ const normalizeRow = (
       comments,
       shares,
       views,
+      saves,
+      avgWatchTimeMs,
+      totalWatchTimeMs,
       diagnostics: {
         object_key: objectKey,
         row_index: rowIndex + 1,
         engagement_source_total: engagementSourceTotal,
-        engagement_source_field: "Media total interactions",
-        format: isNewFormat ? "new" : "legacy"
+        engagement_source_field: engagementSourceTotal === toNumber(row["Reel total interactions"]) ? "Reel total interactions" : "Media total interactions",
+        format: isNewFormat ? "new" : "legacy",
+        reel_avg_watch_time: avgWatchTimeMs || undefined,
+        reel_total_watch_time: totalWatchTimeMs || undefined
       },
       hashtags
     };
@@ -596,6 +635,9 @@ const normalizeRow = (
       comments,
       shares,
       views,
+      saves: 0,
+      avgWatchTimeMs: 0,
+      totalWatchTimeMs: 0,
       diagnostics: {
         object_key: objectKey,
         row_index: rowIndex + 1,
@@ -642,6 +684,9 @@ const normalizeRow = (
       comments,
       shares,
       views,
+      saves: 0,
+      avgWatchTimeMs: 0,
+      totalWatchTimeMs: 0,
       diagnostics: {
         object_key: objectKey,
         row_index: rowIndex + 1,
@@ -686,6 +731,9 @@ const normalizeRow = (
     comments,
     shares,
     views,
+    saves: 0,
+    avgWatchTimeMs: 0,
+    totalWatchTimeMs: 0,
     diagnostics: {
       object_key: objectKey,
       row_index: rowIndex + 1,
@@ -939,6 +987,9 @@ export const runSocialSync = async (input: SocialSyncInput): Promise<SocialSyncO
           comments: normalized.comments,
           shares: normalized.shares,
           views: normalized.views,
+          saves: normalized.saves,
+          avgWatchTimeMs: normalized.avgWatchTimeMs,
+          totalWatchTimeMs: normalized.totalWatchTimeMs,
           rawPayloadS3Key: object.key,
           diagnostics: normalized.diagnostics,
           hashtags: normalized.hashtags
@@ -1295,6 +1346,95 @@ export const runSocialSync = async (input: SocialSyncInput): Promise<SocialSyncO
       state: "completed",
       details: {
         page_metrics_ingested: pageMetricsIngested
+      },
+      metrics: phaseMetrics()
+    });
+
+    // --- Ingest story-level metrics ---
+    await store.updateSyncRunPhase({
+      runId: run.id,
+      phase: "ingest_stories",
+      state: "running",
+      metrics: phaseMetrics()
+    });
+
+    let storyMetricsIngested = 0;
+    const storyObjects = objects.filter((o) => detectFileType(o.key) === "storie" && o.size > 0);
+    for (const storyObj of storyObjects) {
+      const storyChannel = detectChannelFromKey(storyObj.key);
+      if (!storyChannel) continue;
+
+      const alreadyProcessedStory =
+        !input.force &&
+        (await store.isObjectProcessed({
+          bucket,
+          objectKey: storyObj.key,
+          eTag: storyObj.eTag,
+          lastModified: storyObj.lastModified
+        }));
+      if (alreadyProcessedStory) continue;
+
+      const storyBody = await fetchObjectBody(bucket, storyObj.key);
+      const storyRows = parseCsv(storyBody);
+
+      const storyBatch: Array<{
+        date: Date;
+        channel: SocialChannel;
+        accountName: string;
+        storyViews: number;
+        storyReach: number;
+        storyFollows: number;
+        storyShares: number;
+        storyReplies: number;
+        storyTotalActions: number;
+        storyCompletionRate: number | null;
+      }> = [];
+
+      for (const srow of storyRows) {
+        const dateStr = (srow["Date"] ?? srow["Date today"])?.trim();
+        const date = toDate(dateStr);
+        if (!date) continue;
+        const accountName = (srow["Name"] ?? srow["Username"])?.trim();
+        if (!accountName) continue;
+
+        const completionRateRaw = srow["Story Average Completion rate"]?.trim();
+        const completionRate = completionRateRaw
+          ? parseFloat(completionRateRaw.replace(",", ".").replace("%", ""))
+          : null;
+
+        storyBatch.push({
+          date,
+          channel: storyChannel,
+          accountName,
+          storyViews: toNumber(srow["Story views"]),
+          storyReach: toNumber(srow["Story reach"]),
+          storyFollows: toNumber(srow["Story follows"]),
+          storyShares: toNumber(srow["Story shares"]),
+          storyReplies: toNumber(srow["Story replies"]),
+          storyTotalActions: toNumber(srow["Story total actions"]),
+          storyCompletionRate: completionRate != null && !Number.isNaN(completionRate) ? completionRate : null
+        });
+      }
+
+      if (storyBatch.length > 0) {
+        storyMetricsIngested += await store.batchUpsertStoryDailyMetrics(storyBatch);
+      }
+
+      await store.markObjectProcessed({
+        runId: run.id,
+        bucket,
+        objectKey: storyObj.key,
+        eTag: storyObj.eTag,
+        lastModified: storyObj.lastModified
+      });
+    }
+
+    await store.updateSyncRunPhase({
+      runId: run.id,
+      phase: "ingest_stories",
+      state: "completed",
+      details: {
+        story_metrics_ingested: storyMetricsIngested
       },
       metrics: phaseMetrics()
     });

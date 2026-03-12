@@ -40,7 +40,7 @@ type SocialScatterDimension = "post_type" | "channel" | "account" | "campaign" |
 type SocialTopicBreakdownDimension = "post_type" | "channel" | "account" | "campaign" | "strategy" | "hashtag";
 type SocialErBreakdownDimension = "hashtag" | "word" | "post_type" | "publish_frequency" | "weekday";
 type ReconciliationStatus = "ok" | "warning" | "error" | "unknown";
-type SocialPhase = "ingest" | "ingest_comments" | "ingest_pages" | "classify" | "aggregate" | "reconcile" | "alerts";
+type SocialPhase = "ingest" | "ingest_comments" | "ingest_pages" | "ingest_stories" | "classify" | "aggregate" | "reconcile" | "alerts";
 type SocialPhaseState = "pending" | "running" | "completed" | "failed" | "skipped";
 type IncidentSeverity = "SEV1" | "SEV2" | "SEV3" | "SEV4";
 type IncidentStatus = "open" | "acknowledged" | "in_progress" | "resolved" | "dismissed";
@@ -103,6 +103,9 @@ type SocialPostUpsertInput = {
   comments?: number;
   shares?: number;
   views?: number;
+  saves?: number;
+  avgWatchTimeMs?: number;
+  totalWatchTimeMs?: number;
   sourceScore?: number;
   rawPayloadS3Key?: string | null;
   diagnostics?: Record<string, unknown>;
@@ -276,6 +279,19 @@ type PageDailyMetricUpsertInput = {
   engagementRate?: number | null;
   profileLikes?: number | null;
   videoCount?: number | null;
+};
+
+type StoryDailyMetricUpsertInput = {
+  date: Date;
+  channel: SocialChannel;
+  accountName: string;
+  storyViews: number;
+  storyReach: number;
+  storyFollows: number;
+  storyShares: number;
+  storyReplies: number;
+  storyTotalActions: number;
+  storyCompletionRate: number | null;
 };
 
 type AwarioMentionFeedItemUpsertInput = {
@@ -1246,12 +1262,13 @@ const clamp = (value: number, min: number, max: number): number => {
 
 const roundMetric = (value: number): number => Math.round(value * 100) / 100;
 
-const SOCIAL_PHASES: SocialPhase[] = ["ingest", "ingest_comments", "ingest_pages", "classify", "aggregate", "reconcile", "alerts"];
+const SOCIAL_PHASES: SocialPhase[] = ["ingest", "ingest_comments", "ingest_pages", "ingest_stories", "classify", "aggregate", "reconcile", "alerts"];
 
 const buildDefaultPhaseStatus = (): SocialPhaseStatusRecord => ({
   ingest: { status: "pending" },
   ingest_comments: { status: "pending" },
   ingest_pages: { status: "pending" },
+  ingest_stories: { status: "pending" },
   classify: { status: "pending" },
   aggregate: { status: "pending" },
   reconcile: { status: "pending" },
@@ -3772,9 +3789,9 @@ class SocialStore {
         ),
         spm AS (
           INSERT INTO "public"."SocialPostMetric"
-            ("id", "contentItemId", "channel", "accountName", "externalPostId", "postUrl", "postType", "campaignTaxonomyId", "publishedAt", "exposure", "engagementTotal", "impressions", "reach", "clicks", "likes", "comments", "shares", "views", "diagnostics", "createdAt", "updatedAt")
+            ("id", "contentItemId", "channel", "accountName", "externalPostId", "postUrl", "postType", "campaignTaxonomyId", "publishedAt", "exposure", "engagementTotal", "impressions", "reach", "clicks", "likes", "comments", "shares", "views", "saves", "avgWatchTimeMs", "totalWatchTimeMs", "diagnostics", "createdAt", "updatedAt")
           SELECT
-            CAST(:spm_id AS UUID), ci."id", :channel, :account_name, :external_post_id, :post_url, :post_type, CAST(:campaign_taxonomy_id AS UUID), :spm_published_at::timestamp, CAST(:exposure AS DECIMAL(18,2)), CAST(:engagement_total AS DECIMAL(18,2)), CAST(:impressions AS DECIMAL(18,2)), CAST(:reach AS DECIMAL(18,2)), CAST(:clicks AS DECIMAL(18,2)), CAST(:likes AS DECIMAL(18,2)), CAST(:comments AS DECIMAL(18,2)), CAST(:shares AS DECIMAL(18,2)), CAST(:views AS DECIMAL(18,2)), CAST(:diagnostics AS JSONB), NOW(), NOW()
+            CAST(:spm_id AS UUID), ci."id", :channel, :account_name, :external_post_id, :post_url, :post_type, CAST(:campaign_taxonomy_id AS UUID), :spm_published_at::timestamp, CAST(:exposure AS DECIMAL(18,2)), CAST(:engagement_total AS DECIMAL(18,2)), CAST(:impressions AS DECIMAL(18,2)), CAST(:reach AS DECIMAL(18,2)), CAST(:clicks AS DECIMAL(18,2)), CAST(:likes AS DECIMAL(18,2)), CAST(:comments AS DECIMAL(18,2)), CAST(:shares AS DECIMAL(18,2)), CAST(:views AS DECIMAL(18,2)), CAST(:saves AS DECIMAL(18,2)), CAST(:avg_watch_time_ms AS INTEGER), CAST(:total_watch_time_ms AS BIGINT), CAST(:diagnostics AS JSONB), NOW(), NOW()
           FROM ci
           ON CONFLICT ("channel", "externalPostId") DO UPDATE SET
             "contentItemId" = (SELECT "id" FROM ci),
@@ -3792,6 +3809,9 @@ class SocialStore {
             "comments" = EXCLUDED."comments",
             "shares" = EXCLUDED."shares",
             "views" = EXCLUDED."views",
+            "saves" = COALESCE(EXCLUDED."saves", "SocialPostMetric"."saves"),
+            "avgWatchTimeMs" = COALESCE(EXCLUDED."avgWatchTimeMs", "SocialPostMetric"."avgWatchTimeMs"),
+            "totalWatchTimeMs" = COALESCE(EXCLUDED."totalWatchTimeMs", "SocialPostMetric"."totalWatchTimeMs"),
             "diagnostics" = EXCLUDED."diagnostics",
             "updatedAt" = NOW()
           RETURNING "id"
@@ -3834,6 +3854,9 @@ class SocialStore {
         sqlString("comments", String(Math.max(0, input.comments ?? 0))),
         sqlString("shares", String(Math.max(0, input.shares ?? 0))),
         sqlString("views", String(Math.max(0, input.views ?? 0))),
+        sqlString("saves", input.saves != null && input.saves > 0 ? String(input.saves) : null),
+        sqlString("avg_watch_time_ms", input.avgWatchTimeMs != null && input.avgWatchTimeMs > 0 ? String(input.avgWatchTimeMs) : null),
+        sqlString("total_watch_time_ms", input.totalWatchTimeMs != null && input.totalWatchTimeMs > 0 ? String(input.totalWatchTimeMs) : null),
         sqlJson("diagnostics", input.diagnostics ?? {})
       ]
     );
@@ -4013,6 +4036,51 @@ class SocialStore {
       sqlString("engagement_rate", m.engagementRate == null ? null : String(m.engagementRate)),
       sqlString("profile_likes", m.profileLikes == null ? null : String(Math.floor(m.profileLikes))),
       sqlString("video_count", m.videoCount == null ? null : String(Math.floor(m.videoCount)))
+    ]);
+
+    await this.rds.batchExecute(sql, parameterSets, 100);
+    return metrics.length;
+  }
+
+  async batchUpsertStoryDailyMetrics(
+    metrics: StoryDailyMetricUpsertInput[]
+  ): Promise<number> {
+    if (metrics.length === 0) return 0;
+
+    const sql = `
+      INSERT INTO "public"."SocialStoryDailyMetric"
+        ("id", "date", "channel", "accountName",
+         "storyViews", "storyReach", "storyFollows", "storyShares",
+         "storyReplies", "storyTotalActions", "storyCompletionRate",
+         "createdAt", "updatedAt")
+      VALUES
+        (CAST(:id AS UUID), CAST(:date AS DATE), :channel, :account_name,
+         :story_views, :story_reach, :story_follows, :story_shares,
+         :story_replies, :story_total_actions, CAST(:story_completion_rate AS DECIMAL(5,4)),
+         NOW(), NOW())
+      ON CONFLICT ("date", "channel", "accountName") DO UPDATE SET
+        "storyViews" = EXCLUDED."storyViews",
+        "storyReach" = EXCLUDED."storyReach",
+        "storyFollows" = EXCLUDED."storyFollows",
+        "storyShares" = EXCLUDED."storyShares",
+        "storyReplies" = EXCLUDED."storyReplies",
+        "storyTotalActions" = EXCLUDED."storyTotalActions",
+        "storyCompletionRate" = COALESCE(EXCLUDED."storyCompletionRate", "SocialStoryDailyMetric"."storyCompletionRate"),
+        "updatedAt" = NOW()
+    `;
+
+    const parameterSets = metrics.map((m) => [
+      sqlUuid("id", randomUUID()),
+      sqlTimestamp("date", m.date),
+      sqlString("channel", m.channel),
+      sqlString("account_name", m.accountName),
+      sqlLong("story_views", m.storyViews),
+      sqlLong("story_reach", m.storyReach),
+      sqlLong("story_follows", m.storyFollows),
+      sqlLong("story_shares", m.storyShares),
+      sqlLong("story_replies", m.storyReplies),
+      sqlLong("story_total_actions", m.storyTotalActions),
+      sqlString("story_completion_rate", m.storyCompletionRate == null ? null : String(m.storyCompletionRate))
     ]);
 
     await this.rds.batchExecute(sql, parameterSets, 100);

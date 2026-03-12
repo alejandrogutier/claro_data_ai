@@ -188,10 +188,11 @@ const buildPrompt = (input: {
   summary: string | null;
   content: string | null;
   text: string | null;
+  imageUrl?: string | null;
 }): string => {
   const taxonomyBlock = SOCIAL_TOPIC_KEYS.map((key) => `- ${key}`).join("\n");
 
-  return [
+  const lines = [
     "Clasifica el post social en una taxonomia fija de negocio de Claro Colombia.",
     "Responde SOLO JSON valido con este shape exacto:",
     '{"topics":[{"key":"...","confidence":0.0,"evidence":"..."}],"overall_confidence":0.0,"ambiguous_dual_context":false}',
@@ -204,6 +205,7 @@ const buildPrompt = (input: {
     "   - claro_musica_app: app, premium, playlist, escuchar, cancion, catalogo.",
     "   - claro_music_venue_eventos: concierto, boletas, festival, escenario, artistas, evento.",
     "   - si hay ambas senales, marcar ambiguous_dual_context=true y devolver ambos topics.",
+    "5) Si se incluye una imagen, analiza su contenido visual para complementar la clasificacion de topicos.",
     "Keys permitidas:",
     taxonomyBlock,
     "Contexto del post:",
@@ -213,12 +215,36 @@ const buildPrompt = (input: {
     `summary=${truncate(input.summary, 1200)}`,
     `content=${truncate(input.content, MAX_POST_TEXT_CHARS)}`,
     `text=${truncate(input.text, MAX_POST_TEXT_CHARS)}`
-  ].join("\n");
+  ];
+
+  return lines.join("\n");
 };
 
-const invokeModelStrict = async (prompt: string, modelId: string): Promise<Record<string, unknown>> => {
+const isValidImageUrl = (url: string): boolean => {
+  try {
+    const parsed = new URL(url);
+    return parsed.protocol === "https:" && /\.(jpg|jpeg|png|gif|webp)/i.test(parsed.pathname);
+  } catch {
+    return false;
+  }
+};
+
+const invokeModelStrict = async (prompt: string, modelId: string, imageUrl?: string | null): Promise<Record<string, unknown>> => {
+  let useImage = Boolean(imageUrl && isValidImageUrl(imageUrl));
+
   for (let attempt = 1; attempt <= MAX_BEDROCK_ATTEMPTS; attempt += 1) {
     try {
+      const contentBlocks: Array<Record<string, unknown>> = [];
+
+      if (useImage && imageUrl) {
+        contentBlocks.push({
+          type: "image",
+          source: { type: "url", url: imageUrl }
+        });
+      }
+
+      contentBlocks.push({ type: "text", text: prompt });
+
       const response = await bedrock
         .invokeModel({
           modelId,
@@ -231,12 +257,7 @@ const invokeModelStrict = async (prompt: string, modelId: string): Promise<Recor
             messages: [
               {
                 role: "user",
-                content: [
-                  {
-                    type: "text",
-                    text: prompt
-                  }
-                ]
+                content: contentBlocks
               }
             ]
           })
@@ -247,6 +268,14 @@ const invokeModelStrict = async (prompt: string, modelId: string): Promise<Recor
       const textOutput = extractBedrockText(rawBody);
       return parseModelJson(textOutput);
     } catch (error) {
+      // If image fetch failed, fall back to text-only
+      if (useImage && attempt < MAX_BEDROCK_ATTEMPTS) {
+        const msg = ((error as { message?: string }).message ?? "").toLowerCase();
+        if (msg.includes("could not download") || msg.includes("image") || msg.includes("url")) {
+          useImage = false;
+          continue;
+        }
+      }
       if (attempt < MAX_BEDROCK_ATTEMPTS && shouldRetryBedrock(error)) {
         const jitter = Math.floor(Math.random() * 250);
         await sleep(attempt * 500 + jitter);
@@ -333,11 +362,12 @@ const processMessage = async (message: Required<Pick<SocialTopicMessage, "conten
     title: content.title,
     summary: content.summary,
     content: content.content,
-    text: content.text
+    text: content.text,
+    imageUrl: content.imageUrl
   });
 
   const started = Date.now();
-  const modelPayload = await invokeModelStrict(prompt, modelId);
+  const modelPayload = await invokeModelStrict(prompt, modelId, content.imageUrl);
   const latencyMs = Date.now() - started;
   const parsed = parseOutput(modelPayload);
 

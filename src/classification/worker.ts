@@ -350,6 +350,7 @@ const buildPrompt = async (version: string, input: {
   title: string;
   summary: string | null;
   content: string | null;
+  imageUrl?: string | null;
 }): Promise<string> => {
   const template = await loadPromptTemplate(version);
   return template
@@ -358,7 +359,8 @@ const buildPrompt = async (version: string, input: {
     .replaceAll("{{language}}", truncate(input.language, 20))
     .replaceAll("{{title}}", truncate(input.title, 500))
     .replaceAll("{{summary}}", truncate(input.summary, 1200))
-    .replaceAll("{{content}}", truncate(input.content, MAX_CONTENT_CHARS));
+    .replaceAll("{{content}}", truncate(input.content, MAX_CONTENT_CHARS))
+    .replaceAll("{{image_url}}", truncate(input.imageUrl, 2048));
 };
 
 const buildCommentPrompt = async (version: string, input: {
@@ -455,9 +457,39 @@ const processCommentItem = async (message: Required<Pick<ClassificationMessage, 
   );
 };
 
-const invokeModelStrict = async (prompt: string, modelId: string): Promise<Record<string, unknown>> => {
+const isValidImageUrl = (url: string): boolean => {
+  try {
+    const parsed = new URL(url);
+    return parsed.protocol === "https:" && /\.(jpg|jpeg|png|gif|webp)/i.test(parsed.pathname);
+  } catch {
+    return false;
+  }
+};
+
+const isImageFetchError = (error: unknown): boolean => {
+  const msg = ((error as { message?: string }).message ?? "").toLowerCase();
+  return msg.includes("could not download") || msg.includes("image") || msg.includes("url");
+};
+
+const invokeModelStrict = async (prompt: string, modelId: string, imageUrl?: string | null): Promise<Record<string, unknown>> => {
+  let useImage = Boolean(imageUrl && isValidImageUrl(imageUrl));
+
   for (let attempt = 1; attempt <= MAX_BEDROCK_ATTEMPTS; attempt += 1) {
     try {
+      const contentBlocks: Array<Record<string, unknown>> = [];
+
+      if (useImage && imageUrl) {
+        contentBlocks.push({
+          type: "image",
+          source: { type: "url", url: imageUrl }
+        });
+      }
+
+      contentBlocks.push({
+        type: "text",
+        text: `${prompt}\n\nResponde SOLO con JSON valido sin markdown ni texto adicional.`
+      });
+
       const response = await bedrock
         .invokeModel({
           modelId,
@@ -470,12 +502,7 @@ const invokeModelStrict = async (prompt: string, modelId: string): Promise<Recor
             messages: [
               {
                 role: "user",
-                content: [
-                  {
-                    type: "text",
-                    text: `${prompt}\n\nResponde SOLO con JSON valido sin markdown ni texto adicional.`
-                  }
-                ]
+                content: contentBlocks
               }
             ]
           })
@@ -486,6 +513,11 @@ const invokeModelStrict = async (prompt: string, modelId: string): Promise<Recor
       const textOutput = extractBedrockText(rawBody);
       return parseModelJson(textOutput);
     } catch (error) {
+      // If image fetch failed, retry without image
+      if (useImage && isImageFetchError(error) && attempt < MAX_BEDROCK_ATTEMPTS) {
+        useImage = false;
+        continue;
+      }
       if (attempt < MAX_BEDROCK_ATTEMPTS && shouldRetryBedrock(error)) {
         const jitter = Math.floor(Math.random() * 250);
         await sleep(attempt * 500 + jitter);
@@ -531,17 +563,19 @@ const processContentItem = async (message: Required<Pick<ClassificationMessage, 
     return;
   }
 
+  const isSocialSource = content.sourceType === "social";
   const prompt = await buildPrompt(promptVersion, {
     sourceType: content.sourceType,
     provider: content.provider,
     language: content.language,
     title: content.title,
     summary: content.summary,
-    content: content.content
+    content: content.content,
+    imageUrl: isSocialSource ? content.imageUrl : null
   });
 
   const started = Date.now();
-  const rawOutput = await invokeModelStrict(prompt, modelId || env.bedrockModelId);
+  const rawOutput = await invokeModelStrict(prompt, modelId || env.bedrockModelId, isSocialSource ? content.imageUrl : null);
   const latencyMs = Date.now() - started;
 
   const isSocialPrompt = promptVersion.startsWith("social-sentiment-v");

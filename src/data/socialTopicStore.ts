@@ -36,6 +36,7 @@ export type SocialTopicPromptContent = {
   text: string | null;
   publishedAt: Date | null;
   createdAt: Date;
+  imageUrl: string | null;
 };
 
 export type SocialTopicAssignmentInput = {
@@ -227,7 +228,8 @@ class SocialTopicStore {
           ci."content",
           COALESCE(ci."content", ci."summary", ci."title"),
           COALESCE(spm."publishedAt", ci."publishedAt", ci."createdAt"),
-          ci."createdAt"
+          ci."createdAt",
+          ci."imageUrl"
         FROM "public"."ContentItem" ci
         JOIN "public"."SocialPostMetric" spm ON spm."contentItemId" = ci."id"
         WHERE
@@ -251,6 +253,7 @@ class SocialTopicStore {
     const text = fieldString(row, 9);
     const publishedAt = fieldDate(row, 10);
     const createdAt = fieldDate(row, 11);
+    const imageUrl = fieldString(row, 12);
 
     if (!id || !socialPostMetricId || !channel || !accountName || !provider || !title || !createdAt) {
       return null;
@@ -268,7 +271,8 @@ class SocialTopicStore {
       content,
       text,
       publishedAt,
-      createdAt
+      createdAt,
+      imageUrl
     };
   }
 
