@@ -3462,6 +3462,30 @@ class SocialStore {
     );
   }
 
+  async reapZombieRuns(maxRuntimeMinutes = 30): Promise<number> {
+    const response = await this.rds.execute(
+      `
+        UPDATE "public"."SocialSyncRun"
+        SET
+          "status" = CAST('failed' AS "public"."RunStatus"),
+          "finishedAt" = NOW(),
+          "currentPhase" = NULL,
+          "errorMessage" = 'auto-reaped: exceeded max runtime'
+        WHERE
+          "status" = CAST('running' AS "public"."RunStatus")
+          AND "startedAt" < NOW() - CAST(:interval_minutes || ' minutes' AS INTERVAL)
+        RETURNING "id"
+      `,
+      [sqlString("interval_minutes", String(maxRuntimeMinutes))]
+    );
+
+    const reaped = response.records?.length ?? 0;
+    if (reaped > 0) {
+      console.log(JSON.stringify({ level: "info", message: "zombie_runs_reaped", count: reaped }));
+    }
+    return reaped;
+  }
+
   async isObjectProcessed(input: { bucket: string; objectKey: string; eTag: string; lastModified: Date }): Promise<boolean> {
     const response = await this.rds.execute(
       `
@@ -3647,6 +3671,7 @@ class SocialStore {
           VALUES
             (CAST(:id AS UUID), CAST(:content_item_id AS UUID), :channel, :account_name, :external_post_id, :post_url, :post_type, CAST(:campaign_taxonomy_id AS UUID), :published_at, CAST(:exposure AS DECIMAL(18,2)), CAST(:engagement_total AS DECIMAL(18,2)), CAST(:impressions AS DECIMAL(18,2)), CAST(:reach AS DECIMAL(18,2)), CAST(:clicks AS DECIMAL(18,2)), CAST(:likes AS DECIMAL(18,2)), CAST(:comments AS DECIMAL(18,2)), CAST(:shares AS DECIMAL(18,2)), CAST(:views AS DECIMAL(18,2)), CAST(:diagnostics AS JSONB), NOW(), NOW())
           ON CONFLICT ("channel", "externalPostId") DO UPDATE SET
+            "contentItemId" = EXCLUDED."contentItemId",
             "accountName" = EXCLUDED."accountName",
             "postUrl" = EXCLUDED."postUrl",
             "postType" = EXCLUDED."postType",
@@ -3752,6 +3777,7 @@ class SocialStore {
             CAST(:spm_id AS UUID), ci."id", :channel, :account_name, :external_post_id, :post_url, :post_type, CAST(:campaign_taxonomy_id AS UUID), :spm_published_at::timestamp, CAST(:exposure AS DECIMAL(18,2)), CAST(:engagement_total AS DECIMAL(18,2)), CAST(:impressions AS DECIMAL(18,2)), CAST(:reach AS DECIMAL(18,2)), CAST(:clicks AS DECIMAL(18,2)), CAST(:likes AS DECIMAL(18,2)), CAST(:comments AS DECIMAL(18,2)), CAST(:shares AS DECIMAL(18,2)), CAST(:views AS DECIMAL(18,2)), CAST(:diagnostics AS JSONB), NOW(), NOW()
           FROM ci
           ON CONFLICT ("channel", "externalPostId") DO UPDATE SET
+            "contentItemId" = (SELECT "id" FROM ci),
             "accountName" = EXCLUDED."accountName",
             "postUrl" = EXCLUDED."postUrl",
             "postType" = EXCLUDED."postType",
@@ -3913,6 +3939,25 @@ class SocialStore {
     // batchExecuteStatement doesn't tell us which rows were inserted vs conflicted
     // Return total as inserted; actual dedup count is unknown but acceptable for metrics
     return { inserted: comments.length, deduped: 0 };
+  }
+
+  async listUnclassifiedCommentIds(limit = 5000): Promise<string[]> {
+    const safeLimit = Math.min(5000, Math.max(1, limit));
+    const response = await this.rds.execute(
+      `
+        SELECT "id"::text
+        FROM "public"."SocialPostComment"
+        WHERE "sentiment" = 'unknown'
+          AND "sentimentSource" = 'dataslayer'
+        ORDER BY "createdAt" DESC
+        LIMIT :limit
+      `,
+      [sqlLong("limit", safeLimit)]
+    );
+
+    return (response.records ?? [])
+      .map((row) => fieldString(row, 0))
+      .filter((v): v is string => Boolean(v));
   }
 
   async batchUpsertPageDailyMetrics(

@@ -1,5 +1,5 @@
 import { randomUUID } from "crypto";
-import { RdsDataClient, fieldDate, fieldString, sqlJson, sqlLong, sqlString, sqlTimestamp, sqlUuid } from "./rdsData";
+import { RdsDataClient, fieldDate, fieldString, sqlBoolean, sqlJson, sqlLong, sqlString, sqlTimestamp, sqlUuid } from "./rdsData";
 
 export type ClassificationPendingItem = {
   contentItemId: string;
@@ -145,6 +145,74 @@ class ClassificationStore {
     );
 
     return Boolean(fieldString(response.records?.[0], 0));
+  }
+
+  async getCommentForPrompt(commentId: string): Promise<{
+    commentId: string;
+    channel: string;
+    commentText: string;
+    postText: string | null;
+  } | null> {
+    const response = await this.rds.execute(
+      `
+        SELECT
+          sc."id"::text,
+          sc."channel",
+          sc."text",
+          ci."title",
+          ci."content"
+        FROM "public"."SocialPostComment" sc
+        JOIN "public"."SocialPostMetric" spm ON spm."id" = sc."socialPostMetricId"
+        JOIN "public"."ContentItem" ci ON ci."id" = spm."contentItemId"
+        WHERE sc."id" = CAST(:comment_id AS UUID)
+        LIMIT 1
+      `,
+      [sqlUuid("comment_id", commentId)]
+    );
+
+    const row = response.records?.[0];
+    const id = fieldString(row, 0);
+    const channel = fieldString(row, 1);
+    const commentText = fieldString(row, 2);
+    const postTitle = fieldString(row, 3);
+    const postContent = fieldString(row, 4);
+
+    if (!id || !channel || !commentText) return null;
+
+    const postText = [postTitle, postContent].filter(Boolean).join("\n").trim() || null;
+
+    return { commentId: id, channel, commentText, postText };
+  }
+
+  async updateCommentClassification(input: {
+    commentId: string;
+    sentiment: string;
+    relatedToPostText: boolean;
+    isSpam: boolean;
+    confidence: number | null;
+    categoria: string | null;
+  }): Promise<void> {
+    await this.rds.execute(
+      `
+        UPDATE "public"."SocialPostComment"
+        SET
+          "sentiment" = :sentiment,
+          "sentimentSource" = 'model',
+          "relatedToPostText" = :related_to_post,
+          "isSpam" = :is_spam,
+          "confidence" = CAST(:confidence AS DECIMAL(5,4)),
+          "needsReview" = CASE WHEN CAST(:confidence AS DECIMAL(5,4)) < 0.6 THEN TRUE ELSE FALSE END,
+          "updatedAt" = NOW()
+        WHERE "id" = CAST(:comment_id AS UUID)
+      `,
+      [
+        sqlString("sentiment", input.sentiment),
+        sqlBoolean("related_to_post", input.relatedToPostText),
+        sqlBoolean("is_spam", input.isSpam),
+        sqlString("confidence", input.confidence === null ? null : String(input.confidence)),
+        sqlUuid("comment_id", input.commentId)
+      ]
+    );
   }
 
   async upsertAutoClassification(input: UpsertAutoClassificationInput): Promise<void> {

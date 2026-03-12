@@ -16,6 +16,7 @@ type ClassificationTriggerType = "manual" | "scheduled";
 
 type ClassificationMessage = {
   content_item_id?: string;
+  comment_id?: string;
   prompt_version?: string;
   model_id?: string;
   source_type?: string;
@@ -45,6 +46,7 @@ const shouldRetryBedrock = (error: unknown): boolean => {
   const message = (err.message ?? "").toLowerCase();
   if (code === "ThrottlingException" || code === "ModelTimeoutException" || code === "ServiceUnavailableException") return true;
   if (message.includes("throttl") || message.includes("timeout")) return true;
+  if (message.includes("model_invalid_json") || code === "SyntaxError") return true;
   return false;
 };
 
@@ -96,26 +98,38 @@ const extractJsonText = (text: string): string => {
   return trimmed;
 };
 
+const sanitizeModelJson = (text: string): string => {
+  return text
+    .replace(/,\s*([}\]])/g, "$1")                // trailing commas
+    .replace(/'/g, '"')                            // single quotes → double quotes
+    .replace(/(\r?\n|\r)/g, " ");                  // newlines inside values
+};
+
 const parseModelJson = (rawText: string): Record<string, unknown> => {
   const directText = extractJsonText(rawText);
-  try {
-    const parsed = JSON.parse(directText) as unknown;
-    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-      throw new Error("model_output_not_object");
-    }
-    return parsed as Record<string, unknown>;
-  } catch {
-    const firstBrace = directText.indexOf("{");
-    const lastBrace = directText.lastIndexOf("}");
-    if (firstBrace >= 0 && lastBrace > firstBrace) {
-      const chunk = directText.slice(firstBrace, lastBrace + 1);
-      const parsed = JSON.parse(chunk) as unknown;
+
+  const tryParse = (input: string): Record<string, unknown> | null => {
+    try {
+      const parsed = JSON.parse(input) as unknown;
       if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
         return parsed as Record<string, unknown>;
       }
-    }
-    throw new Error("model_invalid_json");
+    } catch { /* fallthrough */ }
+    return null;
+  };
+
+  const result = tryParse(directText) ?? tryParse(sanitizeModelJson(directText));
+  if (result) return result;
+
+  const firstBrace = directText.indexOf("{");
+  const lastBrace = directText.lastIndexOf("}");
+  if (firstBrace >= 0 && lastBrace > firstBrace) {
+    const chunk = directText.slice(firstBrace, lastBrace + 1);
+    const chunkResult = tryParse(chunk) ?? tryParse(sanitizeModelJson(chunk));
+    if (chunkResult) return chunkResult;
   }
+
+  throw new Error("model_invalid_json");
 };
 
 const normalizeString = (value: unknown, maxLen: number): string | null => {
@@ -155,10 +169,122 @@ const normalizeSentimiento = (value: unknown): "positivo" | "neutro" | "negativo
   return null;
 };
 
+// ── Social post taxonomy (38 categories) ──
+const SOCIAL_POST_CATEGORIES: readonly string[] = [
+  "Impacto social y sostenibilidad",
+  "Impacto de marca",
+  "Ferias y activaciones",
+  "Red cobertura y tecnología",
+  "Beneficios y/o alianzas",
+  "D-days",
+  "Smartphones",
+  "Promociones",
+  "Tendencias memes y cultura pop",
+  "Reconocimientos y certificaciones",
+  "Marca empleadora",
+  "Cultura corporativa",
+  "Gestión corporativa",
+  "Noticias / logros",
+  "Deportes",
+  "Servicio al cliente",
+  "Eventos corp",
+  "CRC",
+  "Pymes casos y educación empresarios",
+  "Educación y recomendaciones tec/seguridad",
+  "Branding y narrativa creativa",
+  "Hackeo",
+  "Concursos y fidelización",
+  "Venues",
+  "Claro música",
+  "Política pública",
+  "Claro empresas",
+  "Claro music - Venue eventos",
+  "Claro musica app",
+  "Claro video",
+  "Gaming esports",
+  "Hogares",
+  "Pospago",
+  "Prepago",
+  "Otros productos de claro",
+  "Servicio soporte",
+  "Streaming bundles",
+  "Talento y empleabilidad"
+] as const;
+
+const normalizeForMatch = (s: string): string =>
+  s.toLowerCase().normalize("NFKD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, " ").trim();
+
+const SOCIAL_POST_CATEGORY_INDEX = new Map<string, string>(
+  SOCIAL_POST_CATEGORIES.map((c) => [normalizeForMatch(c), c])
+);
+
+// Keyword map for common model hallucinations → correct category
+const SOCIAL_CATEGORY_KEYWORDS: [RegExp, string][] = [
+  [/\bentretenimiento\b/, "Tendencias memes y cultura pop"],
+  [/\bpublicid|marketing|branding\b/, "Branding y narrativa creativa"],
+  [/\bpromocion|oferta|descuento\b/, "Promociones"],
+  [/\bresponsabilid|rse|sostenib|social\s+corporativ|medio\s+ambient|reciclaj\b/, "Impacto social y sostenibilidad"],
+  [/\bcibersegurid|seguridad\s+digital|fraude|phishing|hackeo\b/, "Hackeo"],
+  [/\bdeporte|futbol|ciclism|copa\b/, "Deportes"],
+  [/\btecnolog|5g|cobertura|fibra|infraestructur|conectivid\b/, "Red cobertura y tecnología"],
+  [/\bevento\s+corp|conferencia|summit|workshop|lanzamiento\s+intern\b/, "Eventos corp"],
+  [/\btalento|empleo|vacan|reclutamiento|oportunidad\s+laboral\b/, "Talento y empleabilidad"],
+  [/\bmarca\s+empleador|employer\s+brand|vida\s+laboral\b/, "Marca empleadora"],
+  [/\bcultura\s+corp|valores\s+corp|celebracion\s+corp\b/, "Cultura corporativa"],
+  [/\bgestion\s+corp|resultado|financi|informe\s+anual\b/, "Gestión corporativa"],
+  [/\breconocimiento|certificacion|premio|great\s+place|effie\b/, "Reconocimientos y certificaciones"],
+  [/\bgaming|esport|torneo|videojuego\b/, "Gaming esports"],
+  [/\bclaro\s+video|streaming\s+video\b/, "Claro video"],
+  [/\bclaro\s+musica\s+app|aplicacion.*musica\b/, "Claro musica app"],
+  [/\bclaro\s+music.*venue|concierto|festival\s+music\b/, "Claro music - Venue eventos"],
+  [/\bclaro\s+musica|musica|playlist|artista\b/, "Claro música"],
+  [/\bclaro\s+empresa|b2b|datacenter|cloud|sd-wan\b/, "Claro empresas"],
+  [/\bhogares|internet\s+hogar|television|iptv|smart\s+home\b/, "Hogares"],
+  [/\bpospago|roaming|data\s+ilimitad\b/, "Pospago"],
+  [/\bprepago|recarga|bolsa\s+de\s+dato\b/, "Prepago"],
+  [/\bstreaming\s+bundle|netflix.*disney|paquete.*streaming\b/, "Streaming bundles"],
+  [/\bpyme|emprendedor|caso\s+de\s+exito\b/, "Pymes casos y educación empresarios"],
+  [/\beducaci.*seguridad|tip.*ciberseg|tutorial\b/, "Educación y recomendaciones tec/seguridad"],
+  [/\bconcurso|sorteo|fideliz|programa\s+de\s+punto|claro\s+club\b/, "Concursos y fidelización"],
+  [/\bvenue|centro\s+de\s+evento|estadio|arena\b/, "Venues"],
+  [/\bferia|activacion|stand|btl|andicom\b/, "Ferias y activaciones"],
+  [/\balianza|partnership|convenio|acuerdo\s+comercial\b/, "Beneficios y/o alianzas"],
+  [/\bblack\s+friday|cyber|hot\s+sale|d-day\b/, "D-days"],
+  [/\bsmartphone|iphone|samsung|xiaomi|dispositivo\b/, "Smartphones"],
+  [/\bmeme|viral|cultura\s+pop|trendjack|humor\b/, "Tendencias memes y cultura pop"],
+  [/\bcrc|regulacion|normativa|comision\b/, "CRC"],
+  [/\bpolitica\s+public|legislacion|mintic|espectro\b/, "Política pública"],
+  [/\bservicio\s+soporte|soporte\s+tecnico|troubleshoot|mesa\s+de\s+ayud\b/, "Servicio soporte"],
+  [/\bservicio\s+al\s+client|atencion\s+al\s+client|canal\s+de\s+atenci\b/, "Servicio al cliente"],
+  [/\blogro|hito|noticia|comunicado\b/, "Noticias / logros"],
+];
+
+const matchSocialPostCategory = (raw: string): string => {
+  const norm = normalizeForMatch(raw);
+
+  // 1. Exact match (case/accent insensitive)
+  const exact = SOCIAL_POST_CATEGORY_INDEX.get(norm);
+  if (exact) return exact;
+
+  // 2. Substring containment — check if any valid category is contained in the raw string
+  for (const [normCat, canonical] of SOCIAL_POST_CATEGORY_INDEX) {
+    if (norm.includes(normCat) || normCat.includes(norm)) return canonical;
+  }
+
+  // 3. Keyword heuristic
+  for (const [pattern, canonical] of SOCIAL_CATEGORY_KEYWORDS) {
+    if (pattern.test(norm)) return canonical;
+  }
+
+  // 4. Fallback
+  return "Otros productos de claro";
+};
+
 const validateOutput = (
   payload: Record<string, unknown>,
   options?: {
     defaultCategoria?: string;
+    useSocialTaxonomy?: boolean;
   }
 ): {
   categoria: string;
@@ -167,10 +293,11 @@ const validateOutput = (
   confianza: number;
   resumen: string | null;
 } => {
-  const categoria = normalizeString(payload.categoria, 120) ?? normalizeString(options?.defaultCategoria, 120);
-  if (!categoria) {
+  const rawCategoria = normalizeString(payload.categoria, 120) ?? normalizeString(options?.defaultCategoria, 120);
+  if (!rawCategoria) {
     throw new Error("model_missing_categoria");
   }
+  const categoria = options?.useSocialTaxonomy ? matchSocialPostCategory(rawCategoria) : rawCategoria;
 
   const sentimiento = normalizeSentimiento(payload.sentimiento);
   if (!sentimiento) {
@@ -232,6 +359,100 @@ const buildPrompt = async (version: string, input: {
     .replaceAll("{{title}}", truncate(input.title, 500))
     .replaceAll("{{summary}}", truncate(input.summary, 1200))
     .replaceAll("{{content}}", truncate(input.content, MAX_CONTENT_CHARS));
+};
+
+const buildCommentPrompt = async (version: string, input: {
+  channel: string;
+  postText: string | null;
+  commentText: string;
+}): Promise<string> => {
+  const template = await loadPromptTemplate(version);
+  return template
+    .replaceAll("{{channel}}", truncate(input.channel, 40))
+    .replaceAll("{{post_text}}", truncate(input.postText, MAX_CONTENT_CHARS))
+    .replaceAll("{{comment_text}}", truncate(input.commentText, MAX_CONTENT_CHARS));
+};
+
+const validateCommentOutput = (
+  payload: Record<string, unknown>
+): {
+  sentimiento: "positivo" | "neutro" | "negativo";
+  relatedToPostText: boolean;
+  isSpam: boolean;
+  confianza: number;
+  categoria: string | null;
+} => {
+  const sentimiento = normalizeSentimiento(payload.sentimiento);
+  if (!sentimiento) {
+    throw new Error(`comment_invalid_sentimiento:${JSON.stringify(payload.sentimiento)}`);
+  }
+
+  const relatedToPostText = typeof payload.relatedToPostText === "boolean" ? payload.relatedToPostText : true;
+  const isSpam = typeof payload.isSpam === "boolean" ? payload.isSpam : false;
+
+  const confianzaRaw = payload.confianza;
+  if (typeof confianzaRaw !== "number" || Number.isNaN(confianzaRaw) || confianzaRaw < 0 || confianzaRaw > 1) {
+    throw new Error("comment_invalid_confianza");
+  }
+
+  const categoria = normalizeString(payload.categoria, 120);
+
+  return { sentimiento, relatedToPostText, isSpam, confianza: confianzaRaw, categoria };
+};
+
+const processCommentItem = async (message: Required<Pick<ClassificationMessage, "comment_id" | "prompt_version" | "model_id">> &
+  Omit<ClassificationMessage, "comment_id" | "prompt_version" | "model_id">): Promise<void> => {
+  const store = createClassificationStore();
+  if (!store) {
+    throw new Error("Database runtime is not configured");
+  }
+
+  const commentId = message.comment_id;
+  const promptVersion = message.prompt_version;
+  const modelId = message.model_id;
+  const requestId = typeof message.request_id === "string" ? message.request_id.trim() : null;
+
+  const comment = await store.getCommentForPrompt(commentId);
+  if (!comment) {
+    console.warn("comment_classification_not_found", { comment_id: commentId });
+    return;
+  }
+
+  const prompt = await buildCommentPrompt(promptVersion, {
+    channel: comment.channel,
+    postText: comment.postText,
+    commentText: comment.commentText
+  });
+
+  const started = Date.now();
+  const rawOutput = await invokeModelStrict(prompt, modelId || env.bedrockModelId);
+  const latencyMs = Date.now() - started;
+
+  const validated = validateCommentOutput(rawOutput);
+
+  await store.updateCommentClassification({
+    commentId,
+    sentiment: validated.sentimiento,
+    relatedToPostText: validated.relatedToPostText,
+    isSpam: validated.isSpam,
+    confidence: validated.confianza,
+    categoria: validated.categoria
+  });
+
+  console.log(
+    JSON.stringify({
+      level: "info",
+      message: "comment_classification_completed",
+      comment_id: commentId,
+      prompt_version: promptVersion,
+      model_id: modelId,
+      request_id: requestId,
+      sentiment: validated.sentimiento,
+      related_to_post: validated.relatedToPostText,
+      is_spam: validated.isSpam,
+      model_latency_ms: latencyMs
+    })
+  );
 };
 
 const invokeModelStrict = async (prompt: string, modelId: string): Promise<Record<string, unknown>> => {
@@ -323,9 +544,10 @@ const processContentItem = async (message: Required<Pick<ClassificationMessage, 
   const rawOutput = await invokeModelStrict(prompt, modelId || env.bedrockModelId);
   const latencyMs = Date.now() - started;
 
+  const isSocialPrompt = promptVersion.startsWith("social-sentiment-v");
   const validated = validateOutput(rawOutput, {
-    // Social sentiment prompt can legitimately omit "categoria"; keep a stable default for storage.
-    defaultCategoria: promptVersion.startsWith("social-sentiment-v") ? "social_sentiment_v1" : undefined
+    defaultCategoria: isSocialPrompt ? "Otros productos de claro" : undefined,
+    useSocialTaxonomy: isSocialPrompt
   });
 
   await store.upsertAutoClassification({
@@ -360,20 +582,33 @@ export const main = async (event: SQSEvent) => {
   for (const record of event.Records) {
     const message = parseMessage(record.body);
     const contentItemId = message.content_item_id;
-
-    if (!contentItemId || !UUID_REGEX.test(contentItemId)) {
-      console.error("classification_worker_invalid_message", {
-        message_id: record.messageId,
-        body: record.body
-      });
-      continue;
-    }
+    const commentId = message.comment_id;
 
     const promptVersion = (message.prompt_version ?? env.classificationPromptVersion ?? "classification-v1").trim();
     const modelId = (message.model_id ?? env.bedrockModelId).trim();
 
     if (!promptVersion || !modelId) {
       console.error("classification_worker_missing_prompt_or_model", {
+        message_id: record.messageId,
+        body: record.body
+      });
+      continue;
+    }
+
+    // Route: comment classification
+    if (commentId && UUID_REGEX.test(commentId)) {
+      await processCommentItem({
+        ...message,
+        comment_id: commentId,
+        prompt_version: promptVersion,
+        model_id: modelId
+      });
+      continue;
+    }
+
+    // Route: content item classification
+    if (!contentItemId || !UUID_REGEX.test(contentItemId)) {
+      console.error("classification_worker_invalid_message", {
         message_id: record.messageId,
         body: record.body
       });

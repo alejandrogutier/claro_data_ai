@@ -17,6 +17,7 @@ const SOCIAL_BUCKET_DEFAULT = "claro-dataslayer-dump";
 const SOCIAL_PREFIX_DEFAULT = "raw/organic/";
 const MAX_BEDROCK_ATTEMPTS = 3;
 const SENTIMENT_PROMPT_VERSION = "social-sentiment-v1";
+const COMMENT_SENTIMENT_PROMPT_VERSION = "social-comment-sentiment-v1";
 
 type SocialSyncInput = {
   triggerType: TriggerType;
@@ -80,16 +81,17 @@ type ChannelS3Stats = {
   rows: number;
   minDate: Date | null;
   maxDate: Date | null;
+  seenIds: Set<string>;
 };
 
 const CHANNELS: SocialChannel[] = ["facebook", "instagram", "linkedin", "tiktok", "x"];
 
 const buildEmptyChannelStats = (): Record<SocialChannel, ChannelS3Stats> => ({
-  facebook: { rows: 0, minDate: null, maxDate: null },
-  instagram: { rows: 0, minDate: null, maxDate: null },
-  linkedin: { rows: 0, minDate: null, maxDate: null },
-  tiktok: { rows: 0, minDate: null, maxDate: null },
-  x: { rows: 0, minDate: null, maxDate: null }
+  facebook: { rows: 0, minDate: null, maxDate: null, seenIds: new Set() },
+  instagram: { rows: 0, minDate: null, maxDate: null, seenIds: new Set() },
+  linkedin: { rows: 0, minDate: null, maxDate: null, seenIds: new Set() },
+  tiktok: { rows: 0, minDate: null, maxDate: null, seenIds: new Set() },
+  x: { rows: 0, minDate: null, maxDate: null, seenIds: new Set() }
 });
 
 const sleep = async (ms: number): Promise<void> =>
@@ -227,6 +229,16 @@ const toDate = (value: string | undefined): Date | null => {
   if (!value) return null;
   const normalized = value.trim();
   if (!normalized) return null;
+
+  // Handle D/MM/YYYY or DD/MM/YYYY format (e.g. LinkedIn comments)
+  const slashMatch = normalized.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (slashMatch) {
+    const [, day, month, year] = slashMatch;
+    const iso = `${year}-${month!.padStart(2, "0")}-${day!.padStart(2, "0")}T00:00:00Z`;
+    const parsed = new Date(iso);
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+  }
+
   const parsed = new Date(normalized.includes("T") ? normalized : `${normalized}T00:00:00Z`);
   return Number.isNaN(parsed.getTime()) ? null : parsed;
 };
@@ -398,8 +410,9 @@ const isPostFile = (fileType: DataslayerFileType): boolean =>
 const X_ACCOUNT_NORMALIZATION: Record<string, string> = {
   ClaroColombiaOficial: "Claro Colombia",
   "Clarovideo Colombia": "Claro Video",
-  "Claro Musica - AdBid": "Claro Musica CO",
-  "K Music": "Claro Musica CO"
+  "Claro Musica - AdBid": "Claro Música CO",
+  "Claro Música - AdBid": "Claro Música CO",
+  "K Music": "Claro Música CO"
 };
 
 const normalizeRow = (
@@ -457,7 +470,7 @@ const normalizeRow = (
     if (!externalPostId || !accountName) return null;
 
     const isNewFormat = "Total reach" in row || "Today" in row;
-    const text = isNewFormat ? null : normalizeText(row["Post message"] ?? row["Post description"] ?? row["Post name"]);
+    const text = normalizeText(row["Post message"] ?? row["Post description"] ?? row["Post name"]);
     const hashtags = mergeHashtags(extractHashtags(text), extractHashtagsFromColumns(row));
     const postUrl = normalizeUrl(row["Link to post"], `social://facebook/${externalPostId}`);
 
@@ -507,7 +520,7 @@ const normalizeRow = (
     if (!externalPostId || !accountName) return null;
 
     const isNewFormat = "Today" in row || "Media unique saves" in row;
-    const text = isNewFormat ? null : normalizeText(row["Media caption"]);
+    const text = normalizeText(row["Media caption"]);
     const hashtags = mergeHashtags(extractHashtags(text), extractHashtagsFromColumns(row));
     const postUrl = normalizeUrl(row["Media permalink"] ?? row["Media URL"], `social://instagram/${externalPostId}`);
     const reach = toNumber(row["Media reach"]);
@@ -595,13 +608,13 @@ const normalizeRow = (
 
   if (channel === "x") {
     const externalPostId = row["Tweet ID"]?.trim();
-    let accountName = row["Account name"]?.trim() ?? row["Profile name"]?.trim();
-    if (!externalPostId || !accountName) return null;
-    accountName = X_ACCOUNT_NORMALIZATION[accountName] ?? accountName;
+    const rawAccountName = row["Account name"]?.trim() ?? row["Profile name"]?.trim();
+    if (!externalPostId || !rawAccountName) return null;
+    const accountName = X_ACCOUNT_NORMALIZATION[rawAccountName] ?? rawAccountName;
     const tweetText = tweetTextLookup?.get(externalPostId) ?? null;
     const text = normalizeText(row["Tweet text"] ?? tweetText);
     const hashtags = mergeHashtags(extractHashtags(text), extractHashtagsFromColumns(row));
-    const postUrl = normalizeUrl(row["Tweet URL"], `social://x/${externalPostId}`);
+    const postUrl = normalizeUrl(row["Tweet URL"], `https://x.com/${rawAccountName}/status/${externalPostId}`);
     const impressions = toNumber(row["Impressions"]);
     const likes = toNumber(row["Likes"]) || toNumber(row["Total likes"]);
     const comments = toNumber(row["Replies"]);
@@ -645,7 +658,7 @@ const normalizeRow = (
   const accountName = row["Account nickname"]?.trim();
   if (!externalPostId || !accountName) return null;
   const isNewFormat = "Date today" in row && !("Title" in row);
-  const text = isNewFormat ? null : normalizeText(row["Title"]);
+  const text = normalizeText(row["Title"]);
   const hashtags = mergeHashtags(extractHashtags(text), extractHashtagsFromColumns(row));
   const postUrl = normalizeUrl(row["Share URL"], `social://tiktok/${externalPostId}`);
   const views = toNumber(row["Video Views"]);
@@ -686,6 +699,9 @@ const normalizeRow = (
 
 const updateChannelStats = (stats: Record<SocialChannel, ChannelS3Stats>, row: NormalizedSocialRow): void => {
   const channel = stats[row.channel];
+  // Deduplicate by externalPostId to align with DB ON CONFLICT dedup
+  if (channel.seenIds.has(row.externalPostId)) return;
+  channel.seenIds.add(row.externalPostId);
   channel.rows += 1;
   if (!row.publishedAt) return;
   if (!channel.minDate || row.publishedAt.getTime() < channel.minDate.getTime()) {
@@ -780,6 +796,10 @@ export const runSocialSync = async (input: SocialSyncInput): Promise<SocialSyncO
 
   const bucket = input.bucket ?? env.socialRawBucketName ?? env.rawBucketName ?? SOCIAL_BUCKET_DEFAULT;
   const prefix = input.prefix ?? env.socialRawPrefix ?? SOCIAL_PREFIX_DEFAULT;
+
+  // Reap zombie runs stuck in "running" state for more than 30 minutes
+  await store.reapZombieRuns(30);
+
   const run = await store.startSyncRun({ triggerType: input.triggerType, requestId: input.requestId, runId: input.runId });
 
   let objectsProcessed = 0;
@@ -995,6 +1015,7 @@ export const runSocialSync = async (input: SocialSyncInput): Promise<SocialSyncO
     let commentsIngested = 0;
     let commentsDeduped = 0;
     let commentsOrphaned = 0;
+    const orphanSamples = new Map<string, Set<string>>();
 
     const commentObjects = objects.filter((o) => detectFileType(o.key) === "comments" && o.size > 0);
 
@@ -1064,6 +1085,9 @@ export const runSocialSync = async (input: SocialSyncInput): Promise<SocialSyncO
         const postMetric = postMetricMap.get(parentPostId);
         if (!postMetric) {
           commentsOrphaned += 1;
+          if (!orphanSamples.has(commentChannel)) orphanSamples.set(commentChannel, new Set());
+          const channelSamples = orphanSamples.get(commentChannel)!;
+          if (channelSamples.size < 20) channelSamples.add(parentPostId);
           continue;
         }
 
@@ -1102,6 +1126,17 @@ export const runSocialSync = async (input: SocialSyncInput): Promise<SocialSyncO
         eTag: commentObj.eTag,
         lastModified: commentObj.lastModified
       });
+    }
+
+    if (orphanSamples.size > 0) {
+      const samples: Record<string, string[]> = {};
+      for (const [ch, ids] of orphanSamples) samples[ch] = [...ids];
+      console.log(JSON.stringify({
+        level: "warn",
+        message: "orphan_comment_samples",
+        total_orphaned: commentsOrphaned,
+        samples
+      }));
     }
 
     await store.updateSyncRunPhase({
@@ -1164,7 +1199,7 @@ export const runSocialSync = async (input: SocialSyncInput): Promise<SocialSyncO
       }> = [];
 
       for (const prow of pageRows) {
-        const dateStr = prow["Date"]?.trim();
+        const dateStr = (prow["Date"] ?? prow["Date today"] ?? prow["End date"])?.trim();
         const date = toDate(dateStr);
         if (!date) continue;
 
@@ -1315,6 +1350,31 @@ export const runSocialSync = async (input: SocialSyncInput): Promise<SocialSyncO
       objectsTopicsQueued = topicClassificationContentIds.size;
     }
 
+    // Queue unclassified comments for sentiment + relatedToPostText analysis
+    let commentsClassificationQueued = 0;
+    if (queueClassification && env.classificationQueueUrl) {
+      const unclassifiedCommentIds = await store.listUnclassifiedCommentIds(5000);
+      if (unclassifiedCommentIds.length > 0) {
+        const requestedAt = new Date().toISOString();
+        for (const commentId of unclassifiedCommentIds) {
+          await sqs
+            .sendMessage({
+              QueueUrl: env.classificationQueueUrl,
+              MessageBody: JSON.stringify({
+                comment_id: commentId,
+                prompt_version: COMMENT_SENTIMENT_PROMPT_VERSION,
+                model_id: env.bedrockModelId,
+                trigger_type: input.triggerType,
+                request_id: input.requestId ?? null,
+                requested_at: requestedAt
+              })
+            })
+            .promise();
+        }
+        commentsClassificationQueued = unclassifiedCommentIds.length;
+      }
+    }
+
     await store.updateSyncRunPhase({
       runId: run.id,
       phase: "classify",
@@ -1323,7 +1383,8 @@ export const runSocialSync = async (input: SocialSyncInput): Promise<SocialSyncO
         mode: queueClassification ? "queued_async" : "inline_sync",
         rows_classified: rowsClassified,
         rows_pending_classification: rowsPendingClassification,
-        rows_pending_topics: objectsTopicsQueued
+        rows_pending_topics: objectsTopicsQueued,
+        comments_classification_queued: commentsClassificationQueued
       },
       metrics: phaseMetrics()
     });
