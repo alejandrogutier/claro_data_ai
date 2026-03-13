@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, useCallback, type MouseEvent } from "react";
+import React, { useEffect, useMemo, useRef, useState, useCallback, type MouseEvent } from "react";
 import { useSearchParams } from "react-router-dom";
 import {
   Card, Row, Col, Tabs, Segmented, Select, Input, InputNumber, Button, Alert, Spin,
@@ -7,7 +7,10 @@ import {
 import {
   ReloadOutlined, DownloadOutlined, FileExcelOutlined, InfoCircleOutlined,
   SearchOutlined, ClearOutlined, FilterOutlined,
-  DashboardOutlined, TeamOutlined, FileTextOutlined, WarningOutlined, CloudSyncOutlined, BookOutlined
+  DashboardOutlined, TeamOutlined, FileTextOutlined, WarningOutlined, CloudSyncOutlined, BookOutlined,
+  EyeOutlined, UsergroupAddOutlined, LinkOutlined, LikeOutlined, CommentOutlined,
+  ShareAltOutlined, PlayCircleOutlined, PercentageOutlined, RiseOutlined,
+  PieChartOutlined, BarChartOutlined, FundViewOutlined
 } from "@ant-design/icons";
 import { Group } from "@visx/group";
 import { Bar, LinePath, Pie, Circle, Line as VisxLine } from "@visx/shape";
@@ -53,6 +56,7 @@ import { computeER } from "../components/social/postsUtils";
 import type { PostRow } from "../components/social/postsTypes";
 import { PageHeader } from "../components/shared/PageHeader";
 import { KpiCard } from "../components/shared/KpiCard";
+import SecondaryKpiCard from "../components/shared/SecondaryKpiCard";
 import { SentimentTag } from "../components/shared/SentimentTag";
 import { StatusTag } from "../components/shared/StatusTag";
 import { SeverityTag } from "../components/shared/SeverityTag";
@@ -107,6 +111,7 @@ type KpiCardData = {
   status: string;
   statusColor: string;
   info: string;
+  deltaValue: number;
 };
 
 type ChartTooltipEntry = {
@@ -196,6 +201,61 @@ const SECONDARY_KPI_METRICS: SecondaryKpiMetric[] = [
   "shares_total", "views_total", "ctr", "er_impressions", "er_reach", "view_rate",
   "likes_share", "comments_share", "shares_share"
 ];
+
+/* ── Secondary KPI groups with icons ── */
+type SecondaryKpiGroup = { title: string; color: string; metrics: SecondaryKpiMetric[] };
+const SECONDARY_KPI_GROUPS: SecondaryKpiGroup[] = [
+  {
+    title: "Volumen",
+    color: "#2563eb",
+    metrics: ["impressions_total", "reach_total", "clicks_total", "likes_total", "comments_total", "shares_total", "views_total"],
+  },
+  {
+    title: "Tasas de eficiencia",
+    color: "#0f766e",
+    metrics: ["ctr", "er_impressions", "er_reach", "view_rate"],
+  },
+  {
+    title: "Mix de interacciones",
+    color: "#7c3aed",
+    metrics: ["likes_share", "comments_share", "shares_share"],
+  },
+];
+
+const SECONDARY_KPI_ICONS: Partial<Record<string, React.ReactNode>> = {
+  impressions_total: <EyeOutlined />,
+  reach_total: <UsergroupAddOutlined />,
+  clicks_total: <LinkOutlined />,
+  likes_total: <LikeOutlined />,
+  comments_total: <CommentOutlined />,
+  shares_total: <ShareAltOutlined />,
+  views_total: <PlayCircleOutlined />,
+  ctr: <PercentageOutlined />,
+  er_impressions: <RiseOutlined />,
+  er_reach: <FundViewOutlined />,
+  view_rate: <BarChartOutlined />,
+  likes_share: <PieChartOutlined />,
+  comments_share: <PieChartOutlined />,
+  shares_share: <PieChartOutlined />,
+};
+
+const SECONDARY_KPI_INFO: Partial<Record<string, string>> = {
+  impressions_total: "Total de impresiones (veces que el contenido fue mostrado).",
+  reach_total: "Personas únicas alcanzadas por el contenido.",
+  clicks_total: "Total de clics en el contenido.",
+  likes_total: "Total de reacciones positivas (likes, love, etc.).",
+  comments_total: "Total de comentarios recibidos (excluye replies).",
+  shares_total: "Total de veces que el contenido fue compartido.",
+  views_total: "Total de reproducciones de video.",
+  ctr: "Click-Through Rate = clics / impresiones × 100.",
+  er_impressions: "Engagement Rate por impresiones = interacciones / impresiones × 100.",
+  er_reach: "Engagement Rate por reach = interacciones / reach × 100.",
+  view_rate: "Tasa de visualización = views / impresiones × 100.",
+  likes_share: "Proporción de likes sobre el total de interacciones.",
+  comments_share: "Proporción de comments sobre el total de interacciones.",
+  shares_share: "Proporción de shares sobre el total de interacciones.",
+};
+
 const TIME_GRANULARITY_OPTIONS: TimeGranularity[] = ["day", "week", "month", "quarter", "semester"];
 const ADDITIVE_METRICS = [
   "posts", "exposure_total", "engagement_total", "impressions_total", "reach_total",
@@ -2015,12 +2075,12 @@ export const MonitorSocialOverviewPage = () => {
     const sc = Number(kpis.shs ?? 0); const sp = Number(prev.shs ?? 0); const ts = Number(tp.target_shs ?? 0);
     const sovc = Number(kpis.focus_account_sov ?? 0); const sovp = Number(prev.focus_account_sov ?? 0); const tsp = Number(tp.quarterly_sov_target_pp ?? 0);
     return [
-      { id: "posts", title: "Posts", value: formatNumber(pc), previous: formatNumber(pp), goal: "Meta: --", status: `Vs anterior: ${formatNumber(pc - pp)}`, statusColor: toDeltaColor(pc - pp), info: KPI_INFO.posts },
-      { id: "exposure_total", title: "Exposición", value: formatNumber(ec), previous: formatNumber(ep), goal: "Meta: --", status: `Vs anterior: ${formatNumber(ec - ep)}`, statusColor: toDeltaColor(ec - ep), info: KPI_INFO.exposure_total },
-      { id: "er_global", title: "ER Global", value: formatPercent(erc), previous: formatPercent(erp), goal: `Meta: ${formatPercent(targetErGlobal)}`, status: `Gap meta: ${formatPercent(erc - targetErGlobal)}`, statusColor: toDeltaColor(erc - targetErGlobal), info: KPI_INFO.er_global },
-      { id: "riesgo_activo", title: "Riesgo activo", value: formatPercent(rc), previous: formatPercent(rp), goal: `Umbral: ${formatPercent(Number((overview as unknown as { settings?: { risk_threshold?: number } })?.settings?.risk_threshold ?? 0))}`, status: `Vs anterior: ${formatPercent(rc - rp)}`, statusColor: toDeltaColor(-(rc - rp)), info: KPI_INFO.riesgo_activo },
-      { id: "shs", title: "SHS (social)", value: formatScore(sc), previous: formatScore(sp), goal: `Meta: ${formatScore(ts)}`, status: `Gap meta: ${formatScore(sc - ts)}`, statusColor: toDeltaColor(sc - ts), info: KPI_INFO.shs },
-      { id: "focus_account_sov", title: "SOV interno", value: formatPercent(sovc), previous: formatPercent(sovp), goal: `Meta trimestral: +${formatScore(tsp)} pp`, status: `Cuenta foco: ${String(kpis.focus_account ?? "n/a")}`, statusColor: "#64748b", info: KPI_INFO.focus_account_sov }
+      { id: "posts", title: "Posts", value: formatNumber(pc), previous: formatNumber(pp), goal: "Meta: --", status: `Vs anterior: ${formatNumber(pc - pp)}`, statusColor: toDeltaColor(pc - pp), info: KPI_INFO.posts, deltaValue: pc - pp },
+      { id: "exposure_total", title: "Exposición", value: formatNumber(ec), previous: formatNumber(ep), goal: "Meta: --", status: `Vs anterior: ${formatNumber(ec - ep)}`, statusColor: toDeltaColor(ec - ep), info: KPI_INFO.exposure_total, deltaValue: ec - ep },
+      { id: "er_global", title: "ER Global", value: formatPercent(erc), previous: formatPercent(erp), goal: `Meta: ${formatPercent(targetErGlobal)}`, status: `Gap meta: ${formatPercent(erc - targetErGlobal)}`, statusColor: toDeltaColor(erc - targetErGlobal), info: KPI_INFO.er_global, deltaValue: erc - targetErGlobal },
+      { id: "riesgo_activo", title: "Riesgo activo", value: formatPercent(rc), previous: formatPercent(rp), goal: `Umbral: ${formatPercent(Number((overview as unknown as { settings?: { risk_threshold?: number } })?.settings?.risk_threshold ?? 0))}`, status: `Vs anterior: ${formatPercent(rc - rp)}`, statusColor: toDeltaColor(-(rc - rp)), info: KPI_INFO.riesgo_activo, deltaValue: -(rc - rp) },
+      { id: "shs", title: "SHS (social)", value: formatScore(sc), previous: formatScore(sp), goal: `Meta: ${formatScore(ts)}`, status: `Gap meta: ${formatScore(sc - ts)}`, statusColor: toDeltaColor(sc - ts), info: KPI_INFO.shs, deltaValue: sc - ts },
+      { id: "focus_account_sov", title: "SOV interno", value: formatPercent(sovc), previous: formatPercent(sovp), goal: `Meta trimestral: +${formatScore(tsp)} pp`, status: `Cuenta foco: ${String(kpis.focus_account ?? "n/a")}`, statusColor: "#64748b", info: KPI_INFO.focus_account_sov, deltaValue: sovc - sovp }
     ];
   }, [normalizedOverview, targetErGlobal, overview]);
 
@@ -2149,25 +2209,53 @@ export const MonitorSocialOverviewPage = () => {
       {/* ═══════ SUMMARY TAB ═══════ */}
       {tab === "summary" && (
         <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+          {/* ── Primary KPIs ── */}
           <Row gutter={[16, 16]}>
             {kpiCards.map((card) => (
               <Col key={card.id} xs={12} md={8} xl={4}>
-                <KpiCard title={card.title} value={card.value} info={card.info} caption={`Periodo anterior: ${card.previous} | ${card.goal}`} valueStyle={{ color: "#a0000a" }} suffix={<span style={{ fontSize: 12, fontWeight: 600, color: card.statusColor }}>{card.status}</span>} />
+                <KpiCard
+                  title={card.title}
+                  value={card.value}
+                  info={card.info}
+                  previousLabel={card.previous}
+                  goalLabel={card.goal}
+                  deltaLabel={card.status}
+                  deltaColor={card.statusColor}
+                  deltaValue={card.deltaValue}
+                />
               </Col>
             ))}
           </Row>
 
-          <Row gutter={[8, 8]}>
-            {secondaryKpis.map((item) => (
-              <Col key={item.metric} xs={12} sm={8} lg={6} xl={3}>
-                <Card size="small" style={{ background: "linear-gradient(135deg, rgba(255,255,255,0.95) 0%, rgba(250,248,249,0.92) 100%)" }}>
-                  <div style={{ fontSize: 11, fontWeight: 600, textTransform: "uppercase", color: "#64748b" }}>{item.label}</div>
-                  <div style={{ fontSize: 16, fontWeight: 700, color: "#1e293b", marginTop: 4, fontFamily: "'Barlow Condensed', sans-serif" }}>{item.value}</div>
-                  <div style={{ marginTop: 2 }}><span style={{ display: "inline-flex", padding: "2px 8px", borderRadius: 999, fontSize: 11, fontWeight: 600, color: toDeltaColor(item.delta) }}>Vs anterior: {item.deltaLabel}</span></div>
-                </Card>
-              </Col>
-            ))}
-          </Row>
+          {/* ── Secondary KPIs grouped ── */}
+          {SECONDARY_KPI_GROUPS.map((group) => {
+            const groupKpis = secondaryKpis.filter((k) => group.metrics.includes(k.metric as SecondaryKpiMetric));
+            if (groupKpis.length === 0) return null;
+            return (
+              <div key={group.title}>
+                <Flex align="center" gap={8} style={{ marginBottom: 10 }}>
+                  <div style={{ width: 3, height: 16, borderRadius: 2, background: group.color }} />
+                  <span style={{ fontSize: 12, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.5px", color: group.color }}>{group.title}</span>
+                  <div style={{ flex: 1, height: 1, background: `linear-gradient(90deg, ${group.color}22, transparent)` }} />
+                </Flex>
+                <Row gutter={[12, 12]}>
+                  {groupKpis.map((item) => (
+                    <Col key={item.metric} xs={12} sm={8} lg={6} xl={group.metrics.length <= 4 ? 6 : 3}>
+                      <SecondaryKpiCard
+                        label={item.label}
+                        value={item.value}
+                        delta={item.delta}
+                        deltaLabel={item.deltaLabel}
+                        icon={SECONDARY_KPI_ICONS[item.metric]}
+                        accentColor={group.color}
+                        info={SECONDARY_KPI_INFO[item.metric]}
+                      />
+                    </Col>
+                  ))}
+                </Row>
+              </div>
+            );
+          })}
 
           {/* ── Trend + Mix ── */}
           <Row gutter={[12, 12]}>
