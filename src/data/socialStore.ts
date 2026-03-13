@@ -7022,11 +7022,10 @@ class SocialStore {
   async getDbStatsByChannel(input: { from?: Date; to?: Date } = {}): Promise<
     Record<SocialChannel, { rows: number; minDate: Date | null; maxDate: Date | null }>
   > {
+    // Reconciliation counts ALL ingested rows (including replies, carousel slides, stale)
+    // because it compares raw S3 CSV rows vs raw DB rows to verify ETL ingestion completeness.
     const conditions = [
-      `ci."sourceType" = CAST('social' AS "public"."SourceType")`,
-      `spm."isReply" = FALSE`,
-      `spm."isCarouselSlide" = FALSE`,
-      `(spm."isStale" = FALSE OR spm."isStale" IS NULL)`
+      `ci."sourceType" = CAST('social' AS "public"."SourceType")`
     ];
     const params: SqlParameter[] = [];
 
