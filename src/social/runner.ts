@@ -1997,7 +1997,15 @@ export const runSocialSync = async (input: SocialSyncInput): Promise<SocialSyncO
         s3MaxDate: s3.maxDate,
         dbMinDate: db.minDate,
         dbMaxDate: db.maxDate,
-        status: deltaRows === 0 ? "ok" : "warning",
+        status: (() => {
+          if (deltaRows === 0) return "ok" as const;
+          // Tolerance: ±5% delta is acceptable for real-world ETL (normalization filters,
+          // cover_photo rows, dedup, Dataslayer format variations, etc.)
+          const absPct = s3.rows > 0 ? Math.abs(deltaRows / s3.rows) * 100 : 100;
+          if (absPct <= 5) return "ok" as const;
+          if (absPct <= 15) return "warning" as const;
+          return "error" as const;
+        })(),
         details: {
           delta_pct: s3.rows > 0 ? Number(((deltaRows / s3.rows) * 100).toFixed(2)) : null
         }
