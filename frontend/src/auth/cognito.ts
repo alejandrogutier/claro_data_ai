@@ -41,7 +41,8 @@ const buildAuthorizeUrl = async (): Promise<string> => {
     scope: appConfig.cognitoScope,
     state,
     code_challenge_method: "S256",
-    code_challenge: challenge
+    code_challenge: challenge,
+    prompt: "login"
   });
 
   return `${appConfig.cognitoDomain}/oauth2/authorize?${params.toString()}`;

@@ -3806,18 +3806,66 @@ class SocialStore {
             "accountName" = EXCLUDED."accountName",
             "postUrl" = EXCLUDED."postUrl",
             "postType" = EXCLUDED."postType",
-            "isReply" = EXCLUDED."isReply",
+            -- Never downgrade a non-reply to a reply: if the existing row is
+            -- already marked as non-reply (FALSE) and the incoming row claims
+            -- it is a reply (TRUE), keep the existing FALSE.  This prevents
+            -- X post-export CSVs (which incorrectly flag many organic tweets
+            -- as replies) from overwriting accurate legacy-file data.
+            "isReply" = CASE
+              WHEN "SocialPostMetric"."isReply" = FALSE AND EXCLUDED."isReply" = TRUE
+                THEN FALSE
+              ELSE EXCLUDED."isReply"
+            END,
             "campaignTaxonomyId" = EXCLUDED."campaignTaxonomyId",
             "publishedAt" = EXCLUDED."publishedAt",
-            "exposure" = EXCLUDED."exposure",
-            "engagementTotal" = EXCLUDED."engagementTotal",
-            "impressions" = EXCLUDED."impressions",
-            "reach" = EXCLUDED."reach",
-            "clicks" = EXCLUDED."clicks",
-            "likes" = EXCLUDED."likes",
-            "comments" = EXCLUDED."comments",
-            "shares" = EXCLUDED."shares",
-            "views" = EXCLUDED."views",
+            -- When preserving non-reply status (see isReply CASE above), also
+            -- keep the existing metrics instead of overwriting with zeroed-out
+            -- values that were produced by the reply-zeroing logic in runner.ts.
+            "exposure" = CASE
+              WHEN "SocialPostMetric"."isReply" = FALSE AND EXCLUDED."isReply" = TRUE
+                THEN "SocialPostMetric"."exposure"
+              ELSE EXCLUDED."exposure"
+            END,
+            "engagementTotal" = CASE
+              WHEN "SocialPostMetric"."isReply" = FALSE AND EXCLUDED."isReply" = TRUE
+                THEN "SocialPostMetric"."engagementTotal"
+              ELSE EXCLUDED."engagementTotal"
+            END,
+            "impressions" = CASE
+              WHEN "SocialPostMetric"."isReply" = FALSE AND EXCLUDED."isReply" = TRUE
+                THEN "SocialPostMetric"."impressions"
+              ELSE EXCLUDED."impressions"
+            END,
+            "reach" = CASE
+              WHEN "SocialPostMetric"."isReply" = FALSE AND EXCLUDED."isReply" = TRUE
+                THEN "SocialPostMetric"."reach"
+              ELSE EXCLUDED."reach"
+            END,
+            "clicks" = CASE
+              WHEN "SocialPostMetric"."isReply" = FALSE AND EXCLUDED."isReply" = TRUE
+                THEN "SocialPostMetric"."clicks"
+              ELSE EXCLUDED."clicks"
+            END,
+            "likes" = CASE
+              WHEN "SocialPostMetric"."isReply" = FALSE AND EXCLUDED."isReply" = TRUE
+                THEN "SocialPostMetric"."likes"
+              ELSE EXCLUDED."likes"
+            END,
+            "comments" = CASE
+              WHEN "SocialPostMetric"."isReply" = FALSE AND EXCLUDED."isReply" = TRUE
+                THEN "SocialPostMetric"."comments"
+              ELSE EXCLUDED."comments"
+            END,
+            "shares" = CASE
+              WHEN "SocialPostMetric"."isReply" = FALSE AND EXCLUDED."isReply" = TRUE
+                THEN "SocialPostMetric"."shares"
+              ELSE EXCLUDED."shares"
+            END,
+            "views" = CASE
+              WHEN "SocialPostMetric"."isReply" = FALSE AND EXCLUDED."isReply" = TRUE
+                THEN "SocialPostMetric"."views"
+              ELSE EXCLUDED."views"
+            END,
             "saves" = COALESCE(EXCLUDED."saves", "SocialPostMetric"."saves"),
             "avgWatchTimeMs" = COALESCE(EXCLUDED."avgWatchTimeMs", "SocialPostMetric"."avgWatchTimeMs"),
             "totalWatchTimeMs" = COALESCE(EXCLUDED."totalWatchTimeMs", "SocialPostMetric"."totalWatchTimeMs"),
