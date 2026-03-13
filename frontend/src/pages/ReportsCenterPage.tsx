@@ -1,7 +1,15 @@
 import { useEffect, useMemo, useState } from "react";
+import { Alert, Button, Card, Flex, Select, Space, Table, Typography } from "antd";
+import { ReloadOutlined, PlayCircleOutlined } from "@ant-design/icons";
 import { ApiError, type ReportRun, type ReportRunStatus, type ReportTemplate } from "../api/client";
 import { useApiClient } from "../api/useApiClient";
 import { useAuth } from "../auth/AuthContext";
+import { PageHeader } from "../components/shared/PageHeader";
+import { StatusTag } from "../components/shared/StatusTag";
+
+import type { ColumnsType } from "antd/es/table";
+
+const { Text, Paragraph } = Typography;
 
 type UiState = "idle" | "loading" | "empty" | "partial_data" | "permission_denied" | "error_retriable" | "error_non_retriable";
 
@@ -114,123 +122,157 @@ export const ReportsCenterPage = () => {
     }
   };
 
+  const columns: ColumnsType<ReportRun> = [
+    {
+      title: "Estado",
+      dataIndex: "status",
+      key: "status",
+      render: (status: ReportRunStatus) => <StatusTag status={statusLabel(status)} />,
+    },
+    {
+      title: "Plantilla",
+      dataIndex: "template_name",
+      key: "template_name",
+    },
+    {
+      title: "Confianza",
+      dataIndex: "confidence",
+      key: "confidence",
+      render: (confidence: number | undefined) =>
+        typeof confidence === "number" ? `${(confidence * 100).toFixed(1)}%` : "n/a",
+    },
+    {
+      title: "Creado",
+      dataIndex: "created_at",
+      key: "created_at",
+    },
+    {
+      title: "Completado",
+      dataIndex: "completed_at",
+      key: "completed_at",
+      render: (value: string | null) => value ?? "-",
+    },
+    {
+      title: "Export",
+      key: "export",
+      render: (_: unknown, run: ReportRun) =>
+        run.download_url ? (
+          <a href={run.download_url} target="_blank" rel="noreferrer">
+            Descargar CSV
+          </a>
+        ) : (
+          run.export_status ?? "-"
+        ),
+    },
+    {
+      title: "Accion",
+      key: "action",
+      render: (_: unknown, run: ReportRun) => (
+        <Button onClick={() => setSelectedRunId(run.id)}>Ver detalle</Button>
+      ),
+    },
+  ];
+
   return (
     <section>
-      <header className="page-header">
-        <h2>Centro de Reportes</h2>
-        <p>Historial operativo de corridas, estado editorial (`pending_review`) y descarga de exportes asociados.</p>
-      </header>
+      <PageHeader
+        title="Centro de Reportes"
+        subtitle="Historial operativo de corridas, estado editorial (`pending_review`) y descarga de exportes asociados."
+      />
 
-      {uiState === "loading" ? <div className="alert info">loading: consultando corridas de reportes...</div> : null}
-      {uiState === "empty" ? <div className="alert info">empty: aun no existen corridas de reportes.</div> : null}
-      {uiState === "partial_data" ? (
-        <div className="alert warning">partial_data: hay corridas en `pending_review` o `failed`; revisar detalle antes de distribuir.</div>
-      ) : null}
-      {uiState === "permission_denied" ? (
-        <div className="alert error">permission_denied: tu rol no tiene acceso a este recurso.</div>
-      ) : null}
-      {uiState === "error_retriable" ? <div className="alert error">error_retriable: {error ?? "intenta nuevamente"}</div> : null}
-      {uiState === "error_non_retriable" ? <div className="alert error">error_non_retriable: {error ?? "revisa la solicitud"}</div> : null}
+      {uiState === "loading" && (
+        <Alert type="info" showIcon title="loading: consultando corridas de reportes..." style={{ marginBottom: 12 }} />
+      )}
+      {uiState === "empty" && (
+        <Alert type="info" showIcon title="empty: aun no existen corridas de reportes." style={{ marginBottom: 12 }} />
+      )}
+      {uiState === "partial_data" && (
+        <Alert type="warning" showIcon title="partial_data: hay corridas en `pending_review` o `failed`; revisar detalle antes de distribuir." style={{ marginBottom: 12 }} />
+      )}
+      {uiState === "permission_denied" && (
+        <Alert type="error" showIcon title="permission_denied: tu rol no tiene acceso a este recurso." style={{ marginBottom: 12 }} />
+      )}
+      {uiState === "error_retriable" && (
+        <Alert type="error" showIcon title={`error_retriable: ${error ?? "intenta nuevamente"}`} style={{ marginBottom: 12 }} />
+      )}
+      {uiState === "error_non_retriable" && (
+        <Alert type="error" showIcon title={`error_non_retriable: ${error ?? "revisa la solicitud"}`} style={{ marginBottom: 12 }} />
+      )}
 
-      <section className="panel">
-        <div className="section-title-row">
-          <h3>Controles</h3>
-          <button className="btn btn-outline" type="button" onClick={() => void load()} disabled={running || uiState === "loading"}>
+      <Card
+        title="Controles"
+        extra={
+          <Button icon={<ReloadOutlined />} onClick={() => void load()} disabled={running || uiState === "loading"}>
             Refrescar
-          </button>
-        </div>
-
-        <div className="form-grid">
-          <label>
-            Estado
-            <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as ReportRunStatus | "")}> 
-              {REPORT_STATUSES.map((status) => (
-                <option key={status || "all"} value={status}>
-                  {status ? statusLabel(status) : "Todos"}
-                </option>
-              ))}
-            </select>
-          </label>
-
-          <label>
-            Plantilla para corrida manual
-            <select value={selectedTemplateId} onChange={(event) => setSelectedTemplateId(event.target.value)}>
-              {templates.map((template) => (
-                <option key={template.id} value={template.id}>
-                  {template.name}
-                </option>
-              ))}
-            </select>
-          </label>
-
-          <div style={{ display: "flex", alignItems: "end" }}>
-            <button className="btn btn-primary" type="button" disabled={!canOperate || running || !selectedTemplateId} onClick={() => void triggerRun()}>
-              {running ? "Encolando..." : "Ejecutar corrida manual"}
-            </button>
+          </Button>
+        }
+        style={{ marginBottom: 16 }}
+      >
+        <Flex gap={16} wrap="wrap" align="flex-end">
+          <div>
+            <Text strong style={{ display: "block", marginBottom: 4 }}>Estado</Text>
+            <Select
+              value={statusFilter}
+              onChange={(value) => setStatusFilter(value as ReportRunStatus | "")}
+              style={{ width: 200 }}
+              options={REPORT_STATUSES.map((status) => ({
+                value: status,
+                label: status ? statusLabel(status) : "Todos",
+              }))}
+            />
           </div>
-        </div>
-      </section>
 
-      <section className="panel">
-        <div className="section-title-row">
-          <h3>Historial</h3>
-          <span>{items.length} corridas</span>
-        </div>
-
-        {items.length > 0 ? (
-          <div className="report-table-wrapper">
-            <table className="report-table">
-              <thead>
-                <tr>
-                  <th>Estado</th>
-                  <th>Plantilla</th>
-                  <th>Confianza</th>
-                  <th>Creado</th>
-                  <th>Completado</th>
-                  <th>Export</th>
-                  <th>Accion</th>
-                </tr>
-              </thead>
-              <tbody>
-                {items.map((run) => (
-                  <tr key={run.id} className={selectedRunId === run.id ? "is-selected" : undefined}>
-                    <td>
-                      <span className={`report-status report-status-${run.status}`}>{statusLabel(run.status)}</span>
-                    </td>
-                    <td>{run.template_name}</td>
-                    <td>{typeof run.confidence === "number" ? `${(run.confidence * 100).toFixed(1)}%` : "n/a"}</td>
-                    <td>{run.created_at}</td>
-                    <td>{run.completed_at ?? "-"}</td>
-                    <td>
-                      {run.download_url ? (
-                        <a href={run.download_url} target="_blank" rel="noreferrer">
-                          Descargar CSV
-                        </a>
-                      ) : (
-                        run.export_status ?? "-"
-                      )}
-                    </td>
-                    <td>
-                      <button className="btn btn-outline" type="button" onClick={() => setSelectedRunId(run.id)}>
-                        Ver detalle
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          <div>
+            <Text strong style={{ display: "block", marginBottom: 4 }}>Plantilla para corrida manual</Text>
+            <Select
+              value={selectedTemplateId}
+              onChange={(value) => setSelectedTemplateId(value)}
+              style={{ width: 260 }}
+              options={templates.map((template) => ({
+                value: template.id,
+                label: template.name,
+              }))}
+            />
           </div>
-        ) : null}
-      </section>
 
-      <section className="panel">
-        <div className="section-title-row">
-          <h3>Detalle de corrida</h3>
-          <span>{selectedRunId ? selectedRunId : "Selecciona una corrida"}</span>
-        </div>
+          <Button
+            type="primary"
+            icon={<PlayCircleOutlined />}
+            disabled={!canOperate || running || !selectedTemplateId}
+            onClick={() => void triggerRun()}
+          >
+            {running ? "Encolando..." : "Ejecutar corrida manual"}
+          </Button>
+        </Flex>
+      </Card>
 
-        {!detail ? <p>Sin detalle cargado.</p> : <pre className="code-block">{JSON.stringify(detail, null, 2)}</pre>}
-      </section>
+      <Card
+        title="Historial"
+        extra={<Text>{items.length} corridas</Text>}
+        style={{ marginBottom: 16 }}
+      >
+        <Table<ReportRun>
+          dataSource={items}
+          columns={columns}
+          rowKey="id"
+          size="small"
+          pagination={false}
+          rowClassName={(record) => (selectedRunId === record.id ? "ant-table-row-selected" : "")}
+        />
+      </Card>
+
+      <Card
+        title="Detalle de corrida"
+        extra={<Text>{selectedRunId ? selectedRunId : "Selecciona una corrida"}</Text>}
+      >
+        {!detail ? (
+          <Paragraph>Sin detalle cargado.</Paragraph>
+        ) : (
+          <pre style={{ background: "#f5f5f5", padding: 12, borderRadius: 6, overflow: "auto", fontSize: 13 }}>
+            {JSON.stringify(detail, null, 2)}
+          </pre>
+        )}
+      </Card>
     </section>
   );
 };

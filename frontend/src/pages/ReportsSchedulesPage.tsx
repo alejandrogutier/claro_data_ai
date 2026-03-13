@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
+import { Alert, Button, Card, Col, Flex, Form, Input, Row, Select, Space, Switch, Typography } from "antd";
+import { ReloadOutlined, EditOutlined, PlayCircleOutlined } from "@ant-design/icons";
 import {
   ApiError,
   type CreateReportScheduleRequest,
@@ -9,6 +11,10 @@ import {
 } from "../api/client";
 import { useApiClient } from "../api/useApiClient";
 import { useAuth } from "../auth/AuthContext";
+import { PageHeader } from "../components/shared/PageHeader";
+import { StatusTag } from "../components/shared/StatusTag";
+
+const { Text, Paragraph } = Typography;
 
 type UiState = "idle" | "loading" | "empty" | "partial_data" | "permission_denied" | "error_retriable" | "error_non_retriable";
 
@@ -196,146 +202,188 @@ export const ReportsSchedulesPage = () => {
 
   return (
     <section>
-      <header className="page-header">
-        <h2>Programacion de Reportes</h2>
-        <p>Schedules de ejecucion (`daily|weekly`) con trigger manual y destinatarios para correo SES verificado.</p>
-      </header>
+      <PageHeader
+        title="Programacion de Reportes"
+        subtitle="Schedules de ejecucion (`daily|weekly`) con trigger manual y destinatarios para correo SES verificado."
+      />
 
-      {uiState === "loading" ? <div className="alert info">loading: consultando schedules...</div> : null}
-      {uiState === "empty" ? <div className="alert info">empty: no hay schedules configurados.</div> : null}
-      {uiState === "partial_data" ? <div className="alert warning">partial_data: hay schedules deshabilitados.</div> : null}
-      {uiState === "permission_denied" ? <div className="alert error">permission_denied: solo Analyst/Admin puede operar schedules.</div> : null}
-      {uiState === "error_retriable" ? <div className="alert error">error_retriable: {error ?? "intenta nuevamente"}</div> : null}
-      {uiState === "error_non_retriable" ? <div className="alert error">error_non_retriable: {error ?? "revisa los datos"}</div> : null}
+      {uiState === "loading" && (
+        <Alert type="info" showIcon title="loading: consultando schedules..." style={{ marginBottom: 12 }} />
+      )}
+      {uiState === "empty" && (
+        <Alert type="info" showIcon title="empty: no hay schedules configurados." style={{ marginBottom: 12 }} />
+      )}
+      {uiState === "partial_data" && (
+        <Alert type="warning" showIcon title="partial_data: hay schedules deshabilitados." style={{ marginBottom: 12 }} />
+      )}
+      {uiState === "permission_denied" && (
+        <Alert type="error" showIcon title="permission_denied: solo Analyst/Admin puede operar schedules." style={{ marginBottom: 12 }} />
+      )}
+      {uiState === "error_retriable" && (
+        <Alert type="error" showIcon title={`error_retriable: ${error ?? "intenta nuevamente"}`} style={{ marginBottom: 12 }} />
+      )}
+      {uiState === "error_non_retriable" && (
+        <Alert type="error" showIcon title={`error_non_retriable: ${error ?? "revisa los datos"}`} style={{ marginBottom: 12 }} />
+      )}
+      {!canOperate && (
+        <Alert type="info" showIcon title="Tu rol tiene lectura para schedules." style={{ marginBottom: 12 }} />
+      )}
 
-      {!canOperate ? <div className="alert info">Tu rol tiene lectura para schedules.</div> : null}
-
-      <section className="panel">
-        <div className="section-title-row">
-          <h3>Listado</h3>
-          <button className="btn btn-outline" type="button" onClick={() => void load()} disabled={saving || uiState === "loading"}>
+      <Card
+        title="Listado"
+        extra={
+          <Button icon={<ReloadOutlined />} onClick={() => void load()} disabled={saving || uiState === "loading"}>
             Refrescar
-          </button>
-        </div>
-
+          </Button>
+        }
+        style={{ marginBottom: 16 }}
+      >
         {items.length > 0 ? (
-          <ul className="simple-list simple-list--stacked">
+          <Space direction="vertical" style={{ width: "100%" }} size="middle">
             {items.map((schedule) => (
-              <li key={schedule.id}>
-                <div style={{ width: "100%", display: "grid", gap: 6 }}>
-                  <div className="section-title-row">
-                    <strong>{schedule.name}</strong>
-                    <span>{schedule.enabled ? "enabled" : "disabled"}</span>
-                  </div>
-                  <span>
-                    {schedule.template_name} | {schedule.frequency}
-                    {typeof schedule.day_of_week === "number" ? ` (${weekdayLabels[schedule.day_of_week]})` : ""} | {schedule.time_local}
-                  </span>
-                  <span className="kpi-caption">next: {schedule.next_run_at}</span>
-                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                    <button className="btn btn-outline" type="button" onClick={() => setSelectedScheduleId(schedule.id)}>
-                      Editar
-                    </button>
-                    <button className="btn btn-primary" type="button" disabled={!canOperate || saving} onClick={() => void triggerRun(schedule.id)}>
-                      Run manual
-                    </button>
-                  </div>
-                </div>
-              </li>
+              <Card key={schedule.id} size="small" type="inner">
+                <Flex justify="space-between" align="center" style={{ marginBottom: 4 }}>
+                  <Text strong>{schedule.name}</Text>
+                  <StatusTag status={schedule.enabled ? "enabled" : "disabled"} color={schedule.enabled ? "green" : "default"} />
+                </Flex>
+                <Paragraph type="secondary" style={{ margin: "0 0 4px 0" }}>
+                  {schedule.template_name} | {schedule.frequency}
+                  {typeof schedule.day_of_week === "number" ? ` (${weekdayLabels[schedule.day_of_week]})` : ""} | {schedule.time_local}
+                </Paragraph>
+                <Text type="secondary" style={{ fontSize: 12 }}>
+                  next: {schedule.next_run_at}
+                </Text>
+                <Flex gap={8} wrap="wrap" style={{ marginTop: 8 }}>
+                  <Button icon={<EditOutlined />} onClick={() => setSelectedScheduleId(schedule.id)}>
+                    Editar
+                  </Button>
+                  <Button type="primary" icon={<PlayCircleOutlined />} disabled={!canOperate || saving} onClick={() => void triggerRun(schedule.id)}>
+                    Run manual
+                  </Button>
+                </Flex>
+              </Card>
             ))}
-          </ul>
+          </Space>
         ) : null}
-      </section>
+      </Card>
 
-      <section className="panel">
-        <div className="section-title-row">
-          <h3>{selectedSchedule ? "Editar schedule" : "Crear schedule"}</h3>
-          <span>{selectedSchedule ? selectedSchedule.id : "nuevo"}</span>
-        </div>
+      <Card
+        title={selectedSchedule ? "Editar schedule" : "Crear schedule"}
+        extra={<Text>{selectedSchedule ? selectedSchedule.id : "nuevo"}</Text>}
+      >
+        <Form layout="vertical">
+          <Row gutter={16}>
+            <Col xs={24} sm={12}>
+              <Form.Item label="Plantilla">
+                <Select
+                  value={templateIdDraft}
+                  onChange={(value) => setTemplateIdDraft(value)}
+                  disabled={Boolean(selectedSchedule)}
+                  style={{ width: "100%" }}
+                  options={templates.map((template) => ({
+                    value: template.id,
+                    label: template.name,
+                  }))}
+                />
+              </Form.Item>
+            </Col>
+            <Col xs={24} sm={12}>
+              <Form.Item label="Nombre">
+                <Input
+                  value={nameDraft}
+                  onChange={(event) => setNameDraft(event.target.value)}
+                  maxLength={120}
+                />
+              </Form.Item>
+            </Col>
+            <Col xs={24} sm={12}>
+              <Form.Item label="Frecuencia">
+                <Select
+                  value={frequencyDraft}
+                  onChange={(value) => setFrequencyDraft(value as ReportScheduleFrequency)}
+                  style={{ width: "100%" }}
+                  options={[
+                    { value: "daily", label: "daily" },
+                    { value: "weekly", label: "weekly" },
+                  ]}
+                />
+              </Form.Item>
+            </Col>
+            <Col xs={24} sm={12}>
+              <Form.Item label="Dia semana (0-6)">
+                <Select
+                  value={dayOfWeekDraft}
+                  onChange={(value) => setDayOfWeekDraft(value === "" ? "" : value)}
+                  style={{ width: "100%" }}
+                  options={[
+                    { value: "", label: "n/a" },
+                    ...weekdayLabels.map((label, index) => ({
+                      value: index,
+                      label: `${index} - ${label}`,
+                    })),
+                  ]}
+                />
+              </Form.Item>
+            </Col>
+            <Col xs={24} sm={12}>
+              <Form.Item label="Hora local (HH:mm)">
+                <Input
+                  value={timeDraft}
+                  onChange={(event) => setTimeDraft(event.target.value)}
+                  placeholder="08:00"
+                />
+              </Form.Item>
+            </Col>
+            <Col xs={24} sm={12}>
+              <Form.Item label="Zona horaria">
+                <Input
+                  value={timezoneDraft}
+                  onChange={(event) => setTimezoneDraft(event.target.value)}
+                />
+              </Form.Item>
+            </Col>
+            <Col xs={24} sm={12}>
+              <Form.Item label="Estado">
+                <Switch
+                  checked={enabledDraft}
+                  onChange={(checked) => setEnabledDraft(checked)}
+                  checkedChildren="enabled"
+                  unCheckedChildren="disabled"
+                />
+              </Form.Item>
+            </Col>
+            <Col xs={24}>
+              <Form.Item label="Recipients (coma)">
+                <Input.TextArea
+                  value={recipientsDraft}
+                  onChange={(event) => setRecipientsDraft(event.target.value)}
+                  rows={3}
+                />
+              </Form.Item>
+            </Col>
+          </Row>
+        </Form>
 
-        <div className="form-grid">
-          <label>
-            Plantilla
-            <select value={templateIdDraft} onChange={(event) => setTemplateIdDraft(event.target.value)} disabled={Boolean(selectedSchedule)}>
-              {templates.map((template) => (
-                <option key={template.id} value={template.id}>
-                  {template.name}
-                </option>
-              ))}
-            </select>
-          </label>
-
-          <label>
-            Nombre
-            <input value={nameDraft} onChange={(event) => setNameDraft(event.target.value)} maxLength={120} />
-          </label>
-
-          <label>
-            Frecuencia
-            <select value={frequencyDraft} onChange={(event) => setFrequencyDraft(event.target.value as ReportScheduleFrequency)}>
-              <option value="daily">daily</option>
-              <option value="weekly">weekly</option>
-            </select>
-          </label>
-
-          <label>
-            Dia semana (0-6)
-            <select value={dayOfWeekDraft} onChange={(event) => setDayOfWeekDraft(event.target.value === "" ? "" : Number.parseInt(event.target.value, 10))}>
-              <option value="">n/a</option>
-              {weekdayLabels.map((label, index) => (
-                <option key={label} value={index}>
-                  {index} - {label}
-                </option>
-              ))}
-            </select>
-          </label>
-
-          <label>
-            Hora local (HH:mm)
-            <input value={timeDraft} onChange={(event) => setTimeDraft(event.target.value)} placeholder="08:00" />
-          </label>
-
-          <label>
-            Zona horaria
-            <input value={timezoneDraft} onChange={(event) => setTimezoneDraft(event.target.value)} />
-          </label>
-
-          <label>
-            Estado
-            <select value={enabledDraft ? "enabled" : "disabled"} onChange={(event) => setEnabledDraft(event.target.value === "enabled")}>
-              <option value="enabled">enabled</option>
-              <option value="disabled">disabled</option>
-            </select>
-          </label>
-
-          <label style={{ gridColumn: "1 / -1" }}>
-            Recipients (coma)
-            <textarea value={recipientsDraft} onChange={(event) => setRecipientsDraft(event.target.value)} rows={3} />
-          </label>
-        </div>
-
-        <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+        <Flex gap={8}>
           {!selectedSchedule ? (
-            <button className="btn btn-primary" type="button" disabled={!canOperate || saving || !templateIdDraft} onClick={() => void saveCreate()}>
+            <Button type="primary" disabled={!canOperate || saving || !templateIdDraft} onClick={() => void saveCreate()}>
               {saving ? "Guardando..." : "Crear schedule"}
-            </button>
+            </Button>
           ) : (
-            <button className="btn btn-primary" type="button" disabled={!canOperate || saving} onClick={() => void saveUpdate()}>
+            <Button type="primary" disabled={!canOperate || saving} onClick={() => void saveUpdate()}>
               {saving ? "Guardando..." : "Actualizar schedule"}
-            </button>
+            </Button>
           )}
-          <button
-            className="btn btn-outline"
-            type="button"
+          <Button
             onClick={() => {
               setSelectedScheduleId("");
               hydrateDraft(null);
             }}
           >
             Limpiar
-          </button>
-        </div>
-      </section>
+          </Button>
+        </Flex>
+      </Card>
     </section>
   );
 };

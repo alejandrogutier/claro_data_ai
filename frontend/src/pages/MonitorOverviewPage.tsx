@@ -1,9 +1,13 @@
 import { useEffect, useState } from "react";
+import { Row, Col, Card, Alert, Spin, Descriptions } from "antd";
 import { type MonitorOverviewResponse } from "../api/client";
 import { useApiClient } from "../api/useApiClient";
+import { PageHeader } from "../components/shared/PageHeader";
+import { KpiCard } from "../components/shared/KpiCard";
+import { SeverityTag } from "../components/shared/SeverityTag";
 
-const formatPercent = (value: number): string => `${value.toFixed(2)}%`;
-const formatScore = (value: number): string => value.toFixed(2);
+const fmt = (v: number) => `${v.toFixed(2)}%`;
+const fmtScore = (v: number) => v.toFixed(2);
 
 export const MonitorOverviewPage = () => {
   const client = useApiClient();
@@ -16,131 +20,90 @@ export const MonitorOverviewPage = () => {
       setLoading(true);
       setError(null);
       try {
-        const response = await client.getMonitorOverview();
-        setOverview(response);
-      } catch (loadError) {
-        setError((loadError as Error).message);
+        setOverview(await client.getMonitorOverview());
+      } catch (e) {
+        setError((e as Error).message);
       } finally {
         setLoading(false);
       }
     };
-
     void load();
   }, []);
 
-  const severityClass = overview ? `severity-chip severity-${overview.totals.severidad.toLowerCase()}` : "severity-chip";
+  const v = (fn: (o: MonitorOverviewResponse) => string) =>
+    loading ? "..." : overview ? fn(overview) : "--";
 
   return (
     <section>
-      <header className="page-header">
-        <h2>Overview de Monitoreo</h2>
-        <p>KPIs de negocio (V1 news-only, ventana fija de 7 dias) para salud de marca y competencia.</p>
-      </header>
+      <PageHeader
+        title="Overview de Monitoreo"
+        subtitle="KPIs de negocio (V1 news-only, ventana fija de 7 dias) para salud de marca y competencia."
+      />
 
-      {error ? <div className="alert error">{error}</div> : null}
-      {overview?.totals.insufficient_data ? (
-        <div className="alert warning">Datos insuficientes para alta confianza de KPI (menos de 20 items clasificados).</div>
-      ) : null}
+      {error && <Alert type="error" showIcon title={error} style={{ marginBottom: 16 }} />}
+      {overview?.totals.insufficient_data && (
+        <Alert
+          type="warning"
+          showIcon
+          title="Datos insuficientes para alta confianza de KPI (menos de 20 items clasificados)."
+          style={{ marginBottom: 16 }}
+        />
+      )}
 
-      <section className="kpi-grid">
-        <article className="panel kpi-card">
-          <h3>BHS</h3>
-          <p className="kpi-value">{loading ? "..." : overview ? formatScore(overview.totals.bhs) : "--"}</p>
-          <p className="kpi-caption">Formula v1</p>
-        </article>
-        <article className="panel kpi-card">
-          <h3>SOV Claro</h3>
-          <p className="kpi-value">{loading ? "..." : overview ? formatPercent(overview.totals.sov_claro) : "--"}</p>
-          <p className="kpi-caption">vs competencia</p>
-        </article>
-        <article className="panel kpi-card">
-          <h3>Sentimiento neto</h3>
-          <p className="kpi-value">{loading ? "..." : overview ? formatPercent(overview.totals.sentimiento_neto) : "--"}</p>
-          <p className="kpi-caption">positivo-negativo</p>
-        </article>
-        <article className="panel kpi-card">
-          <h3>Riesgo activo</h3>
-          <p className="kpi-value">{loading ? "..." : overview ? formatPercent(overview.totals.riesgo_activo) : "--"}</p>
-          <p className="kpi-caption">porcentaje negativo</p>
-        </article>
-        <article className="panel kpi-card">
-          <h3>Severidad</h3>
-          <p className="kpi-value">
-            {loading ? "..." : overview ? <span className={severityClass}>{overview.totals.severidad}</span> : "--"}
-          </p>
-          <p className="kpi-caption">umbral de riesgo</p>
-        </article>
-      </section>
+      <Spin spinning={loading}>
+        <Row gutter={[16, 16]}>
+          <Col xs={24} sm={12} lg={8} xl={4}>
+            <KpiCard title="BHS" value={v((o) => fmtScore(o.totals.bhs))} caption="Formula v1" />
+          </Col>
+          <Col xs={24} sm={12} lg={8} xl={5}>
+            <KpiCard title="SOV Claro" value={v((o) => fmt(o.totals.sov_claro))} caption="vs competencia" />
+          </Col>
+          <Col xs={24} sm={12} lg={8} xl={5}>
+            <KpiCard title="Sentimiento neto" value={v((o) => fmt(o.totals.sentimiento_neto))} caption="positivo-negativo" />
+          </Col>
+          <Col xs={24} sm={12} lg={8} xl={5}>
+            <KpiCard title="Riesgo activo" value={v((o) => fmt(o.totals.riesgo_activo))} caption="porcentaje negativo" />
+          </Col>
+          <Col xs={24} sm={12} lg={8} xl={5}>
+            <Card size="small">
+              <div style={{ fontSize: 13, color: "#5c6370", marginBottom: 8 }}>Severidad</div>
+              {loading ? "..." : overview ? <SeverityTag severity={overview.totals.severidad} /> : "--"}
+              <div style={{ fontSize: 13, color: "#5c6370", marginTop: 8 }}>umbral de riesgo</div>
+            </Card>
+          </Col>
+        </Row>
 
-      <div className="scope-grid">
-        <section className="panel">
-          <div className="section-title-row">
-            <h3>Scope Claro</h3>
-          </div>
-          <ul className="simple-list">
-            <li>
-              <span>Items</span>
-              <strong>{loading ? "..." : overview?.by_scope.claro.items ?? 0}</strong>
-            </li>
-            <li>
-              <span>Clasificados</span>
-              <strong>{loading ? "..." : overview?.by_scope.claro.classified_items ?? 0}</strong>
-            </li>
-            <li>
-              <span>Sentimiento neto</span>
-              <strong>{loading || !overview ? "..." : formatPercent(overview.by_scope.claro.sentimiento_neto)}</strong>
-            </li>
-            <li>
-              <span>SOV</span>
-              <strong>{loading || !overview ? "..." : formatPercent(overview.by_scope.claro.sov)}</strong>
-            </li>
-          </ul>
-        </section>
+        <Row gutter={[16, 16]} style={{ marginTop: 16 }}>
+          <Col xs={24} md={12}>
+            <Card title="Scope Claro">
+              <Descriptions column={1} size="small">
+                <Descriptions.Item label="Items">{v((o) => String(o.by_scope.claro.items))}</Descriptions.Item>
+                <Descriptions.Item label="Clasificados">{v((o) => String(o.by_scope.claro.classified_items))}</Descriptions.Item>
+                <Descriptions.Item label="Sentimiento neto">{v((o) => fmt(o.by_scope.claro.sentimiento_neto))}</Descriptions.Item>
+                <Descriptions.Item label="SOV">{v((o) => fmt(o.by_scope.claro.sov))}</Descriptions.Item>
+              </Descriptions>
+            </Card>
+          </Col>
+          <Col xs={24} md={12}>
+            <Card title="Scope Competencia">
+              <Descriptions column={1} size="small">
+                <Descriptions.Item label="Items">{v((o) => String(o.by_scope.competencia.items))}</Descriptions.Item>
+                <Descriptions.Item label="Clasificados">{v((o) => String(o.by_scope.competencia.classified_items))}</Descriptions.Item>
+                <Descriptions.Item label="Sentimiento neto">{v((o) => fmt(o.by_scope.competencia.sentimiento_neto))}</Descriptions.Item>
+                <Descriptions.Item label="SOV">{v((o) => fmt(o.by_scope.competencia.sov))}</Descriptions.Item>
+              </Descriptions>
+            </Card>
+          </Col>
+        </Row>
 
-        <section className="panel">
-          <div className="section-title-row">
-            <h3>Scope Competencia</h3>
-          </div>
-          <ul className="simple-list">
-            <li>
-              <span>Items</span>
-              <strong>{loading ? "..." : overview?.by_scope.competencia.items ?? 0}</strong>
-            </li>
-            <li>
-              <span>Clasificados</span>
-              <strong>{loading ? "..." : overview?.by_scope.competencia.classified_items ?? 0}</strong>
-            </li>
-            <li>
-              <span>Sentimiento neto</span>
-              <strong>{loading || !overview ? "..." : formatPercent(overview.by_scope.competencia.sentimiento_neto)}</strong>
-            </li>
-            <li>
-              <span>SOV</span>
-              <strong>{loading || !overview ? "..." : formatPercent(overview.by_scope.competencia.sov)}</strong>
-            </li>
-          </ul>
-        </section>
-      </div>
-
-      <section className="panel">
-        <div className="section-title-row">
-          <h3>Diagnostico</h3>
-        </div>
-        <ul className="simple-list">
-          <li>
-            <span>Items sin scope</span>
-            <strong>{loading ? "..." : overview?.diagnostics.unscoped_items ?? 0}</strong>
-          </li>
-          <li>
-            <span>Sentimientos desconocidos</span>
-            <strong>{loading ? "..." : overview?.diagnostics.unknown_sentiment_items ?? 0}</strong>
-          </li>
-          <li>
-            <span>Fuente / ventana</span>
-            <strong>{loading || !overview ? "..." : `${overview.source_type} / ${overview.window_days}d`}</strong>
-          </li>
-        </ul>
-      </section>
+        <Card title="Diagnostico" style={{ marginTop: 16 }}>
+          <Descriptions column={1} size="small">
+            <Descriptions.Item label="Items sin scope">{v((o) => String(o.diagnostics.unscoped_items))}</Descriptions.Item>
+            <Descriptions.Item label="Sentimientos desconocidos">{v((o) => String(o.diagnostics.unknown_sentiment_items))}</Descriptions.Item>
+            <Descriptions.Item label="Fuente / ventana">{v((o) => `${o.source_type} / ${o.window_days}d`)}</Descriptions.Item>
+          </Descriptions>
+        </Card>
+      </Spin>
     </section>
   );
 };

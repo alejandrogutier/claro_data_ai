@@ -1,20 +1,27 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
+import { Row, Col, Card, Alert, Spin, Descriptions, Button, Space, Empty } from "antd";
+import { ArrowUpOutlined, ArrowDownOutlined, MinusOutlined } from "@ant-design/icons";
 import { type AnalyzeOverviewResponse } from "../api/client";
 import { useApiClient } from "../api/useApiClient";
+import { PageHeader } from "../components/shared/PageHeader";
+import { KpiCard } from "../components/shared/KpiCard";
 
-const formatPercent = (value: number): string => `${value.toFixed(2)}%`;
-const formatScore = (value: number): string => value.toFixed(2);
-const formatDelta = (value: number): string => {
-  if (value > 0) return `+${value.toFixed(2)}`;
-  return value.toFixed(2);
-};
+const fmt = (v: number) => `${v.toFixed(2)}%`;
+const fmtScore = (v: number) => v.toFixed(2);
+const fmtDelta = (v: number) => (v > 0 ? `+${v.toFixed(2)}` : v.toFixed(2));
 
-const deltaClass = (value: number): string => {
-  if (value > 0) return "delta-positive";
-  if (value < 0) return "delta-negative";
-  return "delta-neutral";
-};
+const deltaColor = (v: number) =>
+  v > 0 ? "#1f8f4e" : v < 0 ? "#e30613" : "#5c6370";
+
+const DeltaIcon = ({ value }: { value: number }) =>
+  value > 0 ? (
+    <ArrowUpOutlined style={{ color: "#1f8f4e" }} />
+  ) : value < 0 ? (
+    <ArrowDownOutlined style={{ color: "#e30613" }} />
+  ) : (
+    <MinusOutlined style={{ color: "#5c6370" }} />
+  );
 
 export const AnalyzeOverviewPage = () => {
   const client = useApiClient();
@@ -27,15 +34,13 @@ export const AnalyzeOverviewPage = () => {
       setLoading(true);
       setError(null);
       try {
-        const response = await client.getAnalyzeOverview();
-        setOverview(response);
-      } catch (loadError) {
-        setError((loadError as Error).message);
+        setOverview(await client.getAnalyzeOverview());
+      } catch (e) {
+        setError((e as Error).message);
       } finally {
         setLoading(false);
       }
     };
-
     void load();
   }, []);
 
@@ -43,123 +48,123 @@ export const AnalyzeOverviewPage = () => {
 
   return (
     <section>
-      <header className="page-header">
-        <h2>Analisis Overview Marca</h2>
-        <p>Comparativo de ventana actual (7 dias) vs periodo anterior para detectar variaciones de riesgo y reputacion.</p>
-      </header>
+      <PageHeader
+        title="Analisis Overview Marca"
+        subtitle="Comparativo de ventana actual (7 dias) vs periodo anterior para detectar variaciones de riesgo y reputacion."
+        extra={
+          <Space>
+            <Link to="/app/analyze/channel">
+              <Button>Ver por Canal</Button>
+            </Link>
+            <Link to="/app/analyze/competitors">
+              <Button>Benchmark Competencia</Button>
+            </Link>
+          </Space>
+        }
+      />
 
-      <section className="panel analysis-actions">
-        <Link className="btn btn-outline" to="/app/analyze/channel">
-          Ver Analisis por Canal
-        </Link>
-        <Link className="btn btn-outline" to="/app/analyze/competitors">
-          Ver Benchmark Competencia
-        </Link>
-      </section>
+      {error && <Alert type="error" showIcon title={error} style={{ marginBottom: 16 }} />}
+      {overview?.totals.insufficient_data && (
+        <Alert
+          type="warning"
+          showIcon
+          title="Datos parciales: menos de 20 items clasificados para una lectura robusta."
+          style={{ marginBottom: 16 }}
+        />
+      )}
 
-      {loading ? <p>Cargando analisis...</p> : null}
-      {error ? <div className="alert error">{error}</div> : null}
-      {!loading && !error && !hasData ? (
-        <div className="panel">
-          <p>Sin datos activos en la ventana de 7 dias para generar analisis.</p>
-        </div>
-      ) : null}
-      {overview?.totals.insufficient_data ? (
-        <div className="alert warning">Datos parciales: menos de 20 items clasificados para una lectura robusta.</div>
-      ) : null}
+      <Spin spinning={loading}>
+        {!loading && !error && !hasData && (
+          <Card>
+            <Empty description="Sin datos activos en la ventana de 7 dias para generar analisis." />
+          </Card>
+        )}
 
-      {overview && hasData ? (
-        <>
-          <section className="analysis-grid">
-            <article className="panel kpi-card">
-              <h3>BHS (actual)</h3>
-              <p className="kpi-value">{formatScore(overview.totals.bhs)}</p>
-              <p className="kpi-caption">Anterior: {formatScore(overview.previous_totals.bhs)}</p>
-            </article>
-            <article className="panel kpi-card">
-              <h3>Sentimiento neto</h3>
-              <p className="kpi-value">{formatPercent(overview.totals.sentimiento_neto)}</p>
-              <p className="kpi-caption">Anterior: {formatPercent(overview.previous_totals.sentimiento_neto)}</p>
-            </article>
-            <article className="panel kpi-card">
-              <h3>Riesgo activo</h3>
-              <p className="kpi-value">{formatPercent(overview.totals.riesgo_activo)}</p>
-              <p className="kpi-caption">Anterior: {formatPercent(overview.previous_totals.riesgo_activo)}</p>
-            </article>
-            <article className="panel kpi-card">
-              <h3>SOV Claro</h3>
-              <p className="kpi-value">{formatPercent(overview.totals.sov_claro)}</p>
-              <p className="kpi-caption">Anterior: {formatPercent(overview.previous_totals.sov_claro)}</p>
-            </article>
-          </section>
+        {overview && hasData && (
+          <>
+            <Row gutter={[16, 16]}>
+              <Col xs={24} sm={12} lg={6}>
+                <KpiCard
+                  title="BHS (actual)"
+                  value={fmtScore(overview.totals.bhs)}
+                  caption={`Anterior: ${fmtScore(overview.previous_totals.bhs)}`}
+                />
+              </Col>
+              <Col xs={24} sm={12} lg={6}>
+                <KpiCard
+                  title="Sentimiento neto"
+                  value={fmt(overview.totals.sentimiento_neto)}
+                  caption={`Anterior: ${fmt(overview.previous_totals.sentimiento_neto)}`}
+                />
+              </Col>
+              <Col xs={24} sm={12} lg={6}>
+                <KpiCard
+                  title="Riesgo activo"
+                  value={fmt(overview.totals.riesgo_activo)}
+                  caption={`Anterior: ${fmt(overview.previous_totals.riesgo_activo)}`}
+                />
+              </Col>
+              <Col xs={24} sm={12} lg={6}>
+                <KpiCard
+                  title="SOV Claro"
+                  value={fmt(overview.totals.sov_claro)}
+                  caption={`Anterior: ${fmt(overview.previous_totals.sov_claro)}`}
+                />
+              </Col>
+            </Row>
 
-          <section className="panel">
-            <div className="section-title-row">
-              <h3>Variacion vs periodo anterior</h3>
-              <span>Formula: {overview.formula_version}</span>
-            </div>
-            <ul className="simple-list">
-              <li>
-                <span>Items</span>
-                <strong className={deltaClass(overview.delta.items)}>{formatDelta(overview.delta.items)}</strong>
-              </li>
-              <li>
-                <span>Clasificados</span>
-                <strong className={deltaClass(overview.delta.classified_items)}>
-                  {formatDelta(overview.delta.classified_items)}
-                </strong>
-              </li>
-              <li>
-                <span>Sentimiento neto</span>
-                <strong className={deltaClass(overview.delta.sentimiento_neto)}>
-                  {formatDelta(overview.delta.sentimiento_neto)}
-                </strong>
-              </li>
-              <li>
-                <span>BHS</span>
-                <strong className={deltaClass(overview.delta.bhs)}>{formatDelta(overview.delta.bhs)}</strong>
-              </li>
-            </ul>
-          </section>
+            <Card
+              title="Variacion vs periodo anterior"
+              extra={<span style={{ color: "#5c6370" }}>Formula: {overview.formula_version}</span>}
+              style={{ marginTop: 16 }}
+            >
+              <Descriptions column={{ xs: 1, sm: 2 }} size="small">
+                <Descriptions.Item label="Items">
+                  <span style={{ color: deltaColor(overview.delta.items) }}>
+                    <DeltaIcon value={overview.delta.items} /> {fmtDelta(overview.delta.items)}
+                  </span>
+                </Descriptions.Item>
+                <Descriptions.Item label="Clasificados">
+                  <span style={{ color: deltaColor(overview.delta.classified_items) }}>
+                    <DeltaIcon value={overview.delta.classified_items} /> {fmtDelta(overview.delta.classified_items)}
+                  </span>
+                </Descriptions.Item>
+                <Descriptions.Item label="Sentimiento neto">
+                  <span style={{ color: deltaColor(overview.delta.sentimiento_neto) }}>
+                    <DeltaIcon value={overview.delta.sentimiento_neto} /> {fmtDelta(overview.delta.sentimiento_neto)}
+                  </span>
+                </Descriptions.Item>
+                <Descriptions.Item label="BHS">
+                  <span style={{ color: deltaColor(overview.delta.bhs) }}>
+                    <DeltaIcon value={overview.delta.bhs} /> {fmtDelta(overview.delta.bhs)}
+                  </span>
+                </Descriptions.Item>
+              </Descriptions>
+            </Card>
 
-          <section className="analysis-grid">
-            <article className="panel">
-              <h3>Scope Claro</h3>
-              <ul className="simple-list">
-                <li>
-                  <span>Items</span>
-                  <strong>{overview.by_scope.claro.items}</strong>
-                </li>
-                <li>
-                  <span>Riesgo</span>
-                  <strong>{formatPercent(overview.by_scope.claro.riesgo_activo)}</strong>
-                </li>
-                <li>
-                  <span>BHS</span>
-                  <strong>{formatScore(overview.by_scope.claro.bhs)}</strong>
-                </li>
-              </ul>
-            </article>
-            <article className="panel">
-              <h3>Scope Competencia</h3>
-              <ul className="simple-list">
-                <li>
-                  <span>Items</span>
-                  <strong>{overview.by_scope.competencia.items}</strong>
-                </li>
-                <li>
-                  <span>Riesgo</span>
-                  <strong>{formatPercent(overview.by_scope.competencia.riesgo_activo)}</strong>
-                </li>
-                <li>
-                  <span>BHS</span>
-                  <strong>{formatScore(overview.by_scope.competencia.bhs)}</strong>
-                </li>
-              </ul>
-            </article>
-          </section>
-        </>
-      ) : null}
+            <Row gutter={[16, 16]} style={{ marginTop: 16 }}>
+              <Col xs={24} md={12}>
+                <Card title="Scope Claro">
+                  <Descriptions column={1} size="small">
+                    <Descriptions.Item label="Items">{overview.by_scope.claro.items}</Descriptions.Item>
+                    <Descriptions.Item label="Riesgo">{fmt(overview.by_scope.claro.riesgo_activo)}</Descriptions.Item>
+                    <Descriptions.Item label="BHS">{fmtScore(overview.by_scope.claro.bhs)}</Descriptions.Item>
+                  </Descriptions>
+                </Card>
+              </Col>
+              <Col xs={24} md={12}>
+                <Card title="Scope Competencia">
+                  <Descriptions column={1} size="small">
+                    <Descriptions.Item label="Items">{overview.by_scope.competencia.items}</Descriptions.Item>
+                    <Descriptions.Item label="Riesgo">{fmt(overview.by_scope.competencia.riesgo_activo)}</Descriptions.Item>
+                    <Descriptions.Item label="BHS">{fmtScore(overview.by_scope.competencia.bhs)}</Descriptions.Item>
+                  </Descriptions>
+                </Card>
+              </Col>
+            </Row>
+          </>
+        )}
+      </Spin>
     </section>
   );
 };

@@ -1,8 +1,36 @@
 import { useEffect, useMemo, useState } from "react";
+import {
+  Alert,
+  Button,
+  Card,
+  Col,
+  Empty,
+  Flex,
+  Form,
+  Input,
+  Row,
+  Select,
+  Spin,
+  Space,
+  Tag,
+  Typography,
+} from "antd";
+import { ReloadOutlined, LinkOutlined } from "@ant-design/icons";
 import { ApiError, type ConfigQuery, type NewsFeedResponse, type OriginType } from "../api/client";
 import { useApiClient } from "../api/useApiClient";
+import { PageHeader } from "../components/shared/PageHeader";
+
+const { Text, Paragraph } = Typography;
 
 const PAGE_LIMIT = 20;
+
+const originColor = (origin: string): string => {
+  switch (origin) {
+    case "news": return "blue";
+    case "awario": return "purple";
+    default: return "default";
+  }
+};
 
 export const NewsFeedPage = () => {
   const client = useApiClient();
@@ -55,7 +83,7 @@ export const NewsFeedPage = () => {
       setHasNext(Boolean(response.page_info?.has_next));
     } catch (feedError) {
       if (feedError instanceof ApiError && feedError.status === 409) {
-        setError("La query seleccionada no tiene vínculo Awario activo.");
+        setError("La query seleccionada no tiene vinculo Awario activo.");
       } else {
         setError((feedError as Error).message);
       }
@@ -102,90 +130,135 @@ export const NewsFeedPage = () => {
 
   return (
     <section>
-      <header className="page-header">
-        <h2>Feed de Noticias por Query</h2>
-        <p>Feed unificado (news + awario) deduplicado por URL y paginado.</p>
-      </header>
+      <PageHeader
+        title="Feed de Noticias por Query"
+        subtitle="Feed unificado (news + awario) deduplicado por URL y paginado."
+      />
 
-      {error ? <div className="alert error">{error}</div> : null}
+      {error ? (
+        <Alert type="error" showIcon title={error} style={{ marginBottom: 16 }} />
+      ) : null}
 
-      <section className="panel feed-controls">
-        <label>
-          Query activa
-          <select
-            value={selectedQueryId}
-            onChange={(event) => setSelectedQueryId(event.target.value)}
-            disabled={loadingQueries || queries.length === 0}
-          >
-            {queries.length === 0 ? <option value="">No hay queries activas</option> : null}
-            {queries.map((query) => (
-              <option key={query.id} value={query.id}>
-                {query.name} {query.awario_link_status === "linked" ? "" : "(bloqueada: falta Awario)"}
-              </option>
-            ))}
-          </select>
-        </label>
+      <Card style={{ marginBottom: 16 }}>
+        <Form layout="vertical">
+          <Row gutter={[16, 0]} align="bottom">
+            <Col xs={24} sm={12} md={8}>
+              <Form.Item label="Query activa">
+                <Select
+                  value={selectedQueryId || undefined}
+                  onChange={(value) => setSelectedQueryId(value)}
+                  disabled={loadingQueries || queries.length === 0}
+                  placeholder="No hay queries activas"
+                  style={{ width: "100%" }}
+                >
+                  {queries.map((query) => (
+                    <Select.Option key={query.id} value={query.id}>
+                      {query.name} {query.awario_link_status === "linked" ? "" : "(bloqueada: falta Awario)"}
+                    </Select.Option>
+                  ))}
+                </Select>
+              </Form.Item>
+            </Col>
+            <Col xs={24} sm={6} md={4}>
+              <Form.Item>
+                <Button
+                  icon={<ReloadOutlined />}
+                  onClick={() => void loadFeed({ append: false })}
+                  disabled={!selectedQueryId || loadingFeed}
+                >
+                  Refrescar
+                </Button>
+              </Form.Item>
+            </Col>
+          </Row>
+        </Form>
+      </Card>
 
-        <button className="btn btn-outline" type="button" onClick={() => void loadFeed({ append: false })} disabled={!selectedQueryId || loadingFeed}>
-          Refrescar
-        </button>
-      </section>
-
-      <section className="panel feed-controls">
-        <label>
-          Origen
-          <select value={originFilter} onChange={(event) => setOriginFilter(event.target.value as OriginType | "all")}>
-            <option value="all">all</option>
-            <option value="news">news</option>
-            <option value="awario">awario</option>
-          </select>
-        </label>
-        <label>
-          Tag
-          <input
-            value={tagFilter}
-            onChange={(event) => setTagFilter(event.target.value)}
-            placeholder="origin:news o provider:newsapi"
-          />
-        </label>
-      </section>
+      <Card style={{ marginBottom: 16 }}>
+        <Form layout="vertical">
+          <Row gutter={[16, 0]} align="bottom">
+            <Col xs={24} sm={8} md={6}>
+              <Form.Item label="Origen">
+                <Select value={originFilter} onChange={(value) => setOriginFilter(value)} style={{ width: "100%" }}>
+                  <Select.Option value="all">all</Select.Option>
+                  <Select.Option value="news">news</Select.Option>
+                  <Select.Option value="awario">awario</Select.Option>
+                </Select>
+              </Form.Item>
+            </Col>
+            <Col xs={24} sm={8} md={6}>
+              <Form.Item label="Tag">
+                <Input
+                  value={tagFilter}
+                  onChange={(event) => setTagFilter(event.target.value)}
+                  placeholder="origin:news o provider:newsapi"
+                />
+              </Form.Item>
+            </Col>
+          </Row>
+        </Form>
+      </Card>
 
       {selectedQuery && selectedQuery.awario_link_status !== "linked" ? (
-        <div className="alert warning">La query seleccionada está bloqueada hasta vincular una alerta Awario.</div>
+        <Alert
+          type="warning"
+          showIcon
+          title="La query seleccionada esta bloqueada hasta vincular una alerta Awario."
+          style={{ marginBottom: 16 }}
+        />
       ) : null}
 
-      {loadingFeed ? <p>Cargando feed...</p> : null}
+      {loadingFeed ? (
+        <Flex justify="center" style={{ padding: 48 }}>
+          <Spin tip="Cargando feed..." size="large">
+            <div style={{ padding: 50 }} />
+          </Spin>
+        </Flex>
+      ) : null}
 
       {!loadingFeed && selectedQuery && items.length === 0 ? (
-        <div className="panel">
-          <p>No hay resultados para la query seleccionada.</p>
-        </div>
+        <Card style={{ marginBottom: 16 }}>
+          <Empty description="No hay resultados para la query seleccionada." />
+        </Card>
       ) : null}
 
-      <div className="feed-grid">
+      <Row gutter={[16, 16]}>
         {items.map((item) => (
-          <article className="feed-card" key={item.id}>
-            <p className="feed-provider">{item.provider}</p>
-            <div className="origin-chip-row">
-              <span className={`origin-chip origin-chip-${item.origin}`}>{item.origin}</span>
-              {item.medium ? <span className="origin-chip">medio:{item.medium}</span> : null}
-            </div>
-            <h3>{item.title}</h3>
-            <p className="feed-date">{item.published_at ?? item.created_at}</p>
-            <p>{item.summary ?? "Sin resumen disponible."}</p>
-            <a href={item.canonical_url} target="_blank" rel="noreferrer">
-              Abrir fuente
-            </a>
-          </article>
+          <Col xs={24} sm={12} lg={8} key={item.id}>
+            <Card
+              actions={[
+                <a href={item.canonical_url} target="_blank" rel="noreferrer" key="open">
+                  <LinkOutlined /> Abrir fuente
+                </a>,
+              ]}
+            >
+              <Text type="secondary" style={{ fontSize: 12 }}>{item.provider}</Text>
+              <Space wrap style={{ marginTop: 4, marginBottom: 8 }}>
+                <Tag color={originColor(item.origin)}>{item.origin}</Tag>
+                {item.medium ? <Tag>medio:{item.medium}</Tag> : null}
+              </Space>
+              <Card.Meta
+                title={item.title}
+                description={
+                  <>
+                    <Text type="secondary" style={{ fontSize: 12 }}>{item.published_at ?? item.created_at}</Text>
+                    <Paragraph style={{ marginTop: 8, marginBottom: 0 }} ellipsis={{ rows: 4 }}>
+                      {item.summary ?? "Sin resumen disponible."}
+                    </Paragraph>
+                  </>
+                }
+              />
+            </Card>
+          </Col>
         ))}
-      </div>
+      </Row>
 
       {hasNext ? (
-        <div className="button-row" style={{ marginTop: 16 }}>
-          <button className="btn btn-outline" type="button" onClick={() => void loadFeed({ append: true })} disabled={loadingMore}>
-            {loadingMore ? "Cargando..." : "Cargar más"}
-          </button>
-        </div>
+        <Flex justify="center" style={{ marginTop: 16 }}>
+          <Button onClick={() => void loadFeed({ append: true })} loading={loadingMore}>
+            {loadingMore ? "Cargando..." : "Cargar mas"}
+          </Button>
+        </Flex>
       ) : null}
     </section>
   );

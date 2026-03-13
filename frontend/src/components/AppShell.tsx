@@ -1,6 +1,94 @@
-import { useEffect } from "react";
-import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
+import { useEffect, useMemo } from "react";
+import { Outlet, useLocation, useNavigate } from "react-router-dom";
+import { Layout, Menu, Typography, Button, Flex } from "antd";
+import type { MenuProps } from "antd";
+import {
+  DashboardOutlined,
+  BarChartOutlined,
+  FileSearchOutlined,
+  TeamOutlined,
+  AlertOutlined,
+  FundOutlined,
+  NodeIndexOutlined,
+  StockOutlined,
+  ThunderboltOutlined,
+  FileTextOutlined,
+  SnippetsOutlined,
+  ClockCircleOutlined,
+  LinkOutlined,
+  UserOutlined,
+  SearchOutlined,
+  AppstoreOutlined,
+  AimOutlined,
+  BellOutlined,
+  MessageOutlined,
+  AuditOutlined,
+  LogoutOutlined,
+} from "@ant-design/icons";
 import { useAuth } from "../auth/AuthContext";
+
+const { Sider, Content } = Layout;
+const { Text } = Typography;
+
+type MenuItem = Required<MenuProps>["items"][number];
+
+const fullMenuItems: MenuItem[] = [
+  {
+    type: "group",
+    label: "MONITOREO",
+    children: [
+      { key: "/app/monitor/overview", label: "Overview", icon: <DashboardOutlined /> },
+      { key: "/app/monitor/social-overview", label: "Social Overview", icon: <BarChartOutlined /> },
+      { key: "/app/monitor/feed-claro", label: "Feed Claro", icon: <FileSearchOutlined /> },
+      { key: "/app/monitor/feed-competencia", label: "Feed Competencia", icon: <TeamOutlined /> },
+      { key: "/app/monitor/incidents", label: "Incidentes", icon: <AlertOutlined /> },
+    ],
+  },
+  {
+    type: "group",
+    label: "ANALISIS",
+    children: [
+      { key: "/app/analyze/overview", label: "Overview Marca", icon: <FundOutlined /> },
+      { key: "/app/analyze/channel", label: "Por Canal", icon: <NodeIndexOutlined /> },
+      { key: "/app/analyze/competitors", label: "Benchmark Competencia", icon: <StockOutlined /> },
+      { key: "/app/analyze/runs", label: "Runs Async", icon: <ThunderboltOutlined /> },
+    ],
+  },
+  {
+    type: "group",
+    label: "REPORTES",
+    children: [
+      { key: "/app/reports/center", label: "Centro de Reportes", icon: <FileTextOutlined /> },
+      { key: "/app/reports/templates", label: "Plantillas", icon: <SnippetsOutlined /> },
+      { key: "/app/reports/schedules", label: "Programacion", icon: <ClockCircleOutlined /> },
+    ],
+  },
+  {
+    type: "group",
+    label: "CONFIGURACION",
+    children: [
+      { key: "/app/config/connectors", label: "Conectores", icon: <LinkOutlined /> },
+      { key: "/app/config/accounts", label: "Cuentas", icon: <UserOutlined /> },
+      { key: "/app/config/competitors", label: "Competidores", icon: <TeamOutlined /> },
+      { key: "/app/config/queries", label: "Queries", icon: <SearchOutlined /> },
+      { key: "/app/config/taxonomy", label: "Taxonomias", icon: <AppstoreOutlined /> },
+      { key: "/app/config/source-scoring", label: "Source Scoring", icon: <AimOutlined /> },
+      { key: "/app/config/alerts", label: "Notificaciones", icon: <BellOutlined /> },
+      { key: "/app/config/social", label: "Social", icon: <MessageOutlined /> },
+      { key: "/app/config/audit", label: "Auditoria", icon: <AuditOutlined /> },
+    ],
+  },
+];
+
+const restrictedMenuItems: MenuItem[] = [
+  {
+    type: "group",
+    label: "MONITOREO",
+    children: [
+      { key: "/app/monitor/social-overview", label: "Social Overview", icon: <BarChartOutlined /> },
+    ],
+  },
+];
 
 export const AppShell = () => {
   const { session, logout } = useAuth();
@@ -9,117 +97,114 @@ export const AppShell = () => {
   const location = useLocation();
   const navigate = useNavigate();
 
+  const menuItems = useMemo(
+    () => (isSocialOverviewOnly ? restrictedMenuItems : fullMenuItems),
+    [isSocialOverviewOnly],
+  );
+
   useEffect(() => {
     if (!isSocialOverviewOnly) return;
     if (location.pathname === "/app/monitor/social-overview") return;
     navigate("/app/monitor/social-overview", { replace: true });
   }, [isSocialOverviewOnly, location.pathname, navigate]);
 
+  const onMenuClick: MenuProps["onClick"] = ({ key }) => {
+    navigate(key);
+  };
+
   return (
-    <div className="app-shell">
-      <aside className="app-sidebar">
-        <div className="brand-block">
-          <p className="brand-kicker">Claro Data AI</p>
-          <h1>Monitoreo de Marca</h1>
-          <p className="brand-subtitle">Noticias + Social-ready</p>
+    <Layout style={{ minHeight: "100vh" }}>
+      <Sider
+        width={280}
+        breakpoint="lg"
+        collapsedWidth={0}
+        style={{
+          borderRight: "1px solid #e7e9ed",
+          position: "fixed",
+          left: 0,
+          top: 0,
+          bottom: 0,
+          zIndex: 10,
+          display: "flex",
+          flexDirection: "column",
+        }}
+      >
+        <div
+          style={{
+            padding: "28px 24px 20px",
+            borderBottom: "1px solid #e7e9ed",
+          }}
+        >
+          <Text
+            strong
+            style={{
+              fontSize: 11,
+              textTransform: "uppercase",
+              letterSpacing: 1.5,
+              color: "#e30613",
+            }}
+          >
+            Claro Data AI
+          </Text>
+          <div
+            style={{
+              fontFamily: "'Barlow Condensed', sans-serif",
+              fontSize: 22,
+              fontWeight: 700,
+              color: "#1b1f24",
+              lineHeight: 1.2,
+              marginTop: 4,
+            }}
+          >
+            Monitoreo de Marca
+          </div>
+          <Text type="secondary" style={{ fontSize: 13 }}>
+            Noticias + Social-ready
+          </Text>
         </div>
 
-        <nav className="app-nav" aria-label="Navegacion principal">
-          {isSocialOverviewOnly ? (
-            <>
-              <p className="nav-group-title">Monitoreo</p>
-              <NavLink to="/app/monitor/social-overview" className="nav-link">
-                Social Overview
-              </NavLink>
-            </>
-          ) : (
-            <>
-              <p className="nav-group-title">Monitoreo</p>
-              <NavLink to="/app/monitor/overview" className="nav-link">
-                Overview
-              </NavLink>
-              <NavLink to="/app/monitor/social-overview" className="nav-link">
-                Social Overview
-              </NavLink>
-              <NavLink to="/app/monitor/feed-claro" className="nav-link">
-                Feed Claro
-              </NavLink>
-              <NavLink to="/app/monitor/feed-competencia" className="nav-link">
-                Feed Competencia
-              </NavLink>
-              <NavLink to="/app/monitor/incidents" className="nav-link">
-                Incidentes
-              </NavLink>
+        <div style={{ flex: 1, overflowY: "auto", padding: "8px 0" }}>
+          <Menu
+            mode="inline"
+            selectedKeys={[location.pathname]}
+            onClick={onMenuClick}
+            items={menuItems}
+            style={{ border: "none" }}
+          />
+        </div>
 
-              <p className="nav-group-title">Analisis</p>
-              <NavLink to="/app/analyze/overview" className="nav-link">
-                Overview Marca
-              </NavLink>
-              <NavLink to="/app/analyze/channel" className="nav-link">
-                Por Canal
-              </NavLink>
-              <NavLink to="/app/analyze/competitors" className="nav-link">
-                Benchmark Competencia
-              </NavLink>
-              <NavLink to="/app/analyze/runs" className="nav-link">
-                Runs Async
-              </NavLink>
-
-              <p className="nav-group-title">Reportes</p>
-              <NavLink to="/app/reports/center" className="nav-link">
-                Centro de Reportes
-              </NavLink>
-              <NavLink to="/app/reports/templates" className="nav-link">
-                Plantillas
-              </NavLink>
-              <NavLink to="/app/reports/schedules" className="nav-link">
-                Programacion
-              </NavLink>
-
-              <p className="nav-group-title">Configuracion</p>
-              <NavLink to="/app/config/connectors" className="nav-link">
-                Conectores
-              </NavLink>
-              <NavLink to="/app/config/accounts" className="nav-link">
-                Cuentas
-              </NavLink>
-              <NavLink to="/app/config/competitors" className="nav-link">
-                Competidores
-              </NavLink>
-              <NavLink to="/app/config/queries" className="nav-link">
-                Queries
-              </NavLink>
-              <NavLink to="/app/config/taxonomy" className="nav-link">
-                Taxonomias
-              </NavLink>
-              <NavLink to="/app/config/source-scoring" className="nav-link">
-                Source Scoring
-              </NavLink>
-              <NavLink to="/app/config/alerts" className="nav-link">
-                Notificaciones
-              </NavLink>
-              <NavLink to="/app/config/social" className="nav-link">
-                Social
-              </NavLink>
-              <NavLink to="/app/config/audit" className="nav-link">
-                Auditoria
-              </NavLink>
-            </>
-          )}
-        </nav>
-
-        <div className="sidebar-footer">
-          <p className="user-name">{session?.name}</p>
-          <p className="user-role">Rol: {session?.role}</p>
-          <button className="btn btn-outline" onClick={logout} type="button">
+        <Flex
+          vertical
+          gap={4}
+          style={{
+            padding: "16px 24px",
+            borderTop: "1px solid #e7e9ed",
+          }}
+        >
+          <Text strong style={{ fontSize: 14 }}>{session?.name}</Text>
+          <Text type="secondary" style={{ fontSize: 12 }}>
+            Rol: {session?.role}
+          </Text>
+          <Button
+            icon={<LogoutOutlined />}
+            onClick={logout}
+            style={{ marginTop: 8 }}
+            block
+          >
             Cerrar sesion
-          </button>
-        </div>
-      </aside>
+          </Button>
+        </Flex>
+      </Sider>
 
-      <main className="app-main">
+      <Content
+        style={{
+          marginLeft: 280,
+          padding: "32px 40px",
+          minHeight: "100vh",
+        }}
+      >
         <Outlet />
-      </main>
-    </div>
+      </Content>
+    </Layout>
   );
 };

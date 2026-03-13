@@ -1,6 +1,9 @@
 import React from "react";
+import { Flex, Select, Segmented, Typography } from "antd";
 import type { PostsViewMode, SocialPostSort } from "./postsTypes";
 import { POST_SORT_OPTIONS, toPostSortLabel } from "./postsUtils";
+
+const { Text } = Typography;
 
 type Props = {
   totalVisible: number;
@@ -12,46 +15,38 @@ type Props = {
 };
 
 const PostsToolbar: React.FC<Props> = ({ totalVisible, viewMode, onViewModeChange, sort, onSortChange, loading }) => (
-  <div className="flex flex-wrap items-center justify-between gap-2">
-    <div className="flex items-center gap-3">
-      <span className="text-xs text-slate-500">{totalVisible} post{totalVisible !== 1 ? "s" : ""}</span>
-      {loading && <span className="text-xs text-slate-400">Actualizando...</span>}
-    </div>
+  <Flex align="center" justify="space-between" wrap="wrap" gap={8}>
+    <Flex align="center" gap={12}>
+      <Text type="secondary" style={{ fontSize: 12 }}>
+        {totalVisible} post{totalVisible !== 1 ? "s" : ""}
+      </Text>
+      {loading && <Text type="secondary" style={{ fontSize: 12 }}>Actualizando...</Text>}
+    </Flex>
 
-    <div className="flex items-center gap-2">
-      <label className="text-xs font-semibold text-slate-600">
-        Orden
-        <select
-          value={sort}
-          onChange={(e) => onSortChange(e.target.value as SocialPostSort)}
-          className="ml-2 rounded-md border border-slate-200 px-2 py-1 text-xs"
-        >
-          {POST_SORT_OPTIONS.map((opt) => (
-            <option key={opt} value={opt}>
-              {toPostSortLabel(opt)}
-            </option>
-          ))}
-        </select>
-      </label>
+    <Flex align="center" gap={8}>
+      <Text strong style={{ fontSize: 12 }}>Orden</Text>
+      <Select
+        value={sort}
+        onChange={onSortChange}
+        size="small"
+        style={{ width: 170 }}
+        options={POST_SORT_OPTIONS.map((opt) => ({
+          value: opt,
+          label: toPostSortLabel(opt),
+        }))}
+      />
 
-      <div className="monitor-feed-view-toggle">
-        <button
-          type="button"
-          className={`btn btn-sm ${viewMode === "table" ? "is-active" : ""}`}
-          onClick={() => onViewModeChange("table")}
-        >
-          Tabla
-        </button>
-        <button
-          type="button"
-          className={`btn btn-sm ${viewMode === "cards" ? "is-active" : ""}`}
-          onClick={() => onViewModeChange("cards")}
-        >
-          Cards
-        </button>
-      </div>
-    </div>
-  </div>
+      <Segmented
+        value={viewMode}
+        onChange={(val) => onViewModeChange(val as PostsViewMode)}
+        size="small"
+        options={[
+          { value: "table", label: "Tabla" },
+          { value: "cards", label: "Cards" },
+        ]}
+      />
+    </Flex>
+  </Flex>
 );
 
 export default PostsToolbar;

@@ -1,8 +1,16 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
+import { Alert, Button, Card, Col, Empty, Input, Row, Select, Space, Spin, Statistic, Table, Typography } from "antd";
+import { ReloadOutlined, PlayCircleOutlined, SaveOutlined, LinkOutlined } from "@ant-design/icons";
 import { type AwarioAlertBinding, type Connector, type ConnectorSyncRun } from "../api/client";
 import { useApiClient } from "../api/useApiClient";
 import { useAuth } from "../auth/AuthContext";
+import { PageHeader } from "../components/shared/PageHeader";
+import { StatusTag } from "../components/shared/StatusTag";
+
+import type { ColumnsType } from "antd/es/table";
+
+const { Text } = Typography;
 
 const toRunLabel = (run: ConnectorSyncRun): string => {
   const started = run.started_at ?? run.created_at;
@@ -15,6 +23,66 @@ const formatDateTime = (value: string | null | undefined): string => {
   if (Number.isNaN(parsed.getTime())) return value;
   return parsed.toLocaleString();
 };
+
+const awarioColumns: ColumnsType<AwarioAlertBinding> = [
+  {
+    title: "alert_id",
+    dataIndex: "awario_alert_id",
+    key: "awario_alert_id",
+  },
+  {
+    title: "estado",
+    dataIndex: "status",
+    key: "status",
+    render: (text: string) => <StatusTag status={text} />,
+  },
+  {
+    title: "sync_state",
+    dataIndex: "sync_state",
+    key: "sync_state",
+    render: (text: string) => <StatusTag status={text} />,
+  },
+  {
+    title: "ultimo sync",
+    key: "last_sync_at",
+    render: (_: unknown, record: AwarioAlertBinding) => formatDateTime(record.last_sync_at),
+  },
+  {
+    title: "error",
+    dataIndex: "last_sync_error",
+    key: "last_sync_error",
+    render: (text: string | null) => text ?? "-",
+  },
+];
+
+const runColumns: ColumnsType<ConnectorSyncRun> = [
+  {
+    title: "Run",
+    key: "label",
+    render: (_: unknown, record: ConnectorSyncRun) => <strong>{toRunLabel(record)}</strong>,
+  },
+  {
+    title: "Status",
+    dataIndex: "status",
+    key: "status",
+    render: (text: string) => <StatusTag status={text} />,
+  },
+  {
+    title: "Error",
+    dataIndex: "error",
+    key: "error",
+    render: (text: string | null) => <Text type={text ? "danger" : "secondary"}>{text ?? "-"}</Text>,
+  },
+  {
+    title: "Metrics",
+    key: "metrics",
+    render: (_: unknown, record: ConnectorSyncRun) => (
+      <pre style={{ whiteSpace: "pre-wrap", margin: 0, fontSize: 12 }}>
+        {JSON.stringify(record.metrics ?? {}, null, 2)}
+      </pre>
+    ),
+  },
+];
 
 export const ConnectorsPage = () => {
   const client = useApiClient();
@@ -138,199 +206,195 @@ export const ConnectorsPage = () => {
 
   return (
     <section>
-      <header className="page-header">
-        <h2>Configuracion de Conectores</h2>
-        <p>Operacion de salud, frecuencia y corridas manuales. La vinculacion Awario se gestiona desde Configuracion de Queries.</p>
-      </header>
+      <PageHeader
+        title="Configuracion de Conectores"
+        subtitle="Operacion de salud, frecuencia y corridas manuales. La vinculacion Awario se gestiona desde Configuracion de Queries."
+      />
 
-      {error ? <div className="alert error">{error}</div> : null}
+      {error ? <Alert type="error" showIcon title={error} style={{ marginBottom: 16 }} /> : null}
 
-      <section className="panel">
-        <div className="section-title-row">
-          <h3>Conectores</h3>
-          <button className="btn btn-outline" type="button" onClick={() => void loadConnectors()} disabled={loading}>
+      <Card
+        title="Conectores"
+        style={{ marginBottom: 16 }}
+        extra={
+          <Button icon={<ReloadOutlined />} onClick={() => void loadConnectors()} disabled={loading}>
             Recargar
-          </button>
-        </div>
+          </Button>
+        }
+      >
+        <Spin spinning={loading}>
+          {!loading && connectors.length === 0 ? (
+            <Empty description="Sin conectores configurados." />
+          ) : (
+            <Row gutter={[16, 16]}>
+              {connectors.map((connector) => (
+                <Col xs={24} key={connector.id}>
+                  <Card size="small" type="inner">
+                    <Row justify="space-between" align="middle" style={{ marginBottom: 8 }}>
+                      <Col>
+                        <Space>
+                          <strong>{connector.provider}</strong>
+                          <StatusTag status={connector.enabled ? "active" : "inactive"} />
+                          <StatusTag status={connector.health_status} />
+                        </Space>
+                      </Col>
+                    </Row>
 
-        {loading ? <p>Cargando conectores...</p> : null}
+                    <Space size="large" wrap style={{ marginBottom: canOperate ? 8 : 0 }}>
+                      <Text>Frecuencia: {connector.frequency_minutes} min</Text>
+                      <Text>Ultimo sync: {formatDateTime(connector.last_sync_at)}</Text>
+                      <Text>p95: {connector.latency_p95_ms ?? "n/a"} ms</Text>
+                    </Space>
 
-        {!loading ? (
-          <ul className="simple-list simple-list--stacked">
-            {connectors.map((connector) => (
-              <li key={connector.id}>
-                <div style={{ width: "100%", display: "grid", gap: 8 }}>
-                  <div className="section-title-row">
-                    <strong>{connector.provider}</strong>
-                    <span>
-                      estado: {connector.enabled ? "enabled" : "disabled"} | salud: {connector.health_status}
-                    </span>
-                  </div>
+                    {canOperate ? (
+                      <Row gutter={8} align="middle" style={{ marginTop: 8 }}>
+                        <Col>
+                          <Button
+                            onClick={() =>
+                              void updateConnector(connector, {
+                                enabled: !connector.enabled
+                              })
+                            }
+                          >
+                            {connector.enabled ? "Deshabilitar" : "Habilitar"}
+                          </Button>
+                        </Col>
+                        <Col>
+                          <Space.Compact>
+                            <Input
+                              type="number"
+                              min={5}
+                              max={1440}
+                              value={frequencyDraft[connector.id] ?? connector.frequency_minutes}
+                              onChange={(event) =>
+                                setFrequencyDraft((current) => ({
+                                  ...current,
+                                  [connector.id]: Number.parseInt(event.target.value || String(connector.frequency_minutes), 10)
+                                }))
+                              }
+                              style={{ width: 110 }}
+                              addonBefore="min"
+                            />
+                            <Button
+                              icon={<SaveOutlined />}
+                              onClick={() =>
+                                void updateConnector(connector, {
+                                  frequency_minutes: frequencyDraft[connector.id] ?? connector.frequency_minutes
+                                })
+                              }
+                            >
+                              Guardar
+                            </Button>
+                          </Space.Compact>
+                        </Col>
+                        <Col>
+                          <Button type="primary" icon={<PlayCircleOutlined />} onClick={() => void syncConnector(connector.id)}>
+                            Ejecutar sync
+                          </Button>
+                        </Col>
+                      </Row>
+                    ) : null}
+                  </Card>
+                </Col>
+              ))}
+            </Row>
+          )}
+        </Spin>
+      </Card>
 
-                  <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
-                    <span>Frecuencia: {connector.frequency_minutes} min</span>
-                    <span>Ultimo sync: {formatDateTime(connector.last_sync_at)}</span>
-                    <span>p95: {connector.latency_p95_ms ?? "n/a"} ms</span>
-                  </div>
-
-                  {canOperate ? (
-                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                      <button
-                        className="btn btn-outline"
-                        type="button"
-                        onClick={() =>
-                          void updateConnector(connector, {
-                            enabled: !connector.enabled
-                          })
-                        }
-                      >
-                        {connector.enabled ? "Deshabilitar" : "Habilitar"}
-                      </button>
-
-                      <label className="inline-form" style={{ fontWeight: 600 }}>
-                        <span>Frecuencia</span>
-                        <input
-                          type="number"
-                          min={5}
-                          max={1440}
-                          value={frequencyDraft[connector.id] ?? connector.frequency_minutes}
-                          onChange={(event) =>
-                            setFrequencyDraft((current) => ({
-                              ...current,
-                              [connector.id]: Number.parseInt(event.target.value || String(connector.frequency_minutes), 10)
-                            }))
-                          }
-                          style={{ width: 110 }}
-                        />
-                        <button
-                          type="button"
-                          className="btn btn-outline"
-                          onClick={() =>
-                            void updateConnector(connector, {
-                              frequency_minutes: frequencyDraft[connector.id] ?? connector.frequency_minutes
-                            })
-                          }
-                        >
-                          Guardar
-                        </button>
-                      </label>
-
-                      <button className="btn btn-primary" type="button" onClick={() => void syncConnector(connector.id)}>
-                        Ejecutar sync
-                      </button>
-                    </div>
-                  ) : null}
-                </div>
-              </li>
-            ))}
-            {connectors.length === 0 ? <li>Sin conectores configurados.</li> : null}
-          </ul>
-        ) : null}
-      </section>
-
-      <section className="panel" style={{ marginTop: 16 }}>
-        <div className="section-title-row" style={{ alignItems: "center" }}>
-          <h3>Runs del conector</h3>
-          <select value={selectedConnectorId} onChange={(event) => setSelectedConnectorId(event.target.value)}>
-            {connectors.map((connector) => (
-              <option key={connector.id} value={connector.id}>
-                {connector.provider}
-              </option>
-            ))}
-          </select>
-        </div>
-
+      <Card
+        title="Runs del conector"
+        style={{ marginBottom: 16 }}
+        extra={
+          <Select
+            value={selectedConnectorId || undefined}
+            onChange={(value) => setSelectedConnectorId(value)}
+            style={{ minWidth: 200 }}
+            placeholder="Selecciona conector"
+            options={connectors.map((connector) => ({
+              value: connector.id,
+              label: connector.provider,
+            }))}
+          />
+        }
+      >
         {selectedConnector ? (
-          <p className="term-meta" style={{ marginTop: 8 }}>
+          <Text type="secondary" style={{ display: "block", marginBottom: 8 }}>
             Historial para <strong>{selectedConnector.provider}</strong>
-          </p>
+          </Text>
         ) : null}
 
-        {loadingRuns ? <p>Cargando runs...</p> : null}
-        {!loadingRuns && runs.length === 0 ? <p>Sin ejecuciones registradas.</p> : null}
+        <Spin spinning={loadingRuns}>
+          {!loadingRuns && runs.length === 0 ? (
+            <Empty description="Sin ejecuciones registradas." />
+          ) : (
+            <Table<ConnectorSyncRun>
+              dataSource={runs}
+              columns={runColumns}
+              rowKey="id"
+              pagination={false}
+              size="small"
+            />
+          )}
+        </Spin>
+      </Card>
 
-        {!loadingRuns && runs.length > 0 ? (
-          <ul className="simple-list simple-list--stacked" style={{ marginTop: 10 }}>
-            {runs.map((run) => (
-              <li key={run.id}>
-                <div style={{ display: "grid", gap: 4 }}>
-                  <strong>{toRunLabel(run)}</strong>
-                  <span className="term-meta">error: {run.error ?? "-"}</span>
-                  <details>
-                    <summary style={{ cursor: "pointer" }}>Metrics</summary>
-                    <pre style={{ whiteSpace: "pre-wrap", marginTop: 8 }}>{JSON.stringify(run.metrics ?? {}, null, 2)}</pre>
-                  </details>
-                </div>
-              </li>
-            ))}
-          </ul>
-        ) : null}
-      </section>
-
-      <section className="panel" style={{ marginTop: 16 }}>
-        <div className="section-title-row" style={{ alignItems: "center" }}>
-          <h3>Awario (operativo)</h3>
-          <div className="button-row">
-            <button className="btn btn-outline" type="button" onClick={() => void loadAwarioConfig()} disabled={loadingAwario}>
+      <Card
+        title="Awario (operativo)"
+        extra={
+          <Space>
+            <Button icon={<ReloadOutlined />} onClick={() => void loadAwarioConfig()} disabled={loadingAwario}>
               Recargar
-            </button>
-            <Link className="btn btn-primary" to="/app/config/queries?tab=awario">
-              Ir a Vinculacion Awario
+            </Button>
+            <Link to="/app/config/queries?tab=awario">
+              <Button type="primary" icon={<LinkOutlined />}>
+                Ir a Vinculacion Awario
+              </Button>
             </Link>
-          </div>
-        </div>
+          </Space>
+        }
+      >
+        <Text type="secondary" style={{ display: "block", marginBottom: 12 }}>
+          Vista read-only para estado operativo. La vinculacion y reintentos se hacen en Configuracion de Queries.
+        </Text>
 
-        <p style={{ marginTop: 8 }}>Vista read-only para estado operativo. La vinculacion y reintentos se hacen en Configuracion de Queries.</p>
+        <Row gutter={16} style={{ marginBottom: 16 }}>
+          <Col xs={12} sm={6}>
+            <Card size="small">
+              <Statistic title="Bindings" value={awarioSummary.total} />
+            </Card>
+          </Col>
+          <Col xs={12} sm={6}>
+            <Card size="small">
+              <Statistic title="Activos" value={awarioSummary.active} />
+            </Card>
+          </Col>
+          <Col xs={12} sm={6}>
+            <Card size="small">
+              <Statistic title="Backfill pendiente" value={awarioSummary.pendingBackfill} />
+            </Card>
+          </Col>
+          <Col xs={12} sm={6}>
+            <Card size="small">
+              <Statistic title="Con error" value={awarioSummary.withError} />
+            </Card>
+          </Col>
+        </Row>
 
-        <div className="kpi-grid" style={{ marginTop: 12 }}>
-          <article className="panel kpi-card" style={{ marginBottom: 0 }}>
-            <span className="kpi-caption">Bindings</span>
-            <strong className="kpi-value">{awarioSummary.total}</strong>
-          </article>
-          <article className="panel kpi-card" style={{ marginBottom: 0 }}>
-            <span className="kpi-caption">Activos</span>
-            <strong className="kpi-value">{awarioSummary.active}</strong>
-          </article>
-          <article className="panel kpi-card" style={{ marginBottom: 0 }}>
-            <span className="kpi-caption">Backfill pendiente</span>
-            <strong className="kpi-value">{awarioSummary.pendingBackfill}</strong>
-          </article>
-          <article className="panel kpi-card" style={{ marginBottom: 0 }}>
-            <span className="kpi-caption">Con error</span>
-            <strong className="kpi-value">{awarioSummary.withError}</strong>
-          </article>
-        </div>
-
-        {loadingAwario ? <p style={{ marginTop: 12 }}>Cargando bindings Awario...</p> : null}
-        {!loadingAwario && awarioBindings.length === 0 ? <p style={{ marginTop: 12 }}>Sin bindings configurados.</p> : null}
-
-        {!loadingAwario && awarioBindings.length > 0 ? (
-          <div className="incident-table-wrapper" style={{ marginTop: 12 }}>
-            <table className="incident-table">
-              <thead>
-                <tr>
-                  <th>alert_id</th>
-                  <th>estado</th>
-                  <th>sync_state</th>
-                  <th>ultimo sync</th>
-                  <th>error</th>
-                </tr>
-              </thead>
-              <tbody>
-                {awarioBindings.slice(0, 50).map((binding) => (
-                  <tr key={binding.id}>
-                    <td>{binding.awario_alert_id}</td>
-                    <td>{binding.status}</td>
-                    <td>{binding.sync_state}</td>
-                    <td>{formatDateTime(binding.last_sync_at)}</td>
-                    <td>{binding.last_sync_error ?? "-"}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        ) : null}
-      </section>
+        <Spin spinning={loadingAwario}>
+          {!loadingAwario && awarioBindings.length === 0 ? (
+            <Empty description="Sin bindings configurados." />
+          ) : (
+            <Table<AwarioAlertBinding>
+              dataSource={awarioBindings.slice(0, 50)}
+              columns={awarioColumns}
+              rowKey="id"
+              pagination={false}
+              size="small"
+            />
+          )}
+        </Spin>
+      </Card>
     </section>
   );
 };

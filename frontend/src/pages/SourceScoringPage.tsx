@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
+import { Card, Alert, Button, Form, Input, InputNumber, Row, Col, Flex, Table, Switch, Typography } from "antd";
+import { ReloadOutlined, FilterOutlined, ClearOutlined } from "@ant-design/icons";
 import {
   ApiError,
   type CreateSourceWeightRequest,
@@ -7,6 +9,10 @@ import {
 } from "../api/client";
 import { useApiClient } from "../api/useApiClient";
 import { useAuth } from "../auth/AuthContext";
+import { PageHeader } from "../components/shared/PageHeader";
+import { StatusTag } from "../components/shared/StatusTag";
+
+const { Text } = Typography;
 
 type UiState = "idle" | "loading" | "empty" | "partial_data" | "permission_denied" | "error_retriable" | "error_non_retriable";
 
@@ -149,136 +155,196 @@ export const SourceScoringPage = () => {
     }
   };
 
+  const weightColumns = [
+    {
+      title: "Provider",
+      dataIndex: "provider",
+      key: "provider"
+    },
+    {
+      title: "Source Name",
+      dataIndex: "source_name",
+      key: "source_name",
+      render: (value: string | null) => value ?? "provider-default"
+    },
+    {
+      title: "Weight",
+      dataIndex: "weight",
+      key: "weight",
+      render: (value: number | undefined) => (typeof value === "number" ? value.toFixed(2) : "0.50")
+    },
+    {
+      title: "Estado",
+      dataIndex: "is_active",
+      key: "is_active",
+      render: (value: boolean) => <StatusTag status={value ? "active" : "inactive"} />
+    },
+    {
+      title: "Actualizado",
+      dataIndex: "updated_at",
+      key: "updated_at"
+    },
+    {
+      title: "Accion",
+      key: "action",
+      render: (_: unknown, record: SourceWeight) => (
+        <Button size="small" onClick={() => setSelectedId(record.id)}>
+          Ver
+        </Button>
+      )
+    }
+  ];
+
   return (
     <section>
-      <header className="page-header">
-        <h2>Source Scoring Global</h2>
-        <p>Configuracion jerarquica de peso por `provider+source_name` y fallback por `provider`.</p>
-      </header>
+      <PageHeader
+        title="Source Scoring Global"
+        subtitle="Configuracion jerarquica de peso por `provider+source_name` y fallback por `provider`."
+      />
 
-      {uiState === "loading" ? <div className="alert info">loading: consultando pesos configurables...</div> : null}
-      {uiState === "empty" ? <div className="alert info">empty: no existen pesos configurados.</div> : null}
-      {uiState === "partial_data" ? <div className="alert warning">partial_data: hay pesos inactivos en el catalogo.</div> : null}
-      {uiState === "permission_denied" ? <div className="alert error">permission_denied: tu rol no tiene acceso.</div> : null}
-      {uiState === "error_retriable" ? <div className="alert error">error_retriable: {error ?? "intenta nuevamente"}</div> : null}
-      {uiState === "error_non_retriable" ? <div className="alert error">error_non_retriable: {error ?? "revisa los datos"}</div> : null}
+      {uiState === "loading" ? (
+        <Alert type="info" showIcon title="loading: consultando pesos configurables..." style={{ marginBottom: 16 }} />
+      ) : null}
+      {uiState === "empty" ? (
+        <Alert type="info" showIcon title="empty: no existen pesos configurados." style={{ marginBottom: 16 }} />
+      ) : null}
+      {uiState === "partial_data" ? (
+        <Alert type="warning" showIcon title="partial_data: hay pesos inactivos en el catalogo." style={{ marginBottom: 16 }} />
+      ) : null}
+      {uiState === "permission_denied" ? (
+        <Alert type="error" showIcon title="permission_denied: tu rol no tiene acceso." style={{ marginBottom: 16 }} />
+      ) : null}
+      {uiState === "error_retriable" ? (
+        <Alert type="error" showIcon title={`error_retriable: ${error ?? "intenta nuevamente"}`} style={{ marginBottom: 16 }} />
+      ) : null}
+      {uiState === "error_non_retriable" ? (
+        <Alert type="error" showIcon title={`error_non_retriable: ${error ?? "revisa los datos"}`} style={{ marginBottom: 16 }} />
+      ) : null}
 
-      {!canManage ? <div className="alert info">Tu rol es de solo lectura para source scoring.</div> : null}
+      {!canManage ? (
+        <Alert type="info" showIcon title="Tu rol es de solo lectura para source scoring." style={{ marginBottom: 16 }} />
+      ) : null}
 
-      <section className="panel">
-        <div className="section-title-row">
-          <h3>Filtros</h3>
-          <button className="btn btn-outline" type="button" onClick={() => void load()} disabled={saving || uiState === "loading"}>
+      <Card
+        title="Filtros"
+        extra={
+          <Button icon={<ReloadOutlined />} onClick={() => void load()} disabled={saving || uiState === "loading"}>
             Refrescar
-          </button>
-        </div>
-        <div className="form-grid">
-          <label>
-            Provider
-            <input value={providerFilter} onChange={(event) => setProviderFilter(event.target.value)} placeholder="newsapi" />
-          </label>
-          <label style={{ display: "flex", alignItems: "end", gap: 8 }}>
-            <input type="checkbox" checked={includeInactive} onChange={(event) => setIncludeInactive(event.target.checked)} />
-            Incluir inactivos
-          </label>
-          <div style={{ display: "flex", alignItems: "end" }}>
-            <button className="btn btn-primary" type="button" onClick={() => void load()} disabled={saving || uiState === "loading"}>
-              Aplicar filtros
-            </button>
-          </div>
-        </div>
-      </section>
+          </Button>
+        }
+        style={{ marginBottom: 16 }}
+      >
+        <Form layout="vertical">
+          <Row gutter={16} align="bottom">
+            <Col xs={24} sm={12} md={8}>
+              <Form.Item label="Provider">
+                <Input value={providerFilter} onChange={(event) => setProviderFilter(event.target.value)} placeholder="newsapi" />
+              </Form.Item>
+            </Col>
+            <Col xs={24} sm={12} md={8}>
+              <Form.Item label="Incluir inactivos">
+                <Switch checked={includeInactive} onChange={(checked) => setIncludeInactive(checked)} />
+              </Form.Item>
+            </Col>
+            <Col xs={24} sm={12} md={8}>
+              <Form.Item label=" ">
+                <Button type="primary" icon={<FilterOutlined />} onClick={() => void load()} disabled={saving || uiState === "loading"}>
+                  Aplicar filtros
+                </Button>
+              </Form.Item>
+            </Col>
+          </Row>
+        </Form>
+      </Card>
 
-      <section className="panel">
-        <div className="section-title-row">
-          <h3>Pesos</h3>
-          <span>{items.length} registros</span>
-        </div>
-
+      <Card
+        title="Pesos"
+        extra={<Text>{items.length} registros</Text>}
+        style={{ marginBottom: 16 }}
+      >
         {items.length > 0 ? (
-          <div className="report-table-wrapper">
-            <table className="report-table">
-              <thead>
-                <tr>
-                  <th>Provider</th>
-                  <th>Source Name</th>
-                  <th>Weight</th>
-                  <th>Estado</th>
-                  <th>Actualizado</th>
-                  <th>Accion</th>
-                </tr>
-              </thead>
-              <tbody>
-                {items.map((item) => (
-                  <tr key={item.id} className={selectedId === item.id ? "is-selected" : undefined}>
-                    <td>{item.provider}</td>
-                    <td>{item.source_name ?? "provider-default"}</td>
-                    <td>{typeof item.weight === "number" ? item.weight.toFixed(2) : "0.50"}</td>
-                    <td>{item.is_active ? "active" : "inactive"}</td>
-                    <td>{item.updated_at}</td>
-                    <td>
-                      <button className="btn btn-outline" type="button" onClick={() => setSelectedId(item.id)}>
-                        Ver
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <Table
+            dataSource={items}
+            columns={weightColumns}
+            rowKey="id"
+            size="small"
+            pagination={false}
+            rowClassName={(record) => (selectedId === record.id ? "ant-table-row-selected" : "")}
+          />
         ) : null}
-      </section>
+      </Card>
 
-      <section className="panel">
-        <div className="section-title-row">
-          <h3>{selected ? "Editar peso" : "Crear peso"}</h3>
-          <span>{selected ? selected.id : "nuevo"}</span>
-        </div>
+      <Card
+        title={selected ? "Editar peso" : "Crear peso"}
+        extra={<Text type="secondary">{selected ? selected.id : "nuevo"}</Text>}
+        style={{ marginBottom: 16 }}
+      >
+        <Form layout="vertical">
+          <Row gutter={16}>
+            <Col xs={24} sm={12} md={6}>
+              <Form.Item label="Provider">
+                <Input
+                  value={providerDraft}
+                  onChange={(event) => setProviderDraft(event.target.value)}
+                  disabled={Boolean(selected)}
+                />
+              </Form.Item>
+            </Col>
+            <Col xs={24} sm={12} md={6}>
+              <Form.Item label="Source Name (opcional)">
+                <Input
+                  value={sourceNameDraft}
+                  onChange={(event) => setSourceNameDraft(event.target.value)}
+                  placeholder="null -> provider fallback"
+                />
+              </Form.Item>
+            </Col>
+            <Col xs={24} sm={12} md={6}>
+              <Form.Item label="Weight (0..1)">
+                <InputNumber
+                  min={0}
+                  max={1}
+                  step={0.01}
+                  value={Number.parseFloat(weightDraft) || 0}
+                  onChange={(value) => setWeightDraft(value !== null ? String(value) : "0")}
+                  style={{ width: "100%" }}
+                />
+              </Form.Item>
+            </Col>
+            <Col xs={24} sm={12} md={6}>
+              <Form.Item label="Estado">
+                <Switch
+                  checked={isActiveDraft}
+                  onChange={(checked) => setIsActiveDraft(checked)}
+                  checkedChildren="active"
+                  unCheckedChildren="inactive"
+                />
+              </Form.Item>
+            </Col>
+          </Row>
+        </Form>
 
-        <div className="form-grid">
-          <label>
-            Provider
-            <input value={providerDraft} onChange={(event) => setProviderDraft(event.target.value)} disabled={Boolean(selected)} />
-          </label>
-          <label>
-            Source Name (opcional)
-            <input value={sourceNameDraft} onChange={(event) => setSourceNameDraft(event.target.value)} placeholder="null -> provider fallback" />
-          </label>
-          <label>
-            Weight (0..1)
-            <input type="number" min={0} max={1} step={0.01} value={weightDraft} onChange={(event) => setWeightDraft(event.target.value)} />
-          </label>
-          <label>
-            Estado
-            <select value={isActiveDraft ? "active" : "inactive"} onChange={(event) => setIsActiveDraft(event.target.value === "active")}>
-              <option value="active">active</option>
-              <option value="inactive">inactive</option>
-            </select>
-          </label>
-        </div>
-
-        <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+        <Flex gap={8} style={{ marginTop: 10 }}>
           {!selected ? (
-            <button className="btn btn-primary" type="button" disabled={!canManage || saving} onClick={() => void createWeight()}>
+            <Button type="primary" disabled={!canManage || saving} onClick={() => void createWeight()} loading={saving}>
               {saving ? "Guardando..." : "Crear peso"}
-            </button>
+            </Button>
           ) : (
-            <button className="btn btn-primary" type="button" disabled={!canManage || saving} onClick={() => void updateWeight()}>
+            <Button type="primary" disabled={!canManage || saving} onClick={() => void updateWeight()} loading={saving}>
               {saving ? "Guardando..." : "Actualizar peso"}
-            </button>
+            </Button>
           )}
-          <button
-            className="btn btn-outline"
-            type="button"
+          <Button
+            icon={<ClearOutlined />}
             onClick={() => {
               setSelectedId("");
               hydrateDraft(null);
             }}
           >
             Limpiar
-          </button>
-        </div>
-      </section>
+          </Button>
+        </Flex>
+      </Card>
     </section>
   );
 };

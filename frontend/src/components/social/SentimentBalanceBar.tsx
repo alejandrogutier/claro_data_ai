@@ -1,4 +1,7 @@
 import React from "react";
+import { Flex, Typography } from "antd";
+
+const { Text } = Typography;
 
 type Props = {
   positive: number;
@@ -9,10 +12,44 @@ type Props = {
   label?: string;
 };
 
+const COLORS = {
+  positive: "#10b981",
+  neutral: "#38bdf8",
+  negative: "#f43f5e",
+};
+
+const barStyle: React.CSSProperties = {
+  display: "flex",
+  height: 8,
+  borderRadius: 4,
+  overflow: "hidden",
+  width: "100%",
+};
+
+const compactBarStyle: React.CSSProperties = {
+  ...barStyle,
+  height: 6,
+};
+
+const segmentBase: React.CSSProperties = {
+  height: "100%",
+  transition: "width 0.3s ease",
+};
+
+const dotStyle = (color: string): React.CSSProperties => ({
+  display: "inline-block",
+  height: 8,
+  width: 8,
+  borderRadius: "50%",
+  backgroundColor: color,
+});
+
 const SentimentBalanceBar: React.FC<Props> = ({ positive, neutral, negative, unknown, compact = false, label }) => {
   const total = positive + neutral + negative + unknown;
   if (total === 0) {
-    return compact ? null : <p className="text-xs text-slate-400 italic">Sin datos de sentimiento</p>;
+    return compact ? null : (
+      <Text type="secondary" italic style={{ fontSize: 12 }}>Sin datos de sentimiento</Text>
+    );
   }
 
   const balancePercent = ((positive + neutral) / total) * 100;
@@ -22,38 +59,44 @@ const SentimentBalanceBar: React.FC<Props> = ({ positive, neutral, negative, unk
 
   if (compact) {
     return (
-      <div className="flex items-center gap-2">
-        <div className={`sentiment-balance-bar compact flex-1`}>
-          {posPercent > 0 && <div className="sentiment-balance-segment bg-emerald-500" style={{ width: `${posPercent}%` }} />}
-          {neuPercent > 0 && <div className="sentiment-balance-segment bg-sky-400" style={{ width: `${neuPercent}%` }} />}
-          {negPercent > 0 && <div className="sentiment-balance-segment bg-rose-500" style={{ width: `${negPercent}%` }} />}
+      <Flex align="center" gap={8}>
+        <div style={{ ...compactBarStyle, flex: 1 }}>
+          {posPercent > 0 && <div style={{ ...segmentBase, width: `${posPercent}%`, backgroundColor: COLORS.positive }} />}
+          {neuPercent > 0 && <div style={{ ...segmentBase, width: `${neuPercent}%`, backgroundColor: COLORS.neutral }} />}
+          {negPercent > 0 && <div style={{ ...segmentBase, width: `${negPercent}%`, backgroundColor: COLORS.negative }} />}
         </div>
-        <span className="text-xs font-semibold text-slate-700" style={{ fontFamily: "'Barlow Condensed', sans-serif" }}>
+        <Text strong style={{ fontSize: 12, fontFamily: "'Barlow Condensed', sans-serif" }}>
           {balancePercent.toFixed(0)}%
-        </span>
-      </div>
+        </Text>
+      </Flex>
     );
   }
 
   return (
     <div>
-      <div className="mb-1 flex items-center justify-between">
-        <span className="text-xs font-semibold text-slate-700">Balance de sentimiento</span>
-        <span className="text-sm font-bold" style={{ fontFamily: "'Barlow Condensed', sans-serif", color: "var(--claro-red, #e30613)" }}>
+      <Flex align="center" justify="space-between" style={{ marginBottom: 4 }}>
+        <Text strong style={{ fontSize: 12 }}>Balance de sentimiento</Text>
+        <Text strong style={{ fontSize: 14, fontFamily: "'Barlow Condensed', sans-serif", color: "var(--claro-red, #e30613)" }}>
           {balancePercent.toFixed(1)}%
-        </span>
+        </Text>
+      </Flex>
+      <div style={barStyle}>
+        {posPercent > 0 && <div style={{ ...segmentBase, width: `${posPercent}%`, backgroundColor: COLORS.positive }} title={`Positivo: ${positive}`} />}
+        {neuPercent > 0 && <div style={{ ...segmentBase, width: `${neuPercent}%`, backgroundColor: COLORS.neutral }} title={`Neutro: ${neutral}`} />}
+        {negPercent > 0 && <div style={{ ...segmentBase, width: `${negPercent}%`, backgroundColor: COLORS.negative }} title={`Negativo: ${negative}`} />}
       </div>
-      <div className="sentiment-balance-bar">
-        {posPercent > 0 && <div className="sentiment-balance-segment bg-emerald-500" style={{ width: `${posPercent}%` }} title={`Positivo: ${positive}`} />}
-        {neuPercent > 0 && <div className="sentiment-balance-segment bg-sky-400" style={{ width: `${neuPercent}%` }} title={`Neutro: ${neutral}`} />}
-        {negPercent > 0 && <div className="sentiment-balance-segment bg-rose-500" style={{ width: `${negPercent}%` }} title={`Negativo: ${negative}`} />}
-      </div>
-      <div className="mt-1 flex items-center gap-3 text-[10px] text-slate-500">
-        <span className="flex items-center gap-1"><span className="inline-block h-2 w-2 rounded-full bg-emerald-500" /> Positivo ({positive})</span>
-        <span className="flex items-center gap-1"><span className="inline-block h-2 w-2 rounded-full bg-sky-400" /> Neutro ({neutral})</span>
-        <span className="flex items-center gap-1"><span className="inline-block h-2 w-2 rounded-full bg-rose-500" /> Negativo ({negative})</span>
-      </div>
-      {label && <p className="mt-0.5 text-[10px] text-slate-400 italic">{label}</p>}
+      <Flex align="center" gap={12} style={{ marginTop: 4 }}>
+        <Text type="secondary" style={{ fontSize: 10, display: "flex", alignItems: "center", gap: 4 }}>
+          <span style={dotStyle(COLORS.positive)} /> Positivo ({positive})
+        </Text>
+        <Text type="secondary" style={{ fontSize: 10, display: "flex", alignItems: "center", gap: 4 }}>
+          <span style={dotStyle(COLORS.neutral)} /> Neutro ({neutral})
+        </Text>
+        <Text type="secondary" style={{ fontSize: 10, display: "flex", alignItems: "center", gap: 4 }}>
+          <span style={dotStyle(COLORS.negative)} /> Negativo ({negative})
+        </Text>
+      </Flex>
+      {label && <Text type="secondary" italic style={{ fontSize: 10, marginTop: 2, display: "block" }}>{label}</Text>}
     </div>
   );
 };

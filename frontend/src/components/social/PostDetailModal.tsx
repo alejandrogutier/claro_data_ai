@@ -1,7 +1,8 @@
 import React, { useState } from "react";
+import { Modal, Typography, Flex, Image, Statistic, Tag, Divider, Row, Col, Space } from "antd";
 import type { PostRow } from "./postsTypes";
 import {
-  channelColors,
+  channelColorStyles,
   channelIcon,
   toChannelLabel,
   formatDateTime,
@@ -10,11 +11,13 @@ import {
   formatScore,
   computeER,
   erLabel,
-  sentimentPillClass
 } from "./postsUtils";
+import { SentimentTag } from "../shared/SentimentTag";
 import SentimentBalanceBar from "./SentimentBalanceBar";
 import PostDetailComments from "./PostDetailComments";
 import type { ApiClient } from "../../api/client";
+
+const { Text, Title, Paragraph, Link } = Typography;
 
 type Props = {
   post: PostRow;
@@ -33,192 +36,201 @@ const PostDetailModal: React.FC<Props> = ({ post, onClose, client, canOverrideCo
     unknown: number;
   } | null>(null);
 
-  const colors = channelColors[post.channel] ?? channelColors.facebook;
+  const colors = channelColorStyles[post.channel] ?? channelColorStyles.facebook;
   const er = computeER(post);
   const erLbl = erLabel(post);
   const showReach = post.reach > 0;
   const hasImage = post.image_url && !imgError;
 
   return (
-    <div className="fixed inset-0 z-[70] flex items-start justify-center p-3 sm:p-6">
-      <button
-        type="button"
-        className="absolute inset-0 bg-slate-900/45"
-        onClick={onClose}
-        aria-label="Cerrar modal"
-      />
-      <div className="relative z-[71] w-full max-w-5xl overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl">
-        {/* Channel color bar */}
-        <div className={`h-1 w-full ${colors.bg}`} style={{ background: `var(--bar-${post.channel}, currentColor)` }}>
-          <div className={`h-full ${post.channel === "facebook" ? "bg-blue-500" : post.channel === "instagram" ? "bg-fuchsia-500" : post.channel === "x" ? "bg-slate-800" : post.channel === "linkedin" ? "bg-sky-600" : "bg-pink-500"}`} />
-        </div>
-
-        {/* Header */}
-        <div className="flex items-start justify-between gap-3 border-b border-slate-200 px-5 py-4">
-          <div>
-            <div className={`mb-1 flex items-center gap-2 text-sm font-semibold ${colors.text}`}>
-              <span className="text-lg">{channelIcon[post.channel] ?? ""}</span>
-              <span>{toChannelLabel(post.channel)}</span>
-              <span className="text-slate-400">&middot;</span>
-              <span className="text-slate-600 font-normal">{post.account_name}</span>
-              {post.post_type && <span className="post-type-badge ml-1">{post.post_type}</span>}
-              <span className="text-slate-400">&middot;</span>
-              <span className="text-slate-400 font-normal text-xs">{formatDateTime(post.published_at)}</span>
-            </div>
-            <h3
-              className="text-lg font-semibold text-slate-900 leading-snug"
-              style={{ fontFamily: "'Barlow Condensed', sans-serif" }}
-            >
-              {post.title}
-            </h3>
-            <a
-              href={post.post_url}
-              target="_blank"
-              rel="noreferrer"
-              className="mt-1 inline-block text-xs text-red-700 font-semibold hover:underline"
-            >
-              Ver post original &#x2197;
-            </a>
-          </div>
-          <button
-            type="button"
-            className="rounded-md border border-slate-200 px-2 py-1 text-sm text-slate-700 hover:bg-slate-50 shrink-0"
-            onClick={onClose}
+    <Modal
+      open
+      onCancel={onClose}
+      footer={null}
+      width={1024}
+      centered
+      destroyOnClose
+      title={
+        <div>
+          {/* Channel color bar */}
+          <div style={{ height: 4, width: "100%", backgroundColor: colors.accent, borderRadius: "2px 2px 0 0", marginBottom: 12 }} />
+          <Flex align="center" gap={8} wrap="wrap">
+            <span style={{ fontSize: 18 }}>{channelIcon[post.channel] ?? ""}</span>
+            <Text strong style={{ color: colors.text, fontSize: 14 }}>{toChannelLabel(post.channel)}</Text>
+            <Text type="secondary">&middot;</Text>
+            <Text type="secondary" style={{ fontSize: 14 }}>{post.account_name}</Text>
+            {post.post_type && <Tag style={{ fontSize: 10, lineHeight: "16px", margin: 0 }}>{post.post_type}</Tag>}
+            <Text type="secondary">&middot;</Text>
+            <Text type="secondary" style={{ fontSize: 12 }}>{formatDateTime(post.published_at)}</Text>
+          </Flex>
+          <Title
+            level={4}
+            style={{ margin: "4px 0 0", fontFamily: "'Barlow Condensed', sans-serif" }}
           >
-            Cerrar
-          </button>
+            {post.title}
+          </Title>
+          <Link
+            href={post.post_url}
+            target="_blank"
+            style={{ fontSize: 12, color: "#b91c1c", fontWeight: 600 }}
+          >
+            Ver post original &#x2197;
+          </Link>
         </div>
-
-        {/* Scrollable content */}
-        <div className="max-h-[75vh] overflow-auto">
-          {/* Image + Text section */}
-          <div className={`px-5 py-4 ${hasImage ? "grid gap-4" : ""}`} style={hasImage ? { gridTemplateColumns: "280px 1fr" } : undefined}>
-            {hasImage && (
-              <img
-                src={post.image_url!}
-                alt=""
-                className="w-full rounded-xl object-cover"
-                style={{ maxHeight: "320px" }}
-                loading="lazy"
-                onError={() => setImgError(true)}
-              />
-            )}
-            <div>
-              {post.text && (
-                <p className="text-sm text-slate-700 leading-relaxed mb-3">{post.text}</p>
-              )}
-              {post.hashtags && post.hashtags.length > 0 && (
-                <div className={`text-xs font-medium ${colors.text} mb-3`}>
-                  {post.hashtags.map((h) => `#${h}`).join(" ")}
-                </div>
-              )}
-              {!post.text && !hasImage && (
-                <p className="text-sm text-slate-400 italic">Sin texto disponible.</p>
-              )}
-            </div>
-          </div>
-
-          {/* Metrics Grid */}
-          <div className="border-t border-slate-100 px-5 py-4">
-            <h4 className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-500">M\u00e9tricas</h4>
-            <div className="post-detail-metrics-grid">
-              <MetricCell label={showReach ? "Reach" : "Impressions"} value={formatNumber(showReach ? post.reach : post.impressions)} />
-              <MetricCell label="Engagement" value={formatNumber(post.engagement_total)} />
-              <MetricCell label={erLbl} value={formatPercent(er)} />
-              <MetricCell label="Likes" value={formatNumber(post.likes)} />
-              <MetricCell label="Comentarios" value={formatNumber(post.comments)} sub={post.awario_comments_count > 0 ? `${formatNumber(post.awario_comments_count)} capt.` : undefined} />
-              <MetricCell label="Shares" value={formatNumber(post.shares)} />
-              <MetricCell label="Views" value={formatNumber(post.views)} />
-              <MetricCell label="Impressions" value={formatNumber(post.impressions)} />
-              <MetricCell label="Clicks" value={formatNumber(post.clicks)} />
-              <MetricCell label="Saves" value={formatNumber(post.saves)} />
-            </div>
-          </div>
-
-          {/* Classification */}
-          <div className="border-t border-slate-100 px-5 py-4">
-            <h4 className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-500">Clasificaci\u00f3n</h4>
-            <div className="flex flex-wrap items-center gap-3 text-sm">
-              <div className="flex items-center gap-2">
-                <span className="text-xs text-slate-500">Sentimiento:</span>
-                <span className={sentimentPillClass(post.sentiment)}>{post.sentiment}</span>
-              </div>
-              {post.sentiment_confidence !== null && (
-                <div className="flex items-center gap-1">
-                  <span className="text-xs text-slate-500">Confianza:</span>
-                  <span className="text-xs font-semibold text-slate-700">{formatScore(post.sentiment_confidence)}</span>
-                </div>
-              )}
-              <div className="flex items-center gap-1">
-                <span className="text-xs text-slate-500">Source:</span>
-                <span className="text-xs font-semibold text-slate-700">{formatScore(post.source_score)}</span>
-              </div>
-            </div>
-
-            {post.campaign && (
-              <div className="mt-2 text-xs text-slate-600">
-                <span className="text-slate-500">Campa\u00f1a:</span>{" "}
-                <strong className="text-slate-800">{post.campaign}</strong>
-              </div>
-            )}
-
-            {post.strategies && post.strategies.length > 0 && (
-              <div className="mt-2 flex flex-wrap gap-1">
-                <span className="text-xs text-slate-500 mr-1">Estrategias:</span>
-                {post.strategies.map((s) => (
-                  <span key={s} className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-700">
-                    {s}
-                  </span>
-                ))}
-              </div>
-            )}
-
-            {post.topics && post.topics.length > 0 && (
-              <div className="mt-2 flex flex-wrap gap-1">
-                <span className="text-xs text-slate-500 mr-1">Topics:</span>
-                {post.topics.map((t) => (
-                  <span key={t.key} className="rounded-full bg-sky-50 px-2 py-0.5 text-[11px] font-semibold text-sky-700">
-                    {t.label}
-                    <span className="ml-1 text-[9px] text-sky-400">{formatScore(t.confidence)}</span>
-                  </span>
-                ))}
-              </div>
-            )}
-          </div>
-
-          {/* Sentiment Balance (from comments) */}
-          {commentSentimentCounts && (commentSentimentCounts.positive + commentSentimentCounts.neutral + commentSentimentCounts.negative + commentSentimentCounts.unknown) > 0 && (
-            <div className="border-t border-slate-100 px-5 py-4">
-              <h4 className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-500">Balance de sentimiento (comentarios)</h4>
-              <SentimentBalanceBar {...commentSentimentCounts} />
+      }
+    >
+      {/* Image + Text section */}
+      <Row gutter={16} style={{ marginBottom: 16 }}>
+        {hasImage && (
+          <Col span={8}>
+            <Image
+              src={post.image_url!}
+              alt=""
+              style={{ width: "100%", maxHeight: 320, objectFit: "cover", borderRadius: 12 }}
+              loading="lazy"
+              onError={() => setImgError(true)}
+            />
+          </Col>
+        )}
+        <Col span={hasImage ? 16 : 24}>
+          {post.text && (
+            <Paragraph style={{ fontSize: 14, lineHeight: 1.6, marginBottom: 12 }}>
+              {post.text}
+            </Paragraph>
+          )}
+          {post.hashtags && post.hashtags.length > 0 && (
+            <div style={{ fontSize: 12, fontWeight: 500, color: colors.text, marginBottom: 12 }}>
+              {post.hashtags.map((h) => `#${h}`).join(" ")}
             </div>
           )}
-
-          {/* Comments section */}
-          {post.awario_comments_count > 0 && (
-            <div className="border-t border-slate-100 px-5 py-4">
-              <PostDetailComments
-                post={post}
-                client={client}
-                canOverride={canOverrideComments}
-                onError={onError}
-                onSentimentCounts={setCommentSentimentCounts}
-              />
-            </div>
+          {!post.text && !hasImage && (
+            <Text type="secondary" italic>Sin texto disponible.</Text>
           )}
+        </Col>
+      </Row>
+
+      {/* Metrics Grid */}
+      <Divider style={{ margin: "12px 0" }} />
+      <Title level={5} type="secondary" style={{ fontSize: 12, textTransform: "uppercase", letterSpacing: 1, marginBottom: 12 }}>
+        M&eacute;tricas
+      </Title>
+      <Row gutter={[16, 16]} style={{ marginBottom: 16 }}>
+        <Col span={4}>
+          <Statistic
+            title={showReach ? "Reach" : "Impressions"}
+            value={formatNumber(showReach ? post.reach : post.impressions)}
+            valueStyle={{ fontSize: 16, fontFamily: "'Barlow Condensed', sans-serif" }}
+          />
+        </Col>
+        <Col span={4}>
+          <Statistic title="Engagement" value={formatNumber(post.engagement_total)} valueStyle={{ fontSize: 16, fontFamily: "'Barlow Condensed', sans-serif" }} />
+        </Col>
+        <Col span={4}>
+          <Statistic title={erLbl} value={formatPercent(er)} valueStyle={{ fontSize: 16, fontFamily: "'Barlow Condensed', sans-serif" }} />
+        </Col>
+        <Col span={3}>
+          <Statistic title="Likes" value={formatNumber(post.likes)} valueStyle={{ fontSize: 16, fontFamily: "'Barlow Condensed', sans-serif" }} />
+        </Col>
+        <Col span={4}>
+          <div>
+            <Statistic title="Comentarios" value={formatNumber(post.comments)} valueStyle={{ fontSize: 16, fontFamily: "'Barlow Condensed', sans-serif" }} />
+            {post.awario_comments_count > 0 && (
+              <Text type="secondary" style={{ fontSize: 10 }}>{formatNumber(post.awario_comments_count)} capt.</Text>
+            )}
+          </div>
+        </Col>
+        <Col span={3}>
+          <Statistic title="Shares" value={formatNumber(post.shares)} valueStyle={{ fontSize: 16, fontFamily: "'Barlow Condensed', sans-serif" }} />
+        </Col>
+        <Col span={3}>
+          <Statistic title="Views" value={formatNumber(post.views)} valueStyle={{ fontSize: 16, fontFamily: "'Barlow Condensed', sans-serif" }} />
+        </Col>
+        <Col span={4}>
+          <Statistic title="Impressions" value={formatNumber(post.impressions)} valueStyle={{ fontSize: 16, fontFamily: "'Barlow Condensed', sans-serif" }} />
+        </Col>
+        <Col span={3}>
+          <Statistic title="Clicks" value={formatNumber(post.clicks)} valueStyle={{ fontSize: 16, fontFamily: "'Barlow Condensed', sans-serif" }} />
+        </Col>
+        <Col span={3}>
+          <Statistic title="Saves" value={formatNumber(post.saves)} valueStyle={{ fontSize: 16, fontFamily: "'Barlow Condensed', sans-serif" }} />
+        </Col>
+      </Row>
+
+      {/* Classification */}
+      <Divider style={{ margin: "12px 0" }} />
+      <Title level={5} type="secondary" style={{ fontSize: 12, textTransform: "uppercase", letterSpacing: 1, marginBottom: 12 }}>
+        Clasificaci&oacute;n
+      </Title>
+      <Flex wrap="wrap" align="center" gap={12} style={{ marginBottom: 8 }}>
+        <Space size={4}>
+          <Text type="secondary" style={{ fontSize: 12 }}>Sentimiento:</Text>
+          <SentimentTag sentiment={post.sentiment} />
+        </Space>
+        {post.sentiment_confidence !== null && (
+          <Space size={4}>
+            <Text type="secondary" style={{ fontSize: 12 }}>Confianza:</Text>
+            <Text strong style={{ fontSize: 12 }}>{formatScore(post.sentiment_confidence)}</Text>
+          </Space>
+        )}
+        <Space size={4}>
+          <Text type="secondary" style={{ fontSize: 12 }}>Source:</Text>
+          <Text strong style={{ fontSize: 12 }}>{formatScore(post.source_score)}</Text>
+        </Space>
+      </Flex>
+
+      {post.campaign && (
+        <div style={{ marginTop: 8, fontSize: 12 }}>
+          <Text type="secondary">Campa&ntilde;a:</Text>{" "}
+          <Text strong>{post.campaign}</Text>
         </div>
-      </div>
-    </div>
+      )}
+
+      {post.strategies && post.strategies.length > 0 && (
+        <Flex wrap="wrap" gap={4} style={{ marginTop: 8 }} align="center">
+          <Text type="secondary" style={{ fontSize: 12, marginRight: 4 }}>Estrategias:</Text>
+          {post.strategies.map((s) => (
+            <Tag key={s}>{s}</Tag>
+          ))}
+        </Flex>
+      )}
+
+      {post.topics && post.topics.length > 0 && (
+        <Flex wrap="wrap" gap={4} style={{ marginTop: 8 }} align="center">
+          <Text type="secondary" style={{ fontSize: 12, marginRight: 4 }}>Topics:</Text>
+          {post.topics.map((t) => (
+            <Tag key={t.key} color="blue">
+              {t.label} <Text type="secondary" style={{ fontSize: 9 }}>{formatScore(t.confidence)}</Text>
+            </Tag>
+          ))}
+        </Flex>
+      )}
+
+      {/* Sentiment Balance (from comments) */}
+      {commentSentimentCounts && (commentSentimentCounts.positive + commentSentimentCounts.neutral + commentSentimentCounts.negative + commentSentimentCounts.unknown) > 0 && (
+        <>
+          <Divider style={{ margin: "12px 0" }} />
+          <Title level={5} type="secondary" style={{ fontSize: 12, textTransform: "uppercase", letterSpacing: 1, marginBottom: 12 }}>
+            Balance de sentimiento (comentarios)
+          </Title>
+          <SentimentBalanceBar {...commentSentimentCounts} />
+        </>
+      )}
+
+      {/* Comments section */}
+      {post.awario_comments_count > 0 && (
+        <>
+          <Divider style={{ margin: "12px 0" }} />
+          <PostDetailComments
+            post={post}
+            client={client}
+            canOverride={canOverrideComments}
+            onError={onError}
+            onSentimentCounts={setCommentSentimentCounts}
+          />
+        </>
+      )}
+    </Modal>
   );
 };
-
-// ── Mini metric cell ──────────────────────────────────────
-const MetricCell: React.FC<{ label: string; value: string; sub?: string }> = ({ label, value, sub }) => (
-  <div className="text-center">
-    <div className="kpi-value text-base">{value}</div>
-    <div className="kpi-caption">{label}</div>
-    {sub && <div className="text-[10px] text-slate-400">{sub}</div>}
-  </div>
-);
 
 export default PostDetailModal;

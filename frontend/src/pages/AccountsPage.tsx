@@ -1,7 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
+import { Alert, Button, Card, Col, Descriptions, Flex, Form, Input, Row, Select, Spin, Typography } from "antd";
+import { ReloadOutlined } from "@ant-design/icons";
 import { ApiError, type OwnedAccount } from "../api/client";
 import { useApiClient } from "../api/useApiClient";
 import { useAuth } from "../auth/AuthContext";
+import { PageHeader } from "../components/shared/PageHeader";
+import { StatusTag } from "../components/shared/StatusTag";
+
+const { Text } = Typography;
 
 type AccountForm = {
   platform: string;
@@ -12,7 +18,7 @@ type AccountForm = {
   language: string;
   teamOwner: string;
   status: string;
-  campaignTags: string;
+  campaignTags: string[];
 };
 
 const defaultForm: AccountForm = {
@@ -24,15 +30,8 @@ const defaultForm: AccountForm = {
   language: "es",
   teamOwner: "",
   status: "active",
-  campaignTags: ""
+  campaignTags: []
 };
-
-const parseTags = (value: string): string[] =>
-  value
-    .split(",")
-    .map((item) => item.trim())
-    .filter(Boolean)
-    .slice(0, 40);
 
 export const AccountsPage = () => {
   const client = useApiClient();
@@ -79,7 +78,7 @@ export const AccountsPage = () => {
         language: form.language.trim().toLowerCase(),
         team_owner: form.teamOwner.trim() || undefined,
         status: form.status.trim().toLowerCase(),
-        campaign_tags: parseTags(form.campaignTags)
+        campaign_tags: form.campaignTags.slice(0, 40)
       });
 
       setItems((current) => [created, ...current]);
@@ -110,147 +109,164 @@ export const AccountsPage = () => {
 
   return (
     <section>
-      <header className="page-header">
-        <h2>Cuentas Propias</h2>
-        <p>Operacion CLARO-038: catalogo operativo de cuentas oficiales de Claro.</p>
-      </header>
+      <PageHeader
+        title="Cuentas Propias"
+        subtitle="Operacion CLARO-038: catalogo operativo de cuentas oficiales de Claro."
+      />
 
-      {error ? <div className="alert error">{error}</div> : null}
-      {!canMutate ? <div className="alert info">Solo Admin puede crear/editar cuentas.</div> : null}
-
-      {canMutate ? (
-        <form className="panel form-grid" onSubmit={onCreate}>
-          <label>
-            Plataforma
-            <input
-              type="text"
-              value={form.platform}
-              onChange={(event) => setForm((current) => ({ ...current, platform: event.target.value }))}
-              required
-            />
-          </label>
-
-          <label>
-            Handle
-            <input
-              type="text"
-              value={form.handle}
-              onChange={(event) => setForm((current) => ({ ...current, handle: event.target.value }))}
-              required
-            />
-          </label>
-
-          <label>
-            Nombre de cuenta
-            <input
-              type="text"
-              value={form.accountName}
-              onChange={(event) => setForm((current) => ({ ...current, accountName: event.target.value }))}
-              required
-            />
-          </label>
-
-          <label>
-            Linea de negocio
-            <input
-              type="text"
-              value={form.businessLine}
-              onChange={(event) => setForm((current) => ({ ...current, businessLine: event.target.value }))}
-            />
-          </label>
-
-          <label>
-            Region macro
-            <input
-              type="text"
-              value={form.macroRegion}
-              onChange={(event) => setForm((current) => ({ ...current, macroRegion: event.target.value }))}
-            />
-          </label>
-
-          <label>
-            Idioma
-            <input
-              type="text"
-              value={form.language}
-              onChange={(event) => setForm((current) => ({ ...current, language: event.target.value }))}
-              required
-            />
-          </label>
-
-          <label>
-            Owner equipo
-            <input
-              type="text"
-              value={form.teamOwner}
-              onChange={(event) => setForm((current) => ({ ...current, teamOwner: event.target.value }))}
-            />
-          </label>
-
-          <label>
-            Estado
-            <select value={form.status} onChange={(event) => setForm((current) => ({ ...current, status: event.target.value }))}>
-              <option value="active">active</option>
-              <option value="inactive">inactive</option>
-            </select>
-          </label>
-
-          <label>
-            Tags campana (coma)
-            <input
-              type="text"
-              value={form.campaignTags}
-              onChange={(event) => setForm((current) => ({ ...current, campaignTags: event.target.value }))}
-              placeholder="hogar,prepago,q1"
-            />
-          </label>
-
-          <button className="btn btn-primary" type="submit" disabled={submitting}>
-            {submitting ? "Guardando..." : "Crear cuenta"}
-          </button>
-        </form>
+      {error ? <Alert type="error" showIcon title={error} style={{ marginBottom: 16 }} /> : null}
+      {!canMutate ? (
+        <Alert type="info" showIcon title="Solo Admin puede crear/editar cuentas." style={{ marginBottom: 16 }} />
       ) : null}
 
-      <section className="panel">
-        <div className="section-title-row">
-          <h3>Listado</h3>
-          <button className="btn btn-outline" type="button" onClick={() => void loadAccounts()} disabled={loading}>
+      {canMutate ? (
+        <Card style={{ marginBottom: 16 }}>
+          <form onSubmit={onCreate}>
+            <Form layout="vertical" component="div">
+              <Row gutter={16}>
+                <Col xs={24} sm={12} md={8}>
+                  <Form.Item label="Plataforma" required>
+                    <Input
+                      value={form.platform}
+                      onChange={(event) => setForm((current) => ({ ...current, platform: event.target.value }))}
+                    />
+                  </Form.Item>
+                </Col>
+
+                <Col xs={24} sm={12} md={8}>
+                  <Form.Item label="Handle" required>
+                    <Input
+                      value={form.handle}
+                      onChange={(event) => setForm((current) => ({ ...current, handle: event.target.value }))}
+                    />
+                  </Form.Item>
+                </Col>
+
+                <Col xs={24} sm={12} md={8}>
+                  <Form.Item label="Nombre de cuenta" required>
+                    <Input
+                      value={form.accountName}
+                      onChange={(event) => setForm((current) => ({ ...current, accountName: event.target.value }))}
+                    />
+                  </Form.Item>
+                </Col>
+
+                <Col xs={24} sm={12} md={8}>
+                  <Form.Item label="Linea de negocio">
+                    <Input
+                      value={form.businessLine}
+                      onChange={(event) => setForm((current) => ({ ...current, businessLine: event.target.value }))}
+                    />
+                  </Form.Item>
+                </Col>
+
+                <Col xs={24} sm={12} md={8}>
+                  <Form.Item label="Region macro">
+                    <Input
+                      value={form.macroRegion}
+                      onChange={(event) => setForm((current) => ({ ...current, macroRegion: event.target.value }))}
+                    />
+                  </Form.Item>
+                </Col>
+
+                <Col xs={24} sm={12} md={8}>
+                  <Form.Item label="Idioma" required>
+                    <Input
+                      value={form.language}
+                      onChange={(event) => setForm((current) => ({ ...current, language: event.target.value }))}
+                    />
+                  </Form.Item>
+                </Col>
+
+                <Col xs={24} sm={12} md={8}>
+                  <Form.Item label="Owner equipo">
+                    <Input
+                      value={form.teamOwner}
+                      onChange={(event) => setForm((current) => ({ ...current, teamOwner: event.target.value }))}
+                    />
+                  </Form.Item>
+                </Col>
+
+                <Col xs={24} sm={12} md={8}>
+                  <Form.Item label="Estado">
+                    <Select
+                      value={form.status}
+                      onChange={(value) => setForm((current) => ({ ...current, status: value }))}
+                      options={[
+                        { value: "active", label: "active" },
+                        { value: "inactive", label: "inactive" }
+                      ]}
+                    />
+                  </Form.Item>
+                </Col>
+
+                <Col xs={24} sm={12} md={8}>
+                  <Form.Item label="Tags campana">
+                    <Select
+                      mode="tags"
+                      value={form.campaignTags}
+                      onChange={(value) => setForm((current) => ({ ...current, campaignTags: value }))}
+                      placeholder="hogar, prepago, q1"
+                      tokenSeparators={[","]}
+                    />
+                  </Form.Item>
+                </Col>
+              </Row>
+
+              <Form.Item>
+                <Button type="primary" htmlType="submit" loading={submitting} onClick={(e) => { e.preventDefault(); void onCreate(e as unknown as React.FormEvent); }}>
+                  Crear cuenta
+                </Button>
+              </Form.Item>
+            </Form>
+          </form>
+        </Card>
+      ) : null}
+
+      <Card
+        title="Listado"
+        extra={
+          <Button icon={<ReloadOutlined />} onClick={() => void loadAccounts()} loading={loading}>
             Recargar
-          </button>
-        </div>
-
-        {loading ? <p>Cargando...</p> : null}
-        {!loading && items.length === 0 ? <p>No hay cuentas registradas.</p> : null}
-
-        {!loading ? (
-          <ul className="simple-list simple-list--stacked">
-            {items.map((account) => (
-              <li key={account.id}>
-                <div style={{ width: "100%", display: "grid", gap: 8 }}>
-                  <div className="section-title-row">
-                    <strong>
-                      {account.nombre_cuenta} ({account.plataforma})
-                    </strong>
-                    <span>{account.handle}</span>
-                  </div>
-                  <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-                    <span>estado: {account.estado}</span>
-                    <span>linea: {account.linea_negocio ?? "n/a"}</span>
-                    <span>region: {account.region_macro ?? "n/a"}</span>
-                    <span>tags: {account.tags_campana.join(", ") || "n/a"}</span>
-                  </div>
-
-                  {canMutate ? (
-                    <button className="btn btn-outline" type="button" onClick={() => void toggleStatus(account)}>
-                      {account.estado === "active" ? "Desactivar" : "Activar"}
-                    </button>
-                  ) : null}
-                </div>
-              </li>
-            ))}
-          </ul>
+          </Button>
+        }
+      >
+        {loading ? (
+          <Flex justify="center" style={{ padding: 24 }}>
+            <Spin />
+          </Flex>
         ) : null}
-      </section>
+
+        {!loading && items.length === 0 ? <Text type="secondary">No hay cuentas registradas.</Text> : null}
+
+        {!loading
+          ? items.map((account) => (
+              <Card key={account.id} size="small" style={{ marginBottom: 12 }}>
+                <Flex justify="space-between" align="center" style={{ marginBottom: 8 }}>
+                  <Text strong>
+                    {account.nombre_cuenta} ({account.plataforma})
+                  </Text>
+                  <Text>{account.handle}</Text>
+                </Flex>
+
+                <Descriptions size="small" column={{ xs: 1, sm: 2, md: 4 }}>
+                  <Descriptions.Item label="Estado">
+                    <StatusTag status={account.estado} />
+                  </Descriptions.Item>
+                  <Descriptions.Item label="Linea">{account.linea_negocio ?? "n/a"}</Descriptions.Item>
+                  <Descriptions.Item label="Region">{account.region_macro ?? "n/a"}</Descriptions.Item>
+                  <Descriptions.Item label="Tags">{account.tags_campana.join(", ") || "n/a"}</Descriptions.Item>
+                </Descriptions>
+
+                {canMutate ? (
+                  <Button size="small" onClick={() => void toggleStatus(account)} style={{ marginTop: 8 }}>
+                    {account.estado === "active" ? "Desactivar" : "Activar"}
+                  </Button>
+                ) : null}
+              </Card>
+            ))
+          : null}
+      </Card>
     </section>
   );
 };

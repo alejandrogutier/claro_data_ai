@@ -1,5 +1,6 @@
 import { Suspense, lazy } from "react";
 import { Navigate, Route, Routes } from "react-router-dom";
+import { Spin } from "antd";
 import { RequireAuth } from "./auth/RequireAuth";
 import { AppShell } from "./components/AppShell";
 import { AuthCallbackPage } from "./pages/AuthCallbackPage";
@@ -52,7 +53,7 @@ export const App = () => {
         <Route
           path="monitor/social-overview"
           element={
-            <Suspense fallback={<section className="rounded-xl border border-slate-200 bg-white p-4 text-sm text-slate-600">Cargando Social Analytics...</section>}>
+            <Suspense fallback={<Spin size="large" tip="Cargando Social Analytics..."><div style={{ padding: 60 }} /></Spin>}>
               <MonitorSocialOverviewPage />
             </Suspense>
           }

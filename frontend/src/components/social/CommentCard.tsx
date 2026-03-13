@@ -1,6 +1,10 @@
 import React from "react";
+import { Card, Tag, Button, Select, Typography, Flex, Space } from "antd";
 import type { AwarioCommentRow } from "./postsTypes";
 import { formatDateTime, formatScore } from "./postsUtils";
+import { SentimentTag } from "../shared/SentimentTag";
+
+const { Text, Link } = Typography;
 
 type Props = {
   comment: AwarioCommentRow;
@@ -10,73 +14,75 @@ type Props = {
 };
 
 const CommentCard: React.FC<Props> = ({ comment, canOverride, updating, onPatch }) => {
-  const sentimentClass =
-    comment.sentiment === "positive" ? "bg-emerald-50 text-emerald-700"
-      : comment.sentiment === "negative" ? "bg-rose-50 text-rose-700"
-        : comment.sentiment === "neutral" ? "bg-sky-50 text-sky-700"
-          : "bg-slate-100 text-slate-700";
-
   return (
-    <article className="rounded-xl border border-slate-200 p-3">
-      <div className="mb-1 flex flex-wrap items-center gap-2 text-xs text-slate-600">
-        <strong>{comment.author_name ?? "Autor desconocido"}</strong>
-        <span>{formatDateTime(comment.published_at)}</span>
-        <span className={`rounded-full px-2 py-0.5 font-semibold ${sentimentClass}`}>{comment.sentiment}</span>
-        <span className={`rounded-full px-2 py-0.5 font-semibold ${comment.is_spam ? "bg-rose-100 text-rose-700" : "bg-slate-100 text-slate-700"}`}>
+    <Card size="small" style={{ marginBottom: 8 }}>
+      {/* Header */}
+      <Flex align="center" wrap="wrap" gap={8} style={{ marginBottom: 4 }}>
+        <Text strong style={{ fontSize: 12 }}>{comment.author_name ?? "Autor desconocido"}</Text>
+        <Text type="secondary" style={{ fontSize: 12 }}>{formatDateTime(comment.published_at)}</Text>
+        <SentimentTag sentiment={comment.sentiment} />
+        <Tag color={comment.is_spam ? "error" : "default"}>
           {comment.is_spam ? "spam" : "no spam"}
-        </span>
-        <span className={`rounded-full px-2 py-0.5 font-semibold ${comment.related_to_post_text ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"}`}>
+        </Tag>
+        <Tag color={comment.related_to_post_text ? "success" : "warning"}>
           {comment.related_to_post_text ? "relacionado" : "no relacionado"}
-        </span>
-        {comment.needs_review && <span className="rounded-full bg-amber-200 px-2 py-0.5 font-semibold text-amber-900">needs_review</span>}
-      </div>
+        </Tag>
+        {comment.needs_review && <Tag color="orange">needs_review</Tag>}
+      </Flex>
 
-      <p className="text-sm text-slate-800">{comment.text || "(sin texto)"}</p>
+      {/* Body */}
+      <Text style={{ fontSize: 13 }}>{comment.text || "(sin texto)"}</Text>
 
-      <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
+      {/* Meta */}
+      <Flex align="center" wrap="wrap" gap={8} style={{ marginTop: 8 }}>
         {comment.comment_url && (
-          <a href={comment.comment_url} target="_blank" rel="noreferrer" className="text-red-700 underline">
+          <Link
+            href={comment.comment_url}
+            target="_blank"
+            style={{ fontSize: 12, color: "#b91c1c" }}
+          >
             Ver comentario original
-          </a>
+          </Link>
         )}
-        <span className="text-slate-500">confianza: {comment.confidence === null ? "n/a" : formatScore(comment.confidence)}</span>
-      </div>
+        <Text type="secondary" style={{ fontSize: 12 }}>confianza: {comment.confidence === null ? "n/a" : formatScore(comment.confidence)}</Text>
+      </Flex>
 
+      {/* Override actions */}
       {canOverride && (
-        <div className="mt-3 flex flex-wrap items-center gap-2 text-xs">
-          <button
-            type="button"
-            className="rounded-md border border-slate-200 px-2 py-1 text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+        <Flex align="center" wrap="wrap" gap={8} style={{ marginTop: 12 }}>
+          <Button
+            size="small"
             disabled={updating}
             onClick={() => onPatch(comment.id, { is_spam: !comment.is_spam })}
           >
             Marcar {comment.is_spam ? "no spam" : "spam"}
-          </button>
-          <button
-            type="button"
-            className="rounded-md border border-slate-200 px-2 py-1 text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+          </Button>
+          <Button
+            size="small"
             disabled={updating}
             onClick={() => onPatch(comment.id, { related_to_post_text: !comment.related_to_post_text })}
           >
             Marcar {comment.related_to_post_text ? "no relacionado" : "relacionado"}
-          </button>
-          <label className="text-slate-600">
-            Sentimiento
-            <select
-              className="ml-2 rounded-md border border-slate-200 px-2 py-1 text-xs"
+          </Button>
+          <Space size={4}>
+            <Text style={{ fontSize: 12 }}>Sentimiento</Text>
+            <Select
+              size="small"
               value={comment.sentiment}
               disabled={updating}
-              onChange={(e) => onPatch(comment.id, { sentiment: e.target.value as "positive" | "negative" | "neutral" | "unknown" })}
-            >
-              <option value="positive">positive</option>
-              <option value="negative">negative</option>
-              <option value="neutral">neutral</option>
-              <option value="unknown">unknown</option>
-            </select>
-          </label>
-        </div>
+              onChange={(val) => onPatch(comment.id, { sentiment: val as "positive" | "negative" | "neutral" | "unknown" })}
+              style={{ width: 110 }}
+              options={[
+                { value: "positive", label: "positive" },
+                { value: "negative", label: "negative" },
+                { value: "neutral", label: "neutral" },
+                { value: "unknown", label: "unknown" },
+              ]}
+            />
+          </Space>
+        </Flex>
       )}
-    </article>
+    </Card>
   );
 };
 

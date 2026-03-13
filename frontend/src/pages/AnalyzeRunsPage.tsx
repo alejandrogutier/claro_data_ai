@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
+import { Alert, Button, Card, Col, Empty, Form, Input, Row, Select, Space, Spin, Table, Typography } from "antd";
+import { PlayCircleOutlined, ReloadOutlined } from "@ant-design/icons";
 import {
   ApiError,
   type AnalysisRun,
@@ -9,6 +11,12 @@ import {
 } from "../api/client";
 import { useApiClient } from "../api/useApiClient";
 import { useAuth } from "../auth/AuthContext";
+import { PageHeader } from "../components/shared/PageHeader";
+import { StatusTag } from "../components/shared/StatusTag";
+
+import type { ColumnsType } from "antd/es/table";
+
+const { Text } = Typography;
 
 type UiState = "idle" | "loading" | "empty" | "partial_data" | "permission_denied" | "error_retriable" | "error_non_retriable";
 
@@ -29,6 +37,13 @@ const toIso = (value: string): string | undefined => {
   const parsed = new Date(value);
   if (Number.isNaN(parsed.getTime())) return undefined;
   return parsed.toISOString();
+};
+
+const uiStateAlerts: Record<string, { type: "info" | "warning" | "error"; message: string } | null> = {
+  loading: { type: "info", message: "loading: consultando corridas de analisis..." },
+  empty: { type: "info", message: "empty: aun no existen corridas de analisis." },
+  partial_data: { type: "warning", message: "partial_data: hay corridas `failed` en historial reciente." },
+  permission_denied: { type: "error", message: "permission_denied: tu rol no tiene acceso." },
 };
 
 export const AnalyzeRunsPage = () => {
@@ -156,163 +171,232 @@ export const AnalyzeRunsPage = () => {
     }
   };
 
+  const historyColumns: ColumnsType<AnalysisRun> = [
+    {
+      title: "Status",
+      dataIndex: "status",
+      key: "status",
+      render: (text: string) => <StatusTag status={text} />,
+    },
+    {
+      title: "Scope",
+      dataIndex: "scope",
+      key: "scope",
+    },
+    {
+      title: "Input",
+      dataIndex: "input_count",
+      key: "input_count",
+    },
+    {
+      title: "Modelo",
+      dataIndex: "model_id",
+      key: "model_id",
+    },
+    {
+      title: "Creado",
+      dataIndex: "created_at",
+      key: "created_at",
+    },
+    {
+      title: "Completado",
+      dataIndex: "completed_at",
+      key: "completed_at",
+      render: (text: string | null) => text ?? "-",
+    },
+    {
+      title: "Accion",
+      key: "action",
+      render: (_: unknown, record: AnalysisRun) => (
+        <Button size="small" onClick={() => setSelectedRunId(record.id)}>
+          Ver detalle
+        </Button>
+      ),
+    },
+  ];
+
+  const renderUiAlert = () => {
+    if (uiState === "error_retriable") {
+      return <Alert type="error" showIcon title={`error_retriable: ${error ?? "intenta nuevamente"}`} style={{ marginBottom: 16 }} />;
+    }
+    if (uiState === "error_non_retriable") {
+      return <Alert type="error" showIcon title={`error_non_retriable: ${error ?? "revisa la solicitud"}`} style={{ marginBottom: 16 }} />;
+    }
+    const alertConfig = uiStateAlerts[uiState];
+    if (alertConfig) {
+      return <Alert type={alertConfig.type} showIcon title={alertConfig.message} style={{ marginBottom: 16 }} />;
+    }
+    return null;
+  };
+
   return (
     <section>
-      <header className="page-header">
-        <h2>Analysis Runs Async</h2>
-        <p>Disparo manual, historial y detalle de corridas `/v1/analysis/*` sobre worker SQS + Bedrock.</p>
-      </header>
+      <PageHeader
+        title="Analysis Runs Async"
+        subtitle="Disparo manual, historial y detalle de corridas `/v1/analysis/*` sobre worker SQS + Bedrock."
+      />
 
-      {uiState === "loading" ? <div className="alert info">loading: consultando corridas de analisis...</div> : null}
-      {uiState === "empty" ? <div className="alert info">empty: aun no existen corridas de analisis.</div> : null}
-      {uiState === "partial_data" ? <div className="alert warning">partial_data: hay corridas `failed` en historial reciente.</div> : null}
-      {uiState === "permission_denied" ? <div className="alert error">permission_denied: tu rol no tiene acceso.</div> : null}
-      {uiState === "error_retriable" ? <div className="alert error">error_retriable: {error ?? "intenta nuevamente"}</div> : null}
-      {uiState === "error_non_retriable" ? <div className="alert error">error_non_retriable: {error ?? "revisa la solicitud"}</div> : null}
+      {renderUiAlert()}
 
-      <section className="panel">
-        <div className="section-title-row">
-          <h3>Disparo manual</h3>
-          <button className="btn btn-outline" type="button" onClick={() => void load()} disabled={running || uiState === "loading"}>
+      <Card
+        title="Disparo manual"
+        style={{ marginBottom: 16 }}
+        extra={
+          <Button
+            icon={<ReloadOutlined />}
+            onClick={() => void load()}
+            disabled={running || uiState === "loading"}
+          >
             Refrescar historial
-          </button>
-        </div>
+          </Button>
+        }
+      >
+        <Form layout="vertical">
+          <Row gutter={16}>
+            <Col xs={24} sm={12} md={8}>
+              <Form.Item label="Scope">
+                <Select
+                  value={scopeDraft}
+                  onChange={(value) => setScopeDraft(value)}
+                  options={[
+                    { value: "overview", label: "overview" },
+                    { value: "channel", label: "channel" },
+                    { value: "competitors", label: "competitors" },
+                    { value: "custom", label: "custom" },
+                  ]}
+                />
+              </Form.Item>
+            </Col>
+            <Col xs={24} sm={12} md={8}>
+              <Form.Item label="Source Type">
+                <Select
+                  value={sourceTypeDraft}
+                  onChange={(value) => setSourceTypeDraft(value)}
+                  options={[
+                    { value: "news", label: "news" },
+                    { value: "social", label: "social" },
+                  ]}
+                />
+              </Form.Item>
+            </Col>
+            <Col xs={24} sm={12} md={8}>
+              <Form.Item label="Prompt Version">
+                <Input value={promptDraft} onChange={(event) => setPromptDraft(event.target.value)} />
+              </Form.Item>
+            </Col>
+            <Col xs={24} sm={12} md={8}>
+              <Form.Item label="Model ID (opcional)">
+                <Input value={modelDraft} onChange={(event) => setModelDraft(event.target.value)} placeholder="usa default runtime" />
+              </Form.Item>
+            </Col>
+            <Col xs={24} sm={12} md={8}>
+              <Form.Item label="Limit">
+                <Input type="number" min={1} max={500} value={limitDraft} onChange={(event) => setLimitDraft(event.target.value)} />
+              </Form.Item>
+            </Col>
+            <Col xs={24} sm={12} md={8}>
+              <Form.Item label="Provider">
+                <Input value={providerDraft} onChange={(event) => setProviderDraft(event.target.value)} />
+              </Form.Item>
+            </Col>
+            <Col xs={24} sm={12} md={8}>
+              <Form.Item label="Category">
+                <Input value={categoryDraft} onChange={(event) => setCategoryDraft(event.target.value)} />
+              </Form.Item>
+            </Col>
+            <Col xs={24} sm={12} md={8}>
+              <Form.Item label="Sentimiento">
+                <Input value={sentimientoDraft} onChange={(event) => setSentimientoDraft(event.target.value)} />
+              </Form.Item>
+            </Col>
+            <Col xs={24}>
+              <Form.Item label="Query">
+                <Input value={queryDraft} onChange={(event) => setQueryDraft(event.target.value)} />
+              </Form.Item>
+            </Col>
+            <Col xs={24} sm={12} md={8}>
+              <Form.Item label="From">
+                <Input type="datetime-local" value={fromDraft} onChange={(event) => setFromDraft(event.target.value)} />
+              </Form.Item>
+            </Col>
+            <Col xs={24} sm={12} md={8}>
+              <Form.Item label="To">
+                <Input type="datetime-local" value={toDraft} onChange={(event) => setToDraft(event.target.value)} />
+              </Form.Item>
+            </Col>
+            <Col xs={24} sm={12} md={8} style={{ display: "flex", alignItems: "flex-end" }}>
+              <Form.Item>
+                <Button
+                  type="primary"
+                  icon={<PlayCircleOutlined />}
+                  onClick={() => void triggerRun()}
+                  disabled={!canOperate || running}
+                  loading={running}
+                >
+                  {running ? "Encolando..." : "Crear corrida"}
+                </Button>
+              </Form.Item>
+            </Col>
+          </Row>
+        </Form>
+      </Card>
 
-        <div className="form-grid">
-          <label>
-            Scope
-            <select value={scopeDraft} onChange={(event) => setScopeDraft(event.target.value as AnalysisRunScope)}>
-              <option value="overview">overview</option>
-              <option value="channel">channel</option>
-              <option value="competitors">competitors</option>
-              <option value="custom">custom</option>
-            </select>
-          </label>
-          <label>
-            Source Type
-            <select value={sourceTypeDraft} onChange={(event) => setSourceTypeDraft(event.target.value as AnalysisSourceType)}>
-              <option value="news">news</option>
-              <option value="social">social</option>
-            </select>
-          </label>
-          <label>
-            Prompt Version
-            <input value={promptDraft} onChange={(event) => setPromptDraft(event.target.value)} />
-          </label>
-          <label>
-            Model ID (opcional)
-            <input value={modelDraft} onChange={(event) => setModelDraft(event.target.value)} placeholder="usa default runtime" />
-          </label>
-          <label>
-            Limit
-            <input type="number" min={1} max={500} value={limitDraft} onChange={(event) => setLimitDraft(event.target.value)} />
-          </label>
-          <label>
-            Provider
-            <input value={providerDraft} onChange={(event) => setProviderDraft(event.target.value)} />
-          </label>
-          <label>
-            Category
-            <input value={categoryDraft} onChange={(event) => setCategoryDraft(event.target.value)} />
-          </label>
-          <label>
-            Sentimiento
-            <input value={sentimientoDraft} onChange={(event) => setSentimientoDraft(event.target.value)} />
-          </label>
-          <label style={{ gridColumn: "1 / -1" }}>
-            Query
-            <input value={queryDraft} onChange={(event) => setQueryDraft(event.target.value)} />
-          </label>
-          <label>
-            From
-            <input type="datetime-local" value={fromDraft} onChange={(event) => setFromDraft(event.target.value)} />
-          </label>
-          <label>
-            To
-            <input type="datetime-local" value={toDraft} onChange={(event) => setToDraft(event.target.value)} />
-          </label>
-          <div style={{ display: "flex", alignItems: "end" }}>
-            <button className="btn btn-primary" type="button" onClick={() => void triggerRun()} disabled={!canOperate || running}>
-              {running ? "Encolando..." : "Crear corrida"}
-            </button>
-          </div>
-        </div>
-      </section>
+      <Card
+        title="Historial"
+        style={{ marginBottom: 16 }}
+        extra={<Text type="secondary">{items.length} corridas</Text>}
+      >
+        <Space style={{ marginBottom: 16 }}>
+          <Select
+            value={statusFilter}
+            onChange={(value) => setStatusFilter(value)}
+            style={{ minWidth: 150 }}
+            options={ANALYSIS_STATUSES.map((status) => ({
+              value: status,
+              label: status || "Todos",
+            }))}
+            placeholder="Filtro status"
+          />
+          <Select
+            value={scopeFilter}
+            onChange={(value) => setScopeFilter(value)}
+            style={{ minWidth: 150 }}
+            options={ANALYSIS_SCOPES.map((scope) => ({
+              value: scope,
+              label: scope || "Todos",
+            }))}
+            placeholder="Filtro scope"
+          />
+        </Space>
 
-      <section className="panel">
-        <div className="section-title-row">
-          <h3>Historial</h3>
-          <span>{items.length} corridas</span>
-        </div>
+        <Spin spinning={uiState === "loading"}>
+          {items.length > 0 ? (
+            <Table<AnalysisRun>
+              dataSource={items}
+              columns={historyColumns}
+              rowKey="id"
+              pagination={false}
+              size="small"
+              rowClassName={(record) => (selectedRunId === record.id ? "ant-table-row-selected" : "")}
+            />
+          ) : (
+            <Empty description="Sin corridas de analisis." />
+          )}
+        </Spin>
+      </Card>
 
-        <div className="form-grid" style={{ marginBottom: 10 }}>
-          <label>
-            Filtro status
-            <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as AnalysisRunStatus | "")}>
-              {ANALYSIS_STATUSES.map((status) => (
-                <option key={status || "all"} value={status}>
-                  {status || "Todos"}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label>
-            Filtro scope
-            <select value={scopeFilter} onChange={(event) => setScopeFilter(event.target.value as AnalysisRunScope | "")}>
-              {ANALYSIS_SCOPES.map((scope) => (
-                <option key={scope || "all"} value={scope}>
-                  {scope || "Todos"}
-                </option>
-              ))}
-            </select>
-          </label>
-        </div>
-
-        {items.length > 0 ? (
-          <div className="report-table-wrapper">
-            <table className="report-table">
-              <thead>
-                <tr>
-                  <th>Status</th>
-                  <th>Scope</th>
-                  <th>Input</th>
-                  <th>Modelo</th>
-                  <th>Creado</th>
-                  <th>Completado</th>
-                  <th>Accion</th>
-                </tr>
-              </thead>
-              <tbody>
-                {items.map((run) => (
-                  <tr key={run.id} className={selectedRunId === run.id ? "is-selected" : undefined}>
-                    <td>
-                      <span className={`report-status report-status-${run.status}`}>{run.status}</span>
-                    </td>
-                    <td>{run.scope}</td>
-                    <td>{run.input_count}</td>
-                    <td>{run.model_id}</td>
-                    <td>{run.created_at}</td>
-                    <td>{run.completed_at ?? "-"}</td>
-                    <td>
-                      <button className="btn btn-outline" type="button" onClick={() => setSelectedRunId(run.id)}>
-                        Ver detalle
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        ) : null}
-      </section>
-
-      <section className="panel">
-        <div className="section-title-row">
-          <h3>Detalle</h3>
-          <span>{selectedRunId || "Selecciona una corrida"}</span>
-        </div>
-        {!detail ? <p>Sin detalle cargado.</p> : <pre className="code-block">{JSON.stringify(detail, null, 2)}</pre>}
-      </section>
+      <Card
+        title="Detalle"
+        extra={<Text type="secondary">{selectedRunId || "Selecciona una corrida"}</Text>}
+      >
+        {!detail ? (
+          <Empty description="Sin detalle cargado." />
+        ) : (
+          <pre style={{ whiteSpace: "pre-wrap", background: "#f5f5f5", padding: 16, borderRadius: 6, fontSize: 12 }}>
+            {JSON.stringify(detail, null, 2)}
+          </pre>
+        )}
+      </Card>
     </section>
   );
 };

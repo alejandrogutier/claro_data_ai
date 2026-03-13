@@ -1,9 +1,12 @@
 import React, { useCallback, useEffect, useState } from "react";
+import { List, Select, Button, Typography, Flex, Spin, Empty, Space, Divider } from "antd";
 import type { PostRow, AwarioCommentRow, CommentSentimentFilter, CommentSpamFilter, CommentRelatedFilter } from "./postsTypes";
 import { formatNumber } from "./postsUtils";
 import CommentCard from "./CommentCard";
 import SentimentBalanceBar from "./SentimentBalanceBar";
 import type { ApiClient } from "../../api/client";
+
+const { Text, Title } = Typography;
 
 type Props = {
   post: PostRow;
@@ -105,17 +108,21 @@ const PostDetailComments: React.FC<Props> = ({ post, client, canOverride, onErro
   return (
     <div>
       {/* Header */}
-      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-        <h4 className="text-sm font-semibold text-slate-900">Comentarios</h4>
-        <div className="flex items-center gap-3 text-xs text-slate-500">
-          <span>Plataforma: <strong className="text-slate-700">{formatNumber(post.comments)}</strong></span>
-          <span>Capturados: <strong className="text-slate-700">{formatNumber(post.awario_comments_count)}</strong></span>
-        </div>
-      </div>
+      <Flex align="center" justify="space-between" wrap="wrap" gap={8} style={{ marginBottom: 12 }}>
+        <Title level={5} style={{ margin: 0, fontSize: 14 }}>Comentarios</Title>
+        <Flex align="center" gap={12}>
+          <Text type="secondary" style={{ fontSize: 12 }}>
+            Plataforma: <Text strong style={{ fontSize: 12 }}>{formatNumber(post.comments)}</Text>
+          </Text>
+          <Text type="secondary" style={{ fontSize: 12 }}>
+            Capturados: <Text strong style={{ fontSize: 12 }}>{formatNumber(post.awario_comments_count)}</Text>
+          </Text>
+        </Flex>
+      </Flex>
 
       {/* Sentiment Balance */}
       {comments.length > 0 && (
-        <div className="mb-3">
+        <div style={{ marginBottom: 12 }}>
           <SentimentBalanceBar
             {...sentimentCounts}
             label={`Basado en ${comments.length} comentario${comments.length !== 1 ? "s" : ""} cargado${comments.length !== 1 ? "s" : ""}`}
@@ -124,54 +131,67 @@ const PostDetailComments: React.FC<Props> = ({ post, client, canOverride, onErro
       )}
 
       {/* Filters */}
-      <div className="mb-3 flex flex-wrap gap-2 border-b border-slate-100 pb-3">
-        <label className="text-xs font-semibold text-slate-600">
-          Sentimiento
-          <select
-            className="ml-2 rounded-md border border-slate-200 px-2 py-1 text-xs"
+      <Flex wrap="wrap" gap={8} style={{ marginBottom: 12, paddingBottom: 12, borderBottom: "1px solid #f0f0f0" }}>
+        <Space size={4}>
+          <Text strong style={{ fontSize: 12 }}>Sentimiento</Text>
+          <Select
+            size="small"
             value={sentimentFilter}
-            onChange={(e) => setSentimentFilter(e.target.value as CommentSentimentFilter)}
-          >
-            <option value="all">Todos</option>
-            <option value="positive">Positivo</option>
-            <option value="negative">Negativo</option>
-            <option value="neutral">Neutro</option>
-            <option value="unknown">Unknown</option>
-          </select>
-        </label>
-        <label className="text-xs font-semibold text-slate-600">
-          Spam
-          <select
-            className="ml-2 rounded-md border border-slate-200 px-2 py-1 text-xs"
+            onChange={(val) => setSentimentFilter(val as CommentSentimentFilter)}
+            style={{ width: 110 }}
+            options={[
+              { value: "all", label: "Todos" },
+              { value: "positive", label: "Positivo" },
+              { value: "negative", label: "Negativo" },
+              { value: "neutral", label: "Neutro" },
+              { value: "unknown", label: "Unknown" },
+            ]}
+          />
+        </Space>
+        <Space size={4}>
+          <Text strong style={{ fontSize: 12 }}>Spam</Text>
+          <Select
+            size="small"
             value={spamFilter}
-            onChange={(e) => setSpamFilter(e.target.value as CommentSpamFilter)}
-          >
-            <option value="all">Todos</option>
-            <option value="not_spam">No spam</option>
-            <option value="spam">Spam</option>
-          </select>
-        </label>
-        <label className="text-xs font-semibold text-slate-600">
-          Relaci\u00f3n
-          <select
-            className="ml-2 rounded-md border border-slate-200 px-2 py-1 text-xs"
+            onChange={(val) => setSpamFilter(val as CommentSpamFilter)}
+            style={{ width: 110 }}
+            options={[
+              { value: "all", label: "Todos" },
+              { value: "not_spam", label: "No spam" },
+              { value: "spam", label: "Spam" },
+            ]}
+          />
+        </Space>
+        <Space size={4}>
+          <Text strong style={{ fontSize: 12 }}>Relaci&oacute;n</Text>
+          <Select
+            size="small"
             value={relatedFilter}
-            onChange={(e) => setRelatedFilter(e.target.value as CommentRelatedFilter)}
-          >
-            <option value="all">Todos</option>
-            <option value="related">Relacionados</option>
-            <option value="not_related">No relacionados</option>
-          </select>
-        </label>
-      </div>
+            onChange={(val) => setRelatedFilter(val as CommentRelatedFilter)}
+            style={{ width: 140 }}
+            options={[
+              { value: "all", label: "Todos" },
+              { value: "related", label: "Relacionados" },
+              { value: "not_related", label: "No relacionados" },
+            ]}
+          />
+        </Space>
+      </Flex>
 
       {/* List */}
-      {loading && comments.length === 0 && <p className="text-sm text-slate-600">Cargando comentarios...</p>}
-      {!loading && comments.length === 0 && <p className="text-sm text-slate-600">No hay comentarios para estos filtros.</p>}
+      {loading && comments.length === 0 && (
+        <Flex justify="center" style={{ padding: 24 }}>
+          <Spin tip="Cargando comentarios..." />
+        </Flex>
+      )}
+      {!loading && comments.length === 0 && (
+        <Empty description="No hay comentarios para estos filtros." />
+      )}
 
       {comments.length > 0 && (
-        <div className="space-y-3">
-          {comments.map((comment) => (
+        <List
+          dataSource={comments}
+          renderItem={(comment) => (
             <CommentCard
               key={comment.id}
               comment={comment}
@@ -179,19 +199,20 @@ const PostDetailComments: React.FC<Props> = ({ post, client, canOverride, onErro
               updating={updatingId === comment.id}
               onPatch={patchComment}
             />
-          ))}
-
-          {hasNext && (
-            <button
-              type="button"
-              className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
-              onClick={() => void load(true, cursor ?? undefined)}
-              disabled={loading}
-            >
-              {loading ? "Cargando..." : "Cargar m\u00e1s comentarios"}
-            </button>
           )}
-        </div>
+          loadMore={
+            hasNext ? (
+              <Flex justify="center" style={{ marginTop: 12 }}>
+                <Button
+                  onClick={() => void load(true, cursor ?? undefined)}
+                  loading={loading}
+                >
+                  Cargar m&aacute;s comentarios
+                </Button>
+              </Flex>
+            ) : null
+          }
+        />
       )}
     </div>
   );

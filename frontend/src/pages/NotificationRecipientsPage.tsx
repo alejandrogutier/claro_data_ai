@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
+import { Card, Alert, Button, Form, Input, Row, Col, Flex, Table, Switch, Descriptions, Typography, Space } from "antd";
+import { ReloadOutlined, PlusOutlined } from "@ant-design/icons";
 import {
   ApiError,
   type CreateNotificationRecipientRequest,
@@ -9,6 +11,10 @@ import {
 } from "../api/client";
 import { useApiClient } from "../api/useApiClient";
 import { useAuth } from "../auth/AuthContext";
+import { PageHeader } from "../components/shared/PageHeader";
+import { StatusTag } from "../components/shared/StatusTag";
+
+const { Text } = Typography;
 
 type UiState = "idle" | "loading" | "empty" | "partial_data" | "permission_denied" | "error_retriable" | "error_non_retriable";
 
@@ -182,169 +188,216 @@ export const NotificationRecipientsPage = () => {
 
   const isSandbox = sesStatus ? !sesStatus.production_access_enabled : null;
 
+  const recipientColumns = [
+    {
+      title: "Email",
+      dataIndex: "email",
+      key: "email",
+      render: (_: unknown, record: NotificationRecipient) => renderRecipientEmail(record)
+    },
+    {
+      title: "Scope",
+      dataIndex: "scope",
+      key: "scope"
+    },
+    {
+      title: "Estado",
+      dataIndex: "is_active",
+      key: "is_active",
+      render: (value: boolean) => <StatusTag status={value ? "active" : "inactive"} />
+    },
+    {
+      title: "Actualizado",
+      dataIndex: "updated_at",
+      key: "updated_at"
+    },
+    {
+      title: "Accion",
+      key: "action",
+      render: (_: unknown, record: NotificationRecipient) => (
+        <Button size="small" onClick={() => setSelectedId(record.id)}>
+          Ver
+        </Button>
+      )
+    }
+  ];
+
   return (
     <section>
-      <header className="page-header">
-        <h2>Notificaciones: Recipients</h2>
-        <p>Catalogo en DB para recipients de digest e incidentes, con gobernanza Admin y visibilidad enmascarada para Analyst.</p>
-      </header>
+      <PageHeader
+        title="Notificaciones: Recipients"
+        subtitle="Catalogo en DB para recipients de digest e incidentes, con gobernanza Admin y visibilidad enmascarada para Analyst."
+      />
 
-      {uiState === "loading" ? <div className="alert info">loading: consultando recipients...</div> : null}
-      {uiState === "empty" ? <div className="alert info">empty: no existen recipients configurados.</div> : null}
-      {uiState === "partial_data" ? <div className="alert warning">partial_data: hay recipients inactivos en el catalogo.</div> : null}
-      {uiState === "permission_denied" ? <div className="alert error">permission_denied: tu rol no tiene acceso.</div> : null}
-      {uiState === "error_retriable" ? <div className="alert error">error_retriable: {error ?? "intenta nuevamente"}</div> : null}
-      {uiState === "error_non_retriable" ? <div className="alert error">error_non_retriable: {error ?? "revisa los datos"}</div> : null}
+      {uiState === "loading" ? <Alert type="info" showIcon title="loading: consultando recipients..." style={{ marginBottom: 16 }} /> : null}
+      {uiState === "empty" ? <Alert type="info" showIcon title="empty: no existen recipients configurados." style={{ marginBottom: 16 }} /> : null}
+      {uiState === "partial_data" ? (
+        <Alert type="warning" showIcon title="partial_data: hay recipients inactivos en el catalogo." style={{ marginBottom: 16 }} />
+      ) : null}
+      {uiState === "permission_denied" ? (
+        <Alert type="error" showIcon title="permission_denied: tu rol no tiene acceso." style={{ marginBottom: 16 }} />
+      ) : null}
+      {uiState === "error_retriable" ? (
+        <Alert type="error" showIcon title={`error_retriable: ${error ?? "intenta nuevamente"}`} style={{ marginBottom: 16 }} />
+      ) : null}
+      {uiState === "error_non_retriable" ? (
+        <Alert type="error" showIcon title={`error_non_retriable: ${error ?? "revisa los datos"}`} style={{ marginBottom: 16 }} />
+      ) : null}
 
-      <section className="panel">
-        <div className="section-title-row">
-          <h3>Estado SES</h3>
-          <button className="btn btn-outline" type="button" onClick={() => void load()} disabled={saving || uiState === "loading"}>
+      <Card
+        title="Estado SES"
+        extra={
+          <Button icon={<ReloadOutlined />} onClick={() => void load()} disabled={saving || uiState === "loading"}>
             Refrescar
-          </button>
-        </div>
-
-        {!sesStatus && sesError ? <div className="alert error">error_retriable: {sesError}</div> : null}
-        {!sesStatus && !sesError ? <p>Cargando estado SES...</p> : null}
+          </Button>
+        }
+        style={{ marginBottom: 16 }}
+      >
+        {!sesStatus && sesError ? <Alert type="error" showIcon title={`error_retriable: ${sesError}`} style={{ marginBottom: 12 }} /> : null}
+        {!sesStatus && !sesError ? <Text type="secondary">Cargando estado SES...</Text> : null}
 
         {sesStatus ? (
-          <div style={{ display: "grid", gap: 6 }}>
-            <p>
-              SES: <strong>{sesStatus.production_access_enabled ? "produccion" : "sandbox"}</strong> | sending_enabled:{" "}
-              <strong>{sesStatus.sending_enabled ? "true" : "false"}</strong>
-            </p>
-            <p>
-              Sender: <strong>{sesStatus.sender_email ?? "(no configurado)"}</strong> | verified_for_sending:{" "}
-              <strong>{sesStatus.sender_verified_for_sending ? "true" : "false"}</strong>{" "}
-              {sesStatus.sender_verification_status ? <span>({sesStatus.sender_verification_status})</span> : null}
-            </p>
-            <p>
-              Quota: max24h={sesStatus.send_quota?.max_24_hour_send ?? "n/a"} | rate={sesStatus.send_quota?.max_send_rate ?? "n/a"} |
-              sent24h={sesStatus.send_quota?.sent_last_24_hours ?? "n/a"}
-            </p>
+          <Space direction="vertical" size={6} style={{ width: "100%" }}>
+            <Descriptions column={1} size="small" bordered={false}>
+              <Descriptions.Item label="SES">
+                <Text strong>{sesStatus.production_access_enabled ? "produccion" : "sandbox"}</Text>
+              </Descriptions.Item>
+              <Descriptions.Item label="sending_enabled">
+                <Text strong>{sesStatus.sending_enabled ? "true" : "false"}</Text>
+              </Descriptions.Item>
+              <Descriptions.Item label="Sender">
+                <Text strong>{sesStatus.sender_email ?? "(no configurado)"}</Text>
+              </Descriptions.Item>
+              <Descriptions.Item label="verified_for_sending">
+                <Text strong>{sesStatus.sender_verified_for_sending ? "true" : "false"}</Text>
+                {sesStatus.sender_verification_status ? <Text> ({sesStatus.sender_verification_status})</Text> : null}
+              </Descriptions.Item>
+              <Descriptions.Item label="Quota">
+                max24h={sesStatus.send_quota?.max_24_hour_send ?? "n/a"} | rate={sesStatus.send_quota?.max_send_rate ?? "n/a"} |
+                sent24h={sesStatus.send_quota?.sent_last_24_hours ?? "n/a"}
+              </Descriptions.Item>
+            </Descriptions>
             {isSandbox ? (
-              <div className="alert warning">Nota: SES sandbox requiere recipients verificados (email identity) para que el envio funcione.</div>
+              <Alert
+                type="warning"
+                showIcon
+                title="Nota: SES sandbox requiere recipients verificados (email identity) para que el envio funcione."
+              />
             ) : null}
-          </div>
+          </Space>
         ) : null}
-      </section>
+      </Card>
 
-      <section className="panel">
-        <div className="section-title-row">
-          <h3>Tipo</h3>
-          <div style={{ display: "flex", gap: 8 }}>
-            <button className="btn btn-outline" type="button" onClick={() => setKind("digest")} disabled={kind === "digest" || uiState === "loading"}>
+      <Card
+        title="Tipo"
+        extra={
+          <Flex gap={8}>
+            <Button onClick={() => setKind("digest")} disabled={kind === "digest" || uiState === "loading"}>
               Digest
-            </button>
-            <button
-              className="btn btn-outline"
-              type="button"
-              onClick={() => setKind("incident")}
-              disabled={kind === "incident" || uiState === "loading"}
-            >
+            </Button>
+            <Button onClick={() => setKind("incident")} disabled={kind === "incident" || uiState === "loading"}>
               Incidentes
-            </button>
-          </div>
-        </div>
-      </section>
+            </Button>
+          </Flex>
+        }
+        style={{ marginBottom: 16 }}
+      />
 
-      <section className="panel">
-        <div className="section-title-row">
-          <h3>Filtros</h3>
-          <button className="btn btn-outline" type="button" onClick={() => void load()} disabled={saving || uiState === "loading"}>
+      <Card
+        title="Filtros"
+        extra={
+          <Button icon={<ReloadOutlined />} onClick={() => void load()} disabled={saving || uiState === "loading"}>
             Aplicar
-          </button>
-        </div>
-        <div className="form-grid">
-          <label>
-            Scope
-            <input value={scopeFilter} onChange={(event) => setScopeFilter(event.target.value)} placeholder="ops" />
-          </label>
-          <label style={{ display: "flex", alignItems: "end", gap: 8 }}>
-            <input type="checkbox" checked={includeInactive} onChange={(event) => setIncludeInactive(event.target.checked)} />
-            Incluir inactivos
-          </label>
-        </div>
-      </section>
+          </Button>
+        }
+        style={{ marginBottom: 16 }}
+      >
+        <Form layout="vertical">
+          <Row gutter={16} align="bottom">
+            <Col xs={24} sm={12} md={8}>
+              <Form.Item label="Scope">
+                <Input value={scopeFilter} onChange={(event) => setScopeFilter(event.target.value)} placeholder="ops" />
+              </Form.Item>
+            </Col>
+            <Col xs={24} sm={12} md={8}>
+              <Form.Item label="Incluir inactivos">
+                <Switch checked={includeInactive} onChange={(checked) => setIncludeInactive(checked)} />
+              </Form.Item>
+            </Col>
+          </Row>
+        </Form>
+      </Card>
 
-      <section className="panel">
-        <div className="section-title-row">
-          <h3>Recipients</h3>
-          <span>{items.length} registros</span>
-        </div>
-
+      <Card
+        title="Recipients"
+        extra={<Text>{items.length} registros</Text>}
+        style={{ marginBottom: 16 }}
+      >
         {items.length > 0 ? (
-          <div className="report-table-wrapper">
-            <table className="report-table">
-              <thead>
-                <tr>
-                  <th>Email</th>
-                  <th>Scope</th>
-                  <th>Estado</th>
-                  <th>Actualizado</th>
-                  <th>Accion</th>
-                </tr>
-              </thead>
-              <tbody>
-                {items.map((item) => (
-                  <tr key={item.id} className={selectedId === item.id ? "is-selected" : undefined}>
-                    <td>{renderRecipientEmail(item)}</td>
-                    <td>{item.scope}</td>
-                    <td>{item.is_active ? "active" : "inactive"}</td>
-                    <td>{item.updated_at}</td>
-                    <td>
-                      <button className="btn btn-outline" type="button" onClick={() => setSelectedId(item.id)}>
-                        Ver
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <Table
+            dataSource={items}
+            columns={recipientColumns}
+            rowKey="id"
+            size="small"
+            pagination={false}
+            rowClassName={(record) => (selectedId === record.id ? "ant-table-row-selected" : "")}
+          />
         ) : null}
-      </section>
+      </Card>
 
-      <section className="panel">
-        <div className="section-title-row">
-          <h3>{selected ? "Editar recipient" : "Crear recipient"}</h3>
-          <span>{selected ? selected.id : "nuevo"}</span>
-        </div>
+      <Card
+        title={selected ? "Editar recipient" : "Crear recipient"}
+        extra={<Text type="secondary">{selected ? selected.id : "nuevo"}</Text>}
+        style={{ marginBottom: 16 }}
+      >
+        {!canManage ? (
+          <Alert type="info" showIcon title="Tu rol es de solo lectura para notificaciones." style={{ marginBottom: 16 }} />
+        ) : null}
 
-        {!canManage ? <div className="alert info">Tu rol es de solo lectura para notificaciones.</div> : null}
-
-        <div className="form-grid">
-          <label>
-            Email
-            <input value={emailDraft} onChange={(event) => setEmailDraft(event.target.value)} disabled={!canManage} placeholder="ops@example.com" />
-          </label>
-          <label>
-            Scope
-            <input value={scopeDraft} onChange={(event) => setScopeDraft(event.target.value)} disabled={!canManage} placeholder="ops" />
-          </label>
-          <label>
-            Estado
-            <select value={isActiveDraft ? "active" : "inactive"} onChange={(event) => setIsActiveDraft(event.target.value === "active")} disabled={!canManage}>
-              <option value="active">active</option>
-              <option value="inactive">inactive</option>
-            </select>
-          </label>
-        </div>
+        <Form layout="vertical">
+          <Row gutter={16}>
+            <Col xs={24} sm={12} md={8}>
+              <Form.Item label="Email">
+                <Input
+                  value={emailDraft}
+                  onChange={(event) => setEmailDraft(event.target.value)}
+                  disabled={!canManage}
+                  placeholder="ops@example.com"
+                />
+              </Form.Item>
+            </Col>
+            <Col xs={24} sm={12} md={8}>
+              <Form.Item label="Scope">
+                <Input value={scopeDraft} onChange={(event) => setScopeDraft(event.target.value)} disabled={!canManage} placeholder="ops" />
+              </Form.Item>
+            </Col>
+            <Col xs={24} sm={12} md={8}>
+              <Form.Item label="Estado">
+                <Switch
+                  checked={isActiveDraft}
+                  onChange={(checked) => setIsActiveDraft(checked)}
+                  disabled={!canManage}
+                  checkedChildren="active"
+                  unCheckedChildren="inactive"
+                />
+              </Form.Item>
+            </Col>
+          </Row>
+        </Form>
 
         {canManage ? (
-          <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+          <Flex gap={8} style={{ marginTop: 10 }}>
             {!selected ? (
-              <button className="btn btn-primary" type="button" onClick={() => void createRecipient()} disabled={saving || uiState === "loading"}>
+              <Button type="primary" onClick={() => void createRecipient()} disabled={saving || uiState === "loading"} loading={saving}>
                 Crear
-              </button>
+              </Button>
             ) : (
-              <button className="btn btn-primary" type="button" onClick={() => void updateRecipient()} disabled={saving || uiState === "loading"}>
+              <Button type="primary" onClick={() => void updateRecipient()} disabled={saving || uiState === "loading"} loading={saving}>
                 Guardar cambios
-              </button>
+              </Button>
             )}
-            <button
-              className="btn btn-outline"
-              type="button"
+            <Button
+              icon={<PlusOutlined />}
               onClick={() => {
                 setSelectedId("");
                 hydrateDraft(null);
@@ -352,11 +405,10 @@ export const NotificationRecipientsPage = () => {
               disabled={saving || uiState === "loading"}
             >
               Nuevo
-            </button>
-          </div>
+            </Button>
+          </Flex>
         ) : null}
-      </section>
+      </Card>
     </section>
   );
 };
-

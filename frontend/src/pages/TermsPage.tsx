@@ -17,6 +17,41 @@ import {
 } from "../api/client";
 import { useApiClient } from "../api/useApiClient";
 import { useAuth } from "../auth/AuthContext";
+import { PageHeader } from "../components/shared/PageHeader";
+import { StatusTag } from "../components/shared/StatusTag";
+import {
+  Alert,
+  Button,
+  Card,
+  Checkbox,
+  Col,
+  Collapse,
+  Flex,
+  Form,
+  Input,
+  InputNumber,
+  List,
+  Row,
+  Select,
+  Space,
+  Spin,
+  Statistic,
+  Table,
+  Tabs,
+  Tag,
+  Typography
+} from "antd";
+import {
+  DeleteOutlined,
+  PlusOutlined,
+  ReloadOutlined,
+  RollbackOutlined,
+  SearchOutlined,
+  SyncOutlined,
+  ThunderboltOutlined
+} from "@ant-design/icons";
+
+const { Text, Paragraph } = Typography;
 
 type QueryEditorMode = "quick" | "advanced";
 
@@ -844,875 +879,1116 @@ export const TermsPage = () => {
     }
   };
 
+  /* ── Ant Design Table column definitions ── */
+
+  const dryRunProviderColumns = [
+    { title: "provider", dataIndex: "provider", key: "provider" },
+    { title: "raw", dataIndex: "raw_count", key: "raw_count" },
+    { title: "fetched", dataIndex: "fetched_count", key: "fetched_count" },
+    { title: "matched", dataIndex: "matched_count", key: "matched_count" },
+    { title: "duracion(ms)", dataIndex: "duration_ms", key: "duration_ms" },
+    {
+      title: "error",
+      key: "error",
+      render: (_: unknown, record: { error_type?: string; error?: string }) =>
+        record.error_type ? `${record.error_type}: ${record.error ?? ""}` : "-"
+    }
+  ];
+
+  const awarioAlertsColumns = [
+    {
+      title: "Nombre",
+      key: "name",
+      render: (_: unknown, alert: AwarioRemoteAlert) => alert.name ?? "(sin nombre)"
+    },
+    { title: "alert_id", dataIndex: "alert_id", key: "alert_id" },
+    {
+      title: "Estado",
+      key: "is_active",
+      render: (_: unknown, alert: AwarioRemoteAlert) => (
+        <StatusTag status={alert.is_active ? "active" : "inactive"} />
+      )
+    },
+    {
+      title: "Accion",
+      key: "action",
+      render: (_: unknown, alert: AwarioRemoteAlert) => {
+        const isLinked = linkedAwarioAlertIds.has(alert.alert_id);
+        if (!canMutate) {
+          return <Text type="secondary">{isLinked ? "vinculada" : "-"}</Text>;
+        }
+        return (
+          <Button
+            onClick={() => void onLinkAwarioAlert(alert.alert_id)}
+            disabled={awarioLinkingAlertId === alert.alert_id}
+            loading={awarioLinkingAlertId === alert.alert_id}
+          >
+            {isLinked ? "Re-vincular" : "Vincular"}
+          </Button>
+        );
+      }
+    }
+  ];
+
+  const awarioBindingsColumns = [
+    { title: "alert_id", dataIndex: "awario_alert_id", key: "awario_alert_id" },
+    {
+      title: "status",
+      key: "status",
+      render: (_: unknown, binding: AwarioAlertBinding) => <StatusTag status={binding.status} />
+    },
+    {
+      title: "sync_state",
+      key: "sync_state",
+      render: (_: unknown, binding: AwarioAlertBinding) => <StatusTag status={binding.sync_state} />
+    },
+    {
+      title: "ultimo sync",
+      key: "last_sync_at",
+      render: (_: unknown, binding: AwarioAlertBinding) => formatDateTime(binding.last_sync_at)
+    },
+    {
+      title: "backfill",
+      key: "backfill",
+      render: (_: unknown, binding: AwarioAlertBinding) => formatBackfillState(binding)
+    },
+    {
+      title: "error",
+      key: "error",
+      render: (_: unknown, binding: AwarioAlertBinding) => binding.last_sync_error ?? "-"
+    },
+    {
+      title: "acciones",
+      key: "actions",
+      render: (_: unknown, binding: AwarioAlertBinding) => (
+        <Space direction="vertical" size="small">
+          <Space size="small">
+            {canMutate ? (
+              <Button
+                onClick={() => void onToggleAwarioBindingStatus(binding)}
+                disabled={awarioBindingActionId === binding.id}
+                loading={awarioBindingActionId === binding.id}
+              >
+                {binding.status === "active" ? "Pausar" : "Reanudar"}
+              </Button>
+            ) : null}
+            {canMutate ? (
+              <Button
+                onClick={() => void onRetryAwarioBackfill(binding.id)}
+                disabled={awarioBindingActionId === binding.id || binding.status !== "active"}
+              >
+                Reintentar backfill
+              </Button>
+            ) : null}
+          </Space>
+          <Collapse
+            size="small"
+            items={[
+              {
+                key: "detail",
+                label: "Detalle tecnico",
+                children: (
+                  <Typography.Paragraph
+                    code
+                    style={{ whiteSpace: "pre-wrap", margin: 0, fontSize: 12 }}
+                  >
+                    {JSON.stringify(binding.metadata ?? {}, null, 2)}
+                  </Typography.Paragraph>
+                )
+              }
+            ]}
+          />
+        </Space>
+      )
+    }
+  ];
+
+  /* ── Render helpers for sample items (shared between preview and dry-run) ── */
+
+  const renderSampleItem = (item: {
+    content_item_id?: string;
+    provider?: string;
+    canonical_url?: string;
+    title?: string;
+    published_at?: string | null;
+    origin: OriginType;
+    medium: string | null;
+    tags: string[];
+  }) => (
+    <div style={{ display: "grid", gap: 4 }}>
+      <Text strong>{item.title || "(sin titulo)"}</Text>
+      <Text type="secondary">
+        {item.provider} | {formatDateTime(item.published_at)}
+      </Text>
+      <Space size={[4, 4]} wrap>
+        <Tag color={item.origin === "news" ? "blue" : "purple"}>{item.origin}</Tag>
+        {item.medium ? <Tag>medio:{item.medium}</Tag> : null}
+        {item.tags.map((tag) => (
+          <Tag key={`${item.content_item_id ?? item.canonical_url}-${tag}`}>{tag}</Tag>
+        ))}
+      </Space>
+      <Text type="secondary" style={{ fontSize: 12 }}>
+        {item.canonical_url || "(sin url)"}
+      </Text>
+    </div>
+  );
+
+  /* ── Main render ── */
+
   return (
     <section>
-      <header className="page-header">
-        <h2>Configurador de Queries</h2>
-        <p>
-          Gestiona queries de noticias y vinculacion de alertas Awario. Los cambios quedan en configuracion al guardar
-          y corren en la siguiente ejecucion programada.
-        </p>
-      </header>
+      <PageHeader
+        title="Configurador de Queries"
+        subtitle="Gestiona queries de noticias y vinculacion de alertas Awario. Los cambios quedan en configuracion al guardar y corren en la siguiente ejecucion programada."
+      />
 
-      <section className="panel" style={{ marginBottom: 16 }}>
-        <div className="button-row" role="tablist" aria-label="Secciones de configuracion">
-          <button
-            type="button"
-            role="tab"
-            className={configTab === "news" ? "btn btn-primary" : "btn btn-outline"}
-            onClick={() => setConfigTab("news")}
-            aria-selected={configTab === "news"}
-          >
-            Noticias
-          </button>
-          <button
-            type="button"
-            role="tab"
-            className={configTab === "awario" ? "btn btn-primary" : "btn btn-outline"}
-            onClick={() => setConfigTab("awario")}
-            aria-selected={configTab === "awario"}
-          >
-            Awario
-          </button>
-        </div>
-      </section>
-
-      <div style={{ display: configTab === "news" ? "block" : "none" }}>
-      {error ? <div className="alert error">{error}</div> : null}
-      {!canMutate ? (
-        <div className="alert info">Tu rol es {session?.role}. Solo Admin puede guardar, rollback, dry-run y eliminar.</div>
-      ) : null}
-
-      <section className="panel">
-        <div className="form-grid" style={{ gridTemplateColumns: "2fr 1fr 1fr auto" }}>
-          <label>
-            Buscar
-            <input
-              value={searchFilter}
-              onChange={(event) => setSearchFilter(event.target.value)}
-              placeholder="nombre o descripcion"
-            />
-          </label>
-
-          <label>
-            Scope
-            <select value={scopeFilter} onChange={(event) => setScopeFilter(event.target.value as QueryScope | "all")}> 
-              <option value="all">all</option>
-              <option value="claro">claro</option>
-              <option value="competencia">competencia</option>
-            </select>
-          </label>
-
-          <label>
-            Estado
-            <select
-              value={statusFilter}
-              onChange={(event) => setStatusFilter(event.target.value as "all" | "active" | "inactive")}
-            >
-              <option value="all">all</option>
-              <option value="active">active</option>
-              <option value="inactive">inactive</option>
-            </select>
-          </label>
-
-          <div style={{ display: "flex", alignItems: "end", gap: 8 }}>
-            <button className="btn btn-outline" type="button" onClick={() => void loadQueries()} disabled={loading}>
-              Recargar
-            </button>
-            {canMutate ? (
-              <button className="btn btn-primary" type="button" onClick={resetToCreate}>
-                Nueva query
-              </button>
-            ) : null}
-          </div>
-        </div>
-      </section>
-
-      <section className="panel" style={{ marginTop: 16 }}>
-        <h3>Queries registradas</h3>
-        {loading ? <p>Cargando...</p> : null}
-        {!loading && queries.length === 0 ? <p>No hay queries registradas.</p> : null}
-
-        <ul className="term-list">
-          {queries.map((item) => (
-            <li
-              key={item.id}
-              className="term-item"
-              style={{
-                cursor: "pointer",
-                border: selectedId === item.id ? "1px solid var(--color-accent, #2f6fed)" : undefined
-              }}
-              onClick={() => selectQuery(item)}
-            >
-              <div>
-                <p className="term-name">{item.name}</p>
-                <p className="term-meta">
-                  {item.language} | scope: {item.scope} | estado: {item.is_active ? "active" : "inactive"} | rev:{" "}
-                  {item.current_revision} | awario:{" "}
-                  {item.awario_link_status === "linked" ? `linked (${item.awario_sync_state ?? "-"})` : "missing_awario"}
-                </p>
-              </div>
-            </li>
-          ))}
-        </ul>
-      </section>
-
-      <form className="panel" onSubmit={onSave} style={{ marginTop: 16 }}>
-        <div className="section-title-row">
-          <h3>{isCreating ? "Crear query" : `Editar query: ${selectedQuery?.name ?? ""}`}</h3>
-          <div className="button-row">
-            <button className="btn btn-outline" type="button" onClick={onPreview} disabled={isPreviewing}>
-              {isPreviewing ? "Preview..." : "Preview local"}
-            </button>
-            {canMutate && selectedId ? (
-              <button className="btn btn-outline" type="button" onClick={onDryRun} disabled={isDryRunning || isSelectedQueryBlocked}>
-                {isDryRunning ? "Dry-run..." : "Dry-run proveedores"}
-              </button>
-            ) : null}
-            {canMutate && selectedId ? (
-              <button className="btn btn-outline" type="button" onClick={onManualSync} disabled={isManualSyncing || isSelectedQueryBlocked}>
-                {isManualSyncing ? "Sync..." : "Sync manual ahora"}
-              </button>
-            ) : null}
-            {canMutate ? (
-              <button className="btn btn-primary" type="submit" disabled={isSaving}>
-                {isSaving ? "Guardando..." : isCreating ? "Crear" : "Guardar cambios"}
-              </button>
-            ) : null}
-          </div>
-        </div>
-
-        <p style={{ marginTop: 6, marginBottom: 12 }}>
-          Cambios aplican en la configuracion al guardar, pero impactan la siguiente corrida programada. Usa sync manual si necesitas adelantarla.
-        </p>
-        {isSelectedQueryBlocked ? (
-          <div className="alert warning">
-            Esta query esta bloqueada operativamente: falta vínculo Awario. Selecciona una alerta y guarda para activarla.
-          </div>
-        ) : null}
-        {manualSyncInfo ? <div className="alert info">{manualSyncInfo}</div> : null}
-
-        <div className="form-grid" style={{ gridTemplateColumns: "repeat(4, minmax(0, 1fr))" }}>
-          <label>
-            Nombre
-            <input
-              value={form.name}
-              onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))}
-              required
-              minLength={2}
-              maxLength={160}
-            />
-          </label>
-
-          <label>
-            Idioma
-            <input
-              value={form.language}
-              onChange={(event) => setForm((current) => ({ ...current, language: event.target.value }))}
-              maxLength={8}
-              required
-            />
-          </label>
-
-          <label>
-            Scope
-            <select
-              value={form.scope}
-              onChange={(event) => setForm((current) => ({ ...current, scope: event.target.value as QueryScope }))}
-            >
-              <option value="claro">claro</option>
-              <option value="competencia">competencia</option>
-            </select>
-          </label>
-
-          <label>
-            Estado
-            <select
-              value={form.isActive ? "active" : "inactive"}
-              onChange={(event) =>
-                setForm((current) => ({
-                  ...current,
-                  isActive: event.target.value === "active"
-                }))
-              }
-            >
-              <option value="active">active</option>
-              <option value="inactive">inactive</option>
-            </select>
-          </label>
-
-          <label>
-            Prioridad (1-5)
-            <input
-              type="number"
-              min={1}
-              max={5}
-              value={form.priority}
-              onChange={(event) =>
-                setForm((current) => ({
-                  ...current,
-                  priority: Math.max(1, Math.min(5, Number.parseInt(event.target.value || "3", 10)))
-                }))
-              }
-            />
-          </label>
-
-          <label>
-            Max articulos
-            <input
-              type="number"
-              min={1}
-              max={500}
-              value={form.maxArticlesPerRun}
-              onChange={(event) =>
-                setForm((current) => ({
-                  ...current,
-                  maxArticlesPerRun: Math.max(1, Math.min(500, Number.parseInt(event.target.value || "100", 10)))
-                }))
-              }
-            />
-          </label>
-
-          <label style={{ gridColumn: "span 2" }}>
-            Descripcion
-            <input
-              value={form.description}
-              onChange={(event) => setForm((current) => ({ ...current, description: event.target.value }))}
-              maxLength={600}
-            />
-          </label>
-
-          <label style={{ gridColumn: "span 3" }}>
-            Alerta Awario (obligatoria)
-            <select
-              value={form.awarioAlertId}
-              onChange={(event) => setForm((current) => ({ ...current, awarioAlertId: event.target.value }))}
-              required
-            >
-              <option value="">Selecciona una alerta de Awario</option>
-              {form.awarioAlertId && !awarioAlerts.some((item) => item.alert_id === form.awarioAlertId) ? (
-                <option value={form.awarioAlertId}>{form.awarioAlertId} (no visible en el filtro actual)</option>
-              ) : null}
-              {awarioAlerts.map((alert) => (
-                <option key={alert.alert_id} value={alert.alert_id}>
-                  {alert.name || alert.alert_id} [{alert.alert_id}] {alert.is_active ? "" : "(inactive)"}
-                </option>
-              ))}
-            </select>
-          </label>
-
-          <div style={{ display: "grid", gap: 8 }}>
-            <label>
-              Buscar alerta
-              <input
-                value={awarioSearch}
-                onChange={(event) => setAwarioSearch(event.target.value)}
-                placeholder="nombre o alert_id"
-              />
-            </label>
-            <button className="btn btn-outline" type="button" onClick={() => void loadAwarioConfig()} disabled={awarioLoading}>
-              {awarioLoading ? "Cargando..." : "Recargar alertas"}
-            </button>
-          </div>
-        </div>
-
-        <p className="term-meta" style={{ marginTop: 8 }}>
-          Estado vínculo:{" "}
-          {selectedQuery
-            ? selectedQuery.awario_link_status === "linked"
-              ? `linked (${selectedQuery.awario_sync_state ?? "-"})`
-              : "missing_awario"
-            : form.awarioAlertId
-              ? "seleccionado para crear"
-              : "pendiente"}
-          {selectedAwarioAlert ? ` | alerta: ${selectedAwarioAlert.name ?? selectedAwarioAlert.alert_id}` : ""}
-        </p>
-
-        <section className="panel" style={{ marginTop: 16 }}>
-          <div className="section-title-row">
-            <h4>Definicion de reglas</h4>
-            <div className="button-row" role="group" aria-label="Modo de editor">
-              <button
-                type="button"
-                className={editorMode === "quick" ? "btn btn-primary" : "btn btn-outline"}
-                onClick={() => onModeChange("quick")}
-              >
-                Rapido
-              </button>
-              <button
-                type="button"
-                className={editorMode === "advanced" ? "btn btn-primary" : "btn btn-outline"}
-                onClick={() => onModeChange("advanced")}
-              >
-                Avanzado (JSON)
-              </button>
-            </div>
-          </div>
-
-          {editorMode === "quick" ? (
-            <div style={{ display: "grid", gap: 12 }}>
-              {!quickCanRepresent ? (
-                <div className="alert warning" style={{ marginBottom: 0 }}>
-                  Esta query tenia estructura avanzada. Al guardar en modo rapido se reescribe a frases include/exclude.
-                </div>
-              ) : null}
-
-              <div className="form-grid" style={{ gridTemplateColumns: "repeat(2, minmax(0, 1fr))" }}>
-                <label>
-                  Campo para buscar
-                  <select
-                    value={quickField}
-                    onChange={(event) => setQuickField(event.target.value as QueryKeywordRule["field"])}
-                  >
-                    <option value="any">any</option>
-                    <option value="title">title</option>
-                    <option value="summary">summary</option>
-                    <option value="content">content</option>
-                  </select>
-                </label>
-
-                <label>
-                  Tipo de match
-                  <select
-                    value={quickMatch}
-                    onChange={(event) => setQuickMatch(event.target.value as QueryKeywordRule["match"])}
-                  >
-                    <option value="phrase">phrase</option>
-                    <option value="contains">contains</option>
-                  </select>
-                </label>
-
-                <label style={{ gridColumn: "span 2" }}>
-                  Frases obligatorias (una por linea)
-                  <textarea
-                    rows={6}
-                    value={quickIncludeText}
-                    onChange={(event) => setQuickIncludeText(event.target.value)}
-                    placeholder={"claro colombia\nclaro hogar\nclaro movil"}
+      <Tabs
+        activeKey={configTab}
+        onChange={(key) => setConfigTab(key as "news" | "awario")}
+        items={[
+          {
+            key: "news",
+            label: "Noticias",
+            children: (
+              <>
+                {error ? <Alert type="error" showIcon title={error} style={{ marginBottom: 16 }} /> : null}
+                {!canMutate ? (
+                  <Alert
+                    type="info"
+                    showIcon
+                    title={`Tu rol es ${session?.role}. Solo Admin puede guardar, rollback, dry-run y eliminar.`}
+                    style={{ marginBottom: 16 }}
                   />
-                </label>
+                ) : null}
 
-                <label style={{ gridColumn: "span 2" }}>
-                  Frases excluidas (opcional, una por linea)
-                  <textarea
-                    rows={4}
-                    value={quickExcludeText}
-                    onChange={(event) => setQuickExcludeText(event.target.value)}
-                    placeholder={"futbol\nentretenimiento"}
+                {/* ── Filters card ── */}
+                <Card style={{ marginBottom: 16 }}>
+                  <Form layout="vertical">
+                    <Row gutter={16}>
+                      <Col xs={24} sm={24} md={8}>
+                        <Form.Item label="Buscar">
+                          <Input
+                            value={searchFilter}
+                            onChange={(event) => setSearchFilter(event.target.value)}
+                            placeholder="nombre o descripcion"
+                            prefix={<SearchOutlined />}
+                            allowClear
+                          />
+                        </Form.Item>
+                      </Col>
+                      <Col xs={12} sm={12} md={4}>
+                        <Form.Item label="Scope">
+                          <Select
+                            value={scopeFilter}
+                            onChange={(value) => setScopeFilter(value as QueryScope | "all")}
+                            options={[
+                              { value: "all", label: "all" },
+                              { value: "claro", label: "claro" },
+                              { value: "competencia", label: "competencia" }
+                            ]}
+                          />
+                        </Form.Item>
+                      </Col>
+                      <Col xs={12} sm={12} md={4}>
+                        <Form.Item label="Estado">
+                          <Select
+                            value={statusFilter}
+                            onChange={(value) => setStatusFilter(value as "all" | "active" | "inactive")}
+                            options={[
+                              { value: "all", label: "all" },
+                              { value: "active", label: "active" },
+                              { value: "inactive", label: "inactive" }
+                            ]}
+                          />
+                        </Form.Item>
+                      </Col>
+                      <Col xs={24} sm={24} md={8}>
+                        <Form.Item label=" ">
+                          <Space>
+                            <Button
+                              icon={<ReloadOutlined />}
+                              onClick={() => void loadQueries()}
+                              disabled={loading}
+                            >
+                              Recargar
+                            </Button>
+                            {canMutate ? (
+                              <Button type="primary" icon={<PlusOutlined />} onClick={resetToCreate}>
+                                Nueva query
+                              </Button>
+                            ) : null}
+                          </Space>
+                        </Form.Item>
+                      </Col>
+                    </Row>
+                  </Form>
+                </Card>
+
+                {/* ── Queries list card ── */}
+                <Card title="Queries registradas" style={{ marginBottom: 16 }}>
+                  {loading ? (
+                    <Spin />
+                  ) : queries.length === 0 ? (
+                    <Text type="secondary">No hay queries registradas.</Text>
+                  ) : (
+                    <List
+                      dataSource={queries}
+                      renderItem={(item) => (
+                        <List.Item
+                          key={item.id}
+                          onClick={() => selectQuery(item)}
+                          style={{
+                            cursor: "pointer",
+                            border: selectedId === item.id ? "2px solid #1677ff" : "1px solid transparent",
+                            borderRadius: 6,
+                            padding: "8px 12px",
+                            marginBottom: 4
+                          }}
+                        >
+                          <List.Item.Meta
+                            title={item.name}
+                            description={
+                              <Space size={[4, 0]} wrap>
+                                <Text type="secondary">{item.language}</Text>
+                                <Text type="secondary">|</Text>
+                                <Text type="secondary">scope: {item.scope}</Text>
+                                <Text type="secondary">|</Text>
+                                <StatusTag status={item.is_active ? "active" : "inactive"} />
+                                <Text type="secondary">|</Text>
+                                <Text type="secondary">rev: {item.current_revision}</Text>
+                                <Text type="secondary">|</Text>
+                                <Text type="secondary">
+                                  awario:{" "}
+                                  {item.awario_link_status === "linked"
+                                    ? `linked (${item.awario_sync_state ?? "-"})`
+                                    : "missing_awario"}
+                                </Text>
+                              </Space>
+                            }
+                          />
+                        </List.Item>
+                      )}
+                    />
+                  )}
+                </Card>
+
+                {/* ── Query editor card (as form) ── */}
+                <Card
+                  title={
+                    <Flex justify="space-between" align="center" wrap="wrap" gap={8}>
+                      <span>{isCreating ? "Crear query" : `Editar query: ${selectedQuery?.name ?? ""}`}</span>
+                      <Space wrap>
+                        <Button
+                          icon={<SearchOutlined />}
+                          onClick={() => void onPreview()}
+                          loading={isPreviewing}
+                        >
+                          Preview local
+                        </Button>
+                        {canMutate && selectedId ? (
+                          <Button
+                            icon={<ThunderboltOutlined />}
+                            onClick={() => void onDryRun()}
+                            loading={isDryRunning}
+                            disabled={isSelectedQueryBlocked}
+                          >
+                            Dry-run proveedores
+                          </Button>
+                        ) : null}
+                        {canMutate && selectedId ? (
+                          <Button
+                            icon={<SyncOutlined />}
+                            onClick={() => void onManualSync()}
+                            loading={isManualSyncing}
+                            disabled={isSelectedQueryBlocked}
+                          >
+                            Sync manual ahora
+                          </Button>
+                        ) : null}
+                        {canMutate ? (
+                          <Button
+                            type="primary"
+                            onClick={(e) => void onSave(e as unknown as React.FormEvent)}
+                            loading={isSaving}
+                          >
+                            {isCreating ? "Crear" : "Guardar cambios"}
+                          </Button>
+                        ) : null}
+                      </Space>
+                    </Flex>
+                  }
+                  style={{ marginBottom: 16 }}
+                >
+                  <Paragraph type="secondary" style={{ marginBottom: 12 }}>
+                    Cambios aplican en la configuracion al guardar, pero impactan la siguiente corrida programada. Usa
+                    sync manual si necesitas adelantarla.
+                  </Paragraph>
+
+                  {isSelectedQueryBlocked ? (
+                    <Alert
+                      type="warning"
+                      showIcon
+                      title="Esta query esta bloqueada operativamente: falta vinculo Awario. Selecciona una alerta y guarda para activarla."
+                      style={{ marginBottom: 12 }}
+                    />
+                  ) : null}
+                  {manualSyncInfo ? (
+                    <Alert type="info" showIcon title={manualSyncInfo} style={{ marginBottom: 12 }} />
+                  ) : null}
+
+                  <Form layout="vertical">
+                    <Row gutter={16}>
+                      <Col xs={24} sm={12} md={6}>
+                        <Form.Item label="Nombre" required>
+                          <Input
+                            value={form.name}
+                            onChange={(event) =>
+                              setForm((current) => ({ ...current, name: event.target.value }))
+                            }
+                            minLength={2}
+                            maxLength={160}
+                          />
+                        </Form.Item>
+                      </Col>
+                      <Col xs={24} sm={12} md={6}>
+                        <Form.Item label="Idioma" required>
+                          <Input
+                            value={form.language}
+                            onChange={(event) =>
+                              setForm((current) => ({ ...current, language: event.target.value }))
+                            }
+                            maxLength={8}
+                          />
+                        </Form.Item>
+                      </Col>
+                      <Col xs={24} sm={12} md={6}>
+                        <Form.Item label="Scope">
+                          <Select
+                            value={form.scope}
+                            onChange={(value) =>
+                              setForm((current) => ({ ...current, scope: value as QueryScope }))
+                            }
+                            options={[
+                              { value: "claro", label: "claro" },
+                              { value: "competencia", label: "competencia" }
+                            ]}
+                          />
+                        </Form.Item>
+                      </Col>
+                      <Col xs={24} sm={12} md={6}>
+                        <Form.Item label="Estado">
+                          <Select
+                            value={form.isActive ? "active" : "inactive"}
+                            onChange={(value) =>
+                              setForm((current) => ({
+                                ...current,
+                                isActive: value === "active"
+                              }))
+                            }
+                            options={[
+                              { value: "active", label: "active" },
+                              { value: "inactive", label: "inactive" }
+                            ]}
+                          />
+                        </Form.Item>
+                      </Col>
+                    </Row>
+                    <Row gutter={16}>
+                      <Col xs={24} sm={12} md={6}>
+                        <Form.Item label="Prioridad (1-5)">
+                          <InputNumber
+                            min={1}
+                            max={5}
+                            value={form.priority}
+                            onChange={(value) =>
+                              setForm((current) => ({
+                                ...current,
+                                priority: Math.max(1, Math.min(5, value ?? 3))
+                              }))
+                            }
+                            style={{ width: "100%" }}
+                          />
+                        </Form.Item>
+                      </Col>
+                      <Col xs={24} sm={12} md={6}>
+                        <Form.Item label="Max articulos">
+                          <InputNumber
+                            min={1}
+                            max={500}
+                            value={form.maxArticlesPerRun}
+                            onChange={(value) =>
+                              setForm((current) => ({
+                                ...current,
+                                maxArticlesPerRun: Math.max(1, Math.min(500, value ?? 100))
+                              }))
+                            }
+                            style={{ width: "100%" }}
+                          />
+                        </Form.Item>
+                      </Col>
+                      <Col xs={24} sm={24} md={12}>
+                        <Form.Item label="Descripcion">
+                          <Input
+                            value={form.description}
+                            onChange={(event) =>
+                              setForm((current) => ({ ...current, description: event.target.value }))
+                            }
+                            maxLength={600}
+                          />
+                        </Form.Item>
+                      </Col>
+                    </Row>
+                    <Row gutter={16}>
+                      <Col xs={24} sm={24} md={18}>
+                        <Form.Item label="Alerta Awario (obligatoria)" required>
+                          <Select
+                            value={form.awarioAlertId || undefined}
+                            onChange={(value) =>
+                              setForm((current) => ({ ...current, awarioAlertId: value ?? "" }))
+                            }
+                            placeholder="Selecciona una alerta de Awario"
+                            allowClear
+                            showSearch
+                            optionFilterProp="label"
+                            options={[
+                              ...(form.awarioAlertId &&
+                              !awarioAlerts.some((item) => item.alert_id === form.awarioAlertId)
+                                ? [
+                                    {
+                                      value: form.awarioAlertId,
+                                      label: `${form.awarioAlertId} (no visible en el filtro actual)`
+                                    }
+                                  ]
+                                : []),
+                              ...awarioAlerts.map((alert) => ({
+                                value: alert.alert_id,
+                                label: `${alert.name || alert.alert_id} [${alert.alert_id}]${alert.is_active ? "" : " (inactive)"}`
+                              }))
+                            ]}
+                          />
+                        </Form.Item>
+                      </Col>
+                      <Col xs={24} sm={24} md={6}>
+                        <Form.Item label="Buscar alerta">
+                          <Input
+                            value={awarioSearch}
+                            onChange={(event) => setAwarioSearch(event.target.value)}
+                            placeholder="nombre o alert_id"
+                          />
+                        </Form.Item>
+                        <Button
+                          icon={<ReloadOutlined />}
+                          onClick={() => void loadAwarioConfig()}
+                          loading={awarioLoading}
+                          style={{ width: "100%" }}
+                        >
+                          Recargar alertas
+                        </Button>
+                      </Col>
+                    </Row>
+                  </Form>
+
+                  <Text type="secondary" style={{ display: "block", marginTop: 8 }}>
+                    Estado vinculo:{" "}
+                    {selectedQuery
+                      ? selectedQuery.awario_link_status === "linked"
+                        ? `linked (${selectedQuery.awario_sync_state ?? "-"})`
+                        : "missing_awario"
+                      : form.awarioAlertId
+                        ? "seleccionado para crear"
+                        : "pendiente"}
+                    {selectedAwarioAlert
+                      ? ` | alerta: ${selectedAwarioAlert.name ?? selectedAwarioAlert.alert_id}`
+                      : ""}
+                  </Text>
+
+                  {/* ── Rule definition editor ── */}
+                  <Card
+                    title={
+                      <Flex justify="space-between" align="center" wrap="wrap" gap={8}>
+                        <span>Definicion de reglas</span>
+                        <Space>
+                          <Button
+                            type={editorMode === "quick" ? "primary" : "default"}
+                            onClick={() => onModeChange("quick")}
+                          >
+                            Rapido
+                          </Button>
+                          <Button
+                            type={editorMode === "advanced" ? "primary" : "default"}
+                            onClick={() => onModeChange("advanced")}
+                          >
+                            Avanzado (JSON)
+                          </Button>
+                        </Space>
+                      </Flex>
+                    }
+                    style={{ marginTop: 16 }}
+                  >
+                    {editorMode === "quick" ? (
+                      <div>
+                        {!quickCanRepresent ? (
+                          <Alert
+                            type="warning"
+                            showIcon
+                            title="Esta query tenia estructura avanzada. Al guardar en modo rapido se reescribe a frases include/exclude."
+                            style={{ marginBottom: 12 }}
+                          />
+                        ) : null}
+
+                        <Form layout="vertical">
+                          <Row gutter={16}>
+                            <Col xs={24} sm={12}>
+                              <Form.Item label="Campo para buscar">
+                                <Select
+                                  value={quickField}
+                                  onChange={(value) =>
+                                    setQuickField(value as QueryKeywordRule["field"])
+                                  }
+                                  options={[
+                                    { value: "any", label: "any" },
+                                    { value: "title", label: "title" },
+                                    { value: "summary", label: "summary" },
+                                    { value: "content", label: "content" }
+                                  ]}
+                                />
+                              </Form.Item>
+                            </Col>
+                            <Col xs={24} sm={12}>
+                              <Form.Item label="Tipo de match">
+                                <Select
+                                  value={quickMatch}
+                                  onChange={(value) =>
+                                    setQuickMatch(value as QueryKeywordRule["match"])
+                                  }
+                                  options={[
+                                    { value: "phrase", label: "phrase" },
+                                    { value: "contains", label: "contains" }
+                                  ]}
+                                />
+                              </Form.Item>
+                            </Col>
+                          </Row>
+                          <Row gutter={16}>
+                            <Col span={24}>
+                              <Form.Item label="Frases obligatorias (una por linea)">
+                                <Input.TextArea
+                                  rows={6}
+                                  value={quickIncludeText}
+                                  onChange={(event) => setQuickIncludeText(event.target.value)}
+                                  placeholder={"claro colombia\nclaro hogar\nclaro movil"}
+                                />
+                              </Form.Item>
+                            </Col>
+                          </Row>
+                          <Row gutter={16}>
+                            <Col span={24}>
+                              <Form.Item label="Frases excluidas (opcional, una por linea)">
+                                <Input.TextArea
+                                  rows={4}
+                                  value={quickExcludeText}
+                                  onChange={(event) => setQuickExcludeText(event.target.value)}
+                                  placeholder={"futbol\nentretenimiento"}
+                                />
+                              </Form.Item>
+                            </Col>
+                          </Row>
+                        </Form>
+                      </div>
+                    ) : (
+                      <div>
+                        <Alert
+                          type="info"
+                          showIcon
+                          title="Usa este modo para logica completa AND/OR/NOT y facetas provider/language/country/domain."
+                          style={{ marginBottom: 12 }}
+                        />
+
+                        <Form layout="vertical">
+                          <Form.Item label="Definicion JSON">
+                            <Input.TextArea
+                              rows={16}
+                              value={advancedDefinitionText}
+                              onChange={(event) => setAdvancedDefinitionText(event.target.value)}
+                              style={{ fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace" }}
+                            />
+                          </Form.Item>
+                        </Form>
+
+                        <Space>
+                          <Button onClick={onApplyAdvancedJson}>Aplicar JSON al editor</Button>
+                          <Button
+                            onClick={() =>
+                              setAdvancedDefinitionText(JSON.stringify(form.definition, null, 2))
+                            }
+                          >
+                            Restaurar desde version guardada
+                          </Button>
+                        </Space>
+                      </div>
+                    )}
+                  </Card>
+
+                  {/* ── Execution filters ── */}
+                  <Collapse
+                    style={{ marginTop: 12 }}
+                    items={[
+                      {
+                        key: "execution-filters",
+                        label: <Text strong>Filtros de ejecucion (opcional)</Text>,
+                        children: (
+                          <Form layout="vertical">
+                            <Row gutter={16}>
+                              <Col xs={24} sm={12} md={8}>
+                                <Form.Item label="providers_allow">
+                                  <Input
+                                    value={arrayToCsv(form.execution.providers_allow)}
+                                    onChange={(event) =>
+                                      setForm((current) => ({
+                                        ...current,
+                                        execution: {
+                                          ...current.execution,
+                                          providers_allow: csvToArray(event.target.value)
+                                        }
+                                      }))
+                                    }
+                                  />
+                                </Form.Item>
+                              </Col>
+                              <Col xs={24} sm={12} md={8}>
+                                <Form.Item label="providers_deny">
+                                  <Input
+                                    value={arrayToCsv(form.execution.providers_deny)}
+                                    onChange={(event) =>
+                                      setForm((current) => ({
+                                        ...current,
+                                        execution: {
+                                          ...current.execution,
+                                          providers_deny: csvToArray(event.target.value)
+                                        }
+                                      }))
+                                    }
+                                  />
+                                </Form.Item>
+                              </Col>
+                              <Col xs={24} sm={12} md={8}>
+                                <Form.Item label="countries_allow">
+                                  <Input
+                                    value={arrayToCsv(form.execution.countries_allow)}
+                                    onChange={(event) =>
+                                      setForm((current) => ({
+                                        ...current,
+                                        execution: {
+                                          ...current.execution,
+                                          countries_allow: csvToArray(event.target.value)
+                                        }
+                                      }))
+                                    }
+                                  />
+                                </Form.Item>
+                              </Col>
+                              <Col xs={24} sm={12} md={8}>
+                                <Form.Item label="countries_deny">
+                                  <Input
+                                    value={arrayToCsv(form.execution.countries_deny)}
+                                    onChange={(event) =>
+                                      setForm((current) => ({
+                                        ...current,
+                                        execution: {
+                                          ...current.execution,
+                                          countries_deny: csvToArray(event.target.value)
+                                        }
+                                      }))
+                                    }
+                                  />
+                                </Form.Item>
+                              </Col>
+                              <Col xs={24} sm={12} md={8}>
+                                <Form.Item label="domains_allow">
+                                  <Input
+                                    value={arrayToCsv(form.execution.domains_allow)}
+                                    onChange={(event) =>
+                                      setForm((current) => ({
+                                        ...current,
+                                        execution: {
+                                          ...current.execution,
+                                          domains_allow: csvToArray(event.target.value)
+                                        }
+                                      }))
+                                    }
+                                  />
+                                </Form.Item>
+                              </Col>
+                              <Col xs={24} sm={12} md={8}>
+                                <Form.Item label="domains_deny">
+                                  <Input
+                                    value={arrayToCsv(form.execution.domains_deny)}
+                                    onChange={(event) =>
+                                      setForm((current) => ({
+                                        ...current,
+                                        execution: {
+                                          ...current.execution,
+                                          domains_deny: csvToArray(event.target.value)
+                                        }
+                                      }))
+                                    }
+                                  />
+                                </Form.Item>
+                              </Col>
+                            </Row>
+                          </Form>
+                        )
+                      }
+                    ]}
                   />
-                </label>
-              </div>
-            </div>
-          ) : (
-            <div style={{ display: "grid", gap: 10 }}>
-              <div className="alert info" style={{ marginBottom: 0 }}>
-                Usa este modo para logica completa AND/OR/NOT y facetas provider/language/country/domain.
-              </div>
+                </Card>
 
-              <label>
-                Definicion JSON
-                <textarea
-                  rows={16}
-                  value={advancedDefinitionText}
-                  onChange={(event) => setAdvancedDefinitionText(event.target.value)}
-                  style={{ fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace" }}
-                />
-              </label>
-
-              <div className="button-row">
-                <button type="button" className="btn btn-outline" onClick={onApplyAdvancedJson}>
-                  Aplicar JSON al editor
-                </button>
-                <button
-                  type="button"
-                  className="btn btn-outline"
-                  onClick={() => setAdvancedDefinitionText(JSON.stringify(form.definition, null, 2))}
+                {/* ── Revisions card ── */}
+                <Card
+                  title={
+                    <Flex justify="space-between" align="center">
+                      <span>Revisiones</span>
+                      {selectedQuery ? <Text type="secondary">query_id: {selectedQuery.id}</Text> : null}
+                    </Flex>
+                  }
+                  style={{ marginBottom: 16 }}
                 >
-                  Restaurar desde version guardada
-                </button>
-              </div>
-            </div>
-          )}
-        </section>
+                  {!selectedId ? <Text type="secondary">Selecciona una query para ver revisiones.</Text> : null}
+                  {selectedId && loadingRevisions ? <Spin /> : null}
+                  {selectedId && !loadingRevisions && revisions.length === 0 ? (
+                    <Text type="secondary">Sin revisiones disponibles.</Text>
+                  ) : null}
 
-        <details style={{ marginTop: 12 }}>
-          <summary style={{ cursor: "pointer", fontWeight: 700 }}>Filtros de ejecucion (opcional)</summary>
-          <div className="form-grid" style={{ gridTemplateColumns: "repeat(3, minmax(0, 1fr))", marginTop: 12 }}>
-            <label>
-              providers_allow
-              <input
-                value={arrayToCsv(form.execution.providers_allow)}
-                onChange={(event) =>
-                  setForm((current) => ({
-                    ...current,
-                    execution: {
-                      ...current.execution,
-                      providers_allow: csvToArray(event.target.value)
-                    }
-                  }))
-                }
-              />
-            </label>
+                  {selectedId && revisions.length > 0 ? (
+                    <>
+                      <List
+                        dataSource={revisions.slice(0, 12)}
+                        renderItem={(revision) => (
+                          <List.Item key={revision.id}>
+                            <List.Item.Meta
+                              title={`Revision #${revision.revision}`}
+                              description={`${formatDateTime(revision.created_at)} | reason: ${revision.change_reason ?? "(sin motivo)"}`}
+                            />
+                          </List.Item>
+                        )}
+                      />
 
-            <label>
-              providers_deny
-              <input
-                value={arrayToCsv(form.execution.providers_deny)}
-                onChange={(event) =>
-                  setForm((current) => ({
-                    ...current,
-                    execution: {
-                      ...current.execution,
-                      providers_deny: csvToArray(event.target.value)
-                    }
-                  }))
-                }
-              />
-            </label>
+                      {canMutate ? (
+                        <Space style={{ marginTop: 12 }}>
+                          <Select
+                            value={rollbackRevision ?? undefined}
+                            onChange={(value) => setRollbackRevision(value)}
+                            style={{ minWidth: 180 }}
+                            options={revisions.map((revision) => ({
+                              value: revision.revision,
+                              label: `Revision ${revision.revision}`
+                            }))}
+                          />
+                          <Button
+                            icon={<RollbackOutlined />}
+                            onClick={() => void onRollback()}
+                            disabled={!rollbackRevision}
+                          >
+                            Rollback
+                          </Button>
+                          <Button
+                            danger
+                            icon={<DeleteOutlined />}
+                            onClick={() => void onDelete()}
+                          >
+                            Hard delete
+                          </Button>
+                        </Space>
+                      ) : null}
+                    </>
+                  ) : null}
+                </Card>
 
-            <label>
-              countries_allow
-              <input
-                value={arrayToCsv(form.execution.countries_allow)}
-                onChange={(event) =>
-                  setForm((current) => ({
-                    ...current,
-                    execution: {
-                      ...current.execution,
-                      countries_allow: csvToArray(event.target.value)
-                    }
-                  }))
-                }
-              />
-            </label>
+                {/* ── Preview local results ── */}
+                {previewResult ? (
+                  <Card title="Preview local" style={{ marginBottom: 16 }}>
+                    <Row gutter={16} style={{ marginBottom: 16 }}>
+                      <Col xs={12} sm={12} md={6}>
+                        <Card>
+                          <Statistic title="Matched" value={previewResult.matched_count} />
+                        </Card>
+                      </Col>
+                      <Col xs={12} sm={12} md={6}>
+                        <Card>
+                          <Statistic title="Candidates" value={previewResult.candidates_count} />
+                        </Card>
+                      </Col>
+                    </Row>
 
-            <label>
-              countries_deny
-              <input
-                value={arrayToCsv(form.execution.countries_deny)}
-                onChange={(event) =>
-                  setForm((current) => ({
-                    ...current,
-                    execution: {
-                      ...current.execution,
-                      countries_deny: csvToArray(event.target.value)
-                    }
-                  }))
-                }
-              />
-            </label>
+                    <Typography.Title level={5}>Provider breakdown</Typography.Title>
+                    <List
+                      size="small"
+                      dataSource={previewResult.provider_breakdown}
+                      locale={{ emptyText: "Sin datos de proveedores." }}
+                      renderItem={(entry) => (
+                        <List.Item>
+                          <Text strong>{entry.provider}</Text>
+                          <Text>{entry.count}</Text>
+                        </List.Item>
+                      )}
+                    />
 
-            <label>
-              domains_allow
-              <input
-                value={arrayToCsv(form.execution.domains_allow)}
-                onChange={(event) =>
-                  setForm((current) => ({
-                    ...current,
-                    execution: {
-                      ...current.execution,
-                      domains_allow: csvToArray(event.target.value)
-                    }
-                  }))
-                }
-              />
-            </label>
+                    <Typography.Title level={5} style={{ marginTop: 16 }}>
+                      Muestra
+                    </Typography.Title>
+                    <Form layout="vertical">
+                      <Row gutter={16}>
+                        <Col xs={24} sm={8}>
+                          <Form.Item label="Filtrar por origen">
+                            <Select
+                              value={sampleOriginFilter}
+                              onChange={(value) => setSampleOriginFilter(value as OriginType | "all")}
+                              options={[
+                                { value: "all", label: "all" },
+                                { value: "news", label: "news" },
+                                { value: "awario", label: "awario" }
+                              ]}
+                            />
+                          </Form.Item>
+                        </Col>
+                        <Col xs={24} sm={16}>
+                          <Form.Item label="Filtrar por tag exacto">
+                            <Input
+                              value={sampleTagFilter}
+                              onChange={(event) => setSampleTagFilter(event.target.value)}
+                              placeholder="origin:news, provider:newsapi, medium:cnn"
+                            />
+                          </Form.Item>
+                        </Col>
+                      </Row>
+                    </Form>
+                    <Text type="secondary">
+                      Mostrando {filteredPreviewSample.length} de {previewResult.sample.length} items de
+                      muestra.
+                    </Text>
+                    <List
+                      style={{ marginTop: 8 }}
+                      dataSource={filteredPreviewSample}
+                      locale={{ emptyText: "No hubo coincidencias para la muestra con estos filtros." }}
+                      renderItem={(item) => (
+                        <List.Item key={item.content_item_id}>{renderSampleItem(item)}</List.Item>
+                      )}
+                    />
 
-            <label>
-              domains_deny
-              <input
-                value={arrayToCsv(form.execution.domains_deny)}
-                onChange={(event) =>
-                  setForm((current) => ({
-                    ...current,
-                    execution: {
-                      ...current.execution,
-                      domains_deny: csvToArray(event.target.value)
-                    }
-                  }))
-                }
-              />
-            </label>
-          </div>
-        </details>
-      </form>
+                    <Collapse
+                      style={{ marginTop: 12 }}
+                      items={[
+                        {
+                          key: "preview-json",
+                          label: <Text strong>Ver JSON</Text>,
+                          children: (
+                            <Typography.Paragraph
+                              code
+                              style={{ whiteSpace: "pre-wrap", margin: 0, fontSize: 12 }}
+                            >
+                              {JSON.stringify(previewResult, null, 2)}
+                            </Typography.Paragraph>
+                          )
+                        }
+                      ]}
+                    />
+                  </Card>
+                ) : null}
 
-      <section className="panel" style={{ marginTop: 16 }}>
-        <div className="section-title-row">
-          <h3>Revisiones</h3>
-          {selectedQuery ? <span className="term-meta">query_id: {selectedQuery.id}</span> : null}
-        </div>
-        {selectedId ? null : <p>Selecciona una query para ver revisiones.</p>}
-        {selectedId && loadingRevisions ? <p>Cargando revisiones...</p> : null}
-        {selectedId && !loadingRevisions && revisions.length === 0 ? <p>Sin revisiones disponibles.</p> : null}
+                {/* ── Dry-run results ── */}
+                {dryRunResult ? (
+                  <Card title="Dry-run proveedores" style={{ marginBottom: 16 }}>
+                    <Row gutter={16} style={{ marginBottom: 16 }}>
+                      <Col xs={12} sm={6}>
+                        <Card>
+                          <Statistic title="Raw" value={dryRunResult.totals.raw_count} />
+                        </Card>
+                      </Col>
+                      <Col xs={12} sm={6}>
+                        <Card>
+                          <Statistic title="Fetched" value={dryRunResult.totals.fetched_count} />
+                        </Card>
+                      </Col>
+                      <Col xs={12} sm={6}>
+                        <Card>
+                          <Statistic title="Matched" value={dryRunResult.totals.matched_count} />
+                        </Card>
+                      </Col>
+                      <Col xs={12} sm={6}>
+                        <Card>
+                          <Statistic
+                            title="Origin"
+                            value={
+                              Object.entries(dryRunResult.totals.origin_breakdown)
+                                .map(([origin, count]) => `${origin}:${count}`)
+                                .join(" | ") || "-"
+                            }
+                            valueStyle={{ fontSize: "1.2rem" }}
+                          />
+                        </Card>
+                      </Col>
+                    </Row>
 
-        {selectedId && revisions.length > 0 ? (
-          <>
-            <ul className="term-list">
-              {revisions.slice(0, 12).map((revision) => (
-                <li key={revision.id} className="term-item">
-                  <div>
-                    <p className="term-name">Revision #{revision.revision}</p>
-                    <p className="term-meta">
-                      {formatDateTime(revision.created_at)} | reason: {revision.change_reason ?? "(sin motivo)"}
-                    </p>
-                  </div>
-                </li>
-              ))}
-            </ul>
+                    <Table
+                      dataSource={dryRunResult.providers}
+                      columns={dryRunProviderColumns}
+                      rowKey="provider"
+                      pagination={false}
+                      size="small"
+                      scroll={{ x: true }}
+                    />
 
-            {canMutate ? (
-              <div className="button-row">
-                <select
-                  value={rollbackRevision ?? ""}
-                  onChange={(event) => setRollbackRevision(Number.parseInt(event.target.value, 10))}
+                    <Typography.Title level={5} style={{ marginTop: 16 }}>
+                      Muestra dry-run
+                    </Typography.Title>
+                    <Text type="secondary">
+                      Mostrando {filteredDryRunSample.length} de {dryRunResult.sample.length} items de
+                      muestra.
+                    </Text>
+                    <List
+                      style={{ marginTop: 8 }}
+                      dataSource={filteredDryRunSample}
+                      locale={{ emptyText: "No hubo coincidencias para la muestra con estos filtros." }}
+                      renderItem={(item) => (
+                        <List.Item key={`${item.provider}-${item.canonical_url}`}>
+                          {renderSampleItem(item)}
+                        </List.Item>
+                      )}
+                    />
+
+                    <Collapse
+                      style={{ marginTop: 12 }}
+                      items={[
+                        {
+                          key: "dryrun-json",
+                          label: <Text strong>Ver JSON</Text>,
+                          children: (
+                            <Typography.Paragraph
+                              code
+                              style={{ whiteSpace: "pre-wrap", margin: 0, fontSize: 12 }}
+                            >
+                              {JSON.stringify(dryRunResult, null, 2)}
+                            </Typography.Paragraph>
+                          )
+                        }
+                      ]}
+                    />
+                  </Card>
+                ) : null}
+              </>
+            )
+          },
+          {
+            key: "awario",
+            label: "Awario",
+            children: (
+              <>
+                {error ? <Alert type="error" showIcon title={error} style={{ marginBottom: 16 }} /> : null}
+                {!canMutate ? (
+                  <Alert
+                    type="info"
+                    showIcon
+                    title={`Tu rol es ${session?.role}. Solo Admin puede vincular, pausar/reanudar y reintentar backfill.`}
+                    style={{ marginBottom: 16 }}
+                  />
+                ) : null}
+                {awarioInfo ? (
+                  <Alert type="info" showIcon title={awarioInfo} style={{ marginBottom: 16 }} />
+                ) : null}
+
+                {/* ── Available Awario alerts ── */}
+                <Card
+                  title={
+                    <Flex justify="space-between" align="center">
+                      <span>Alertas disponibles en Awario</span>
+                      <Button
+                        icon={<ReloadOutlined />}
+                        onClick={() => void loadAwarioConfig()}
+                        loading={awarioLoading}
+                      >
+                        Recargar
+                      </Button>
+                    </Flex>
+                  }
+                  style={{ marginBottom: 16 }}
                 >
-                  {revisions.map((revision) => (
-                    <option key={revision.id} value={revision.revision}>
-                      Revision {revision.revision}
-                    </option>
-                  ))}
-                </select>
-                <button className="btn btn-outline" type="button" onClick={onRollback} disabled={!rollbackRevision}>
-                  Rollback
-                </button>
-                <button className="btn btn-outline" type="button" onClick={onDelete}>
-                  Hard delete
-                </button>
-              </div>
-            ) : null}
-          </>
-        ) : null}
-      </section>
+                  <Form layout="vertical">
+                    <Row gutter={16} align="bottom">
+                      <Col xs={24} sm={12} md={10}>
+                        <Form.Item label="Buscar alerta">
+                          <Input
+                            value={awarioSearch}
+                            onChange={(event) => setAwarioSearch(event.target.value)}
+                            placeholder="nombre o alert_id"
+                            prefix={<SearchOutlined />}
+                          />
+                        </Form.Item>
+                      </Col>
+                      <Col xs={12} sm={6} md={6}>
+                        <Form.Item label=" ">
+                          <Checkbox
+                            checked={awarioIncludeInactive}
+                            onChange={(event) => setAwarioIncludeInactive(event.target.checked)}
+                          >
+                            incluir inactivas
+                          </Checkbox>
+                        </Form.Item>
+                      </Col>
+                      <Col xs={12} sm={6} md={4}>
+                        <Form.Item label=" ">
+                          <Text type="secondary">items: {awarioAlerts.length}</Text>
+                        </Form.Item>
+                      </Col>
+                    </Row>
+                  </Form>
 
-      {previewResult ? (
-        <section className="panel" style={{ marginTop: 16 }}>
-          <h3>Preview local</h3>
-          <div className="kpi-grid" style={{ marginBottom: 12 }}>
-            <article className="panel kpi-card" style={{ marginBottom: 0 }}>
-              <span className="kpi-caption">Matched</span>
-              <strong className="kpi-value">{previewResult.matched_count}</strong>
-            </article>
-            <article className="panel kpi-card" style={{ marginBottom: 0 }}>
-              <span className="kpi-caption">Candidates</span>
-              <strong className="kpi-value">{previewResult.candidates_count}</strong>
-            </article>
-          </div>
+                  {awarioLoading ? (
+                    <Spin style={{ marginTop: 10 }} />
+                  ) : awarioAlerts.length === 0 ? (
+                    <Text type="secondary">No hay alertas remotas para mostrar.</Text>
+                  ) : (
+                    <Table
+                      dataSource={awarioAlerts}
+                      columns={awarioAlertsColumns}
+                      rowKey="alert_id"
+                      pagination={false}
+                      size="small"
+                      scroll={{ x: true }}
+                      style={{ marginTop: 12 }}
+                    />
+                  )}
+                </Card>
 
-          <h4>Provider breakdown</h4>
-          <ul className="simple-list simple-list--stacked" style={{ marginTop: 8 }}>
-            {previewResult.provider_breakdown.map((entry) => (
-              <li key={`${entry.provider}-${entry.count}`}>
-                <strong>{entry.provider}</strong>
-                <span>{entry.count}</span>
-              </li>
-            ))}
-            {previewResult.provider_breakdown.length === 0 ? <li>Sin datos de proveedores.</li> : null}
-          </ul>
-
-          <h4 style={{ marginTop: 12 }}>Muestra</h4>
-          <div className="form-grid" style={{ gridTemplateColumns: "220px minmax(0, 1fr)", marginTop: 8 }}>
-            <label>
-              Filtrar por origen
-              <select
-                value={sampleOriginFilter}
-                onChange={(event) => setSampleOriginFilter(event.target.value as OriginType | "all")}
-              >
-                <option value="all">all</option>
-                <option value="news">news</option>
-                <option value="awario">awario</option>
-              </select>
-            </label>
-            <label>
-              Filtrar por tag exacto
-              <input
-                value={sampleTagFilter}
-                onChange={(event) => setSampleTagFilter(event.target.value)}
-                placeholder="origin:news, provider:newsapi, medium:cnn"
-              />
-            </label>
-          </div>
-          <p className="term-meta" style={{ marginTop: 8 }}>
-            Mostrando {filteredPreviewSample.length} de {previewResult.sample.length} items de muestra.
-          </p>
-          <ul className="simple-list simple-list--stacked" style={{ marginTop: 8 }}>
-            {filteredPreviewSample.map((item) => (
-              <li key={item.content_item_id}>
-                <div style={{ display: "grid", gap: 4 }}>
-                  <strong>{item.title || "(sin titulo)"}</strong>
-                  <span className="term-meta">
-                    {item.provider} | {formatDateTime(item.published_at)}
-                  </span>
-                  <div className="origin-chip-row">
-                    <span className={`origin-chip origin-chip-${item.origin}`}>{item.origin}</span>
-                    {item.medium ? <span className="origin-chip">medio:{item.medium}</span> : null}
-                    {item.tags.map((tag) => (
-                      <span className="origin-chip" key={`${item.content_item_id}-${tag}`}>
-                        {tag}
-                      </span>
-                    ))}
-                  </div>
-                  <span className="term-meta">{item.canonical_url || "(sin url)"}</span>
-                </div>
-              </li>
-            ))}
-            {filteredPreviewSample.length === 0 ? <li>No hubo coincidencias para la muestra con estos filtros.</li> : null}
-          </ul>
-
-          <details style={{ marginTop: 12 }}>
-            <summary style={{ cursor: "pointer", fontWeight: 700 }}>Ver JSON</summary>
-            <pre style={{ whiteSpace: "pre-wrap", marginTop: 10 }}>{JSON.stringify(previewResult, null, 2)}</pre>
-          </details>
-        </section>
-      ) : null}
-
-      {dryRunResult ? (
-        <section className="panel" style={{ marginTop: 16 }}>
-          <h3>Dry-run proveedores</h3>
-          <div className="kpi-grid" style={{ marginBottom: 12 }}>
-            <article className="panel kpi-card" style={{ marginBottom: 0 }}>
-              <span className="kpi-caption">Raw</span>
-              <strong className="kpi-value">{dryRunResult.totals.raw_count}</strong>
-            </article>
-            <article className="panel kpi-card" style={{ marginBottom: 0 }}>
-              <span className="kpi-caption">Fetched</span>
-              <strong className="kpi-value">{dryRunResult.totals.fetched_count}</strong>
-            </article>
-            <article className="panel kpi-card" style={{ marginBottom: 0 }}>
-              <span className="kpi-caption">Matched</span>
-              <strong className="kpi-value">{dryRunResult.totals.matched_count}</strong>
-            </article>
-            <article className="panel kpi-card" style={{ marginBottom: 0 }}>
-              <span className="kpi-caption">Origin</span>
-              <strong className="kpi-value" style={{ fontSize: "1.2rem" }}>
-                {Object.entries(dryRunResult.totals.origin_breakdown)
-                  .map(([origin, count]) => `${origin}:${count}`)
-                  .join(" | ") || "-"}
-              </strong>
-            </article>
-          </div>
-
-          <div className="incident-table-wrapper">
-            <table className="incident-table">
-              <thead>
-                <tr>
-                  <th>provider</th>
-                  <th>raw</th>
-                  <th>fetched</th>
-                  <th>matched</th>
-                  <th>duracion(ms)</th>
-                  <th>error</th>
-                </tr>
-              </thead>
-              <tbody>
-                {dryRunResult.providers.map((provider) => (
-                  <tr key={provider.provider}>
-                    <td>{provider.provider}</td>
-                    <td>{provider.raw_count}</td>
-                    <td>{provider.fetched_count}</td>
-                    <td>{provider.matched_count}</td>
-                    <td>{provider.duration_ms}</td>
-                    <td>{provider.error_type ? `${provider.error_type}: ${provider.error ?? ""}` : "-"}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-
-          <h4 style={{ marginTop: 12 }}>Muestra dry-run</h4>
-          <p className="term-meta" style={{ marginTop: 4 }}>
-            Mostrando {filteredDryRunSample.length} de {dryRunResult.sample.length} items de muestra.
-          </p>
-          <ul className="simple-list simple-list--stacked" style={{ marginTop: 8 }}>
-            {filteredDryRunSample.map((item) => (
-              <li key={`${item.provider}-${item.canonical_url}`}>
-                <div style={{ display: "grid", gap: 4 }}>
-                  <strong>{item.title || "(sin titulo)"}</strong>
-                  <span className="term-meta">
-                    {item.provider} | {formatDateTime(item.published_at)}
-                  </span>
-                  <div className="origin-chip-row">
-                    <span className={`origin-chip origin-chip-${item.origin}`}>{item.origin}</span>
-                    {item.medium ? <span className="origin-chip">medio:{item.medium}</span> : null}
-                    {item.tags.map((tag) => (
-                      <span className="origin-chip" key={`${item.provider}-${item.canonical_url}-${tag}`}>
-                        {tag}
-                      </span>
-                    ))}
-                  </div>
-                  <span className="term-meta">{item.canonical_url || "(sin url)"}</span>
-                </div>
-              </li>
-            ))}
-            {filteredDryRunSample.length === 0 ? <li>No hubo coincidencias para la muestra con estos filtros.</li> : null}
-          </ul>
-
-          <details style={{ marginTop: 12 }}>
-            <summary style={{ cursor: "pointer", fontWeight: 700 }}>Ver JSON</summary>
-            <pre style={{ whiteSpace: "pre-wrap", marginTop: 10 }}>{JSON.stringify(dryRunResult, null, 2)}</pre>
-          </details>
-        </section>
-      ) : null}
-      </div>
-
-      <div style={{ display: configTab === "awario" ? "block" : "none" }}>
-        {error ? <div className="alert error">{error}</div> : null}
-        {!canMutate ? (
-          <div className="alert info">Tu rol es {session?.role}. Solo Admin puede vincular, pausar/reanudar y reintentar backfill.</div>
-        ) : null}
-        {awarioInfo ? <div className="alert info">{awarioInfo}</div> : null}
-
-        <section className="panel">
-          <div className="section-title-row">
-            <h3>Alertas disponibles en Awario</h3>
-            <button className="btn btn-outline" type="button" onClick={() => void loadAwarioConfig()} disabled={awarioLoading}>
-              Recargar
-            </button>
-          </div>
-
-          <div className="form-grid" style={{ gridTemplateColumns: "2fr auto auto", marginTop: 10 }}>
-            <label>
-              Buscar alerta
-              <input
-                value={awarioSearch}
-                onChange={(event) => setAwarioSearch(event.target.value)}
-                placeholder="nombre o alert_id"
-              />
-            </label>
-            <label style={{ display: "flex", gap: 8, alignItems: "end", fontWeight: 600 }}>
-              <input
-                type="checkbox"
-                checked={awarioIncludeInactive}
-                onChange={(event) => setAwarioIncludeInactive(event.target.checked)}
-              />
-              incluir inactivas
-            </label>
-            <div style={{ display: "flex", alignItems: "end" }}>
-              <span className="term-meta">items: {awarioAlerts.length}</span>
-            </div>
-          </div>
-
-          {awarioLoading ? <p style={{ marginTop: 10 }}>Cargando alertas...</p> : null}
-          {!awarioLoading && awarioAlerts.length === 0 ? <p style={{ marginTop: 10 }}>No hay alertas remotas para mostrar.</p> : null}
-
-          {!awarioLoading && awarioAlerts.length > 0 ? (
-            <div className="incident-table-wrapper" style={{ marginTop: 12 }}>
-              <table className="incident-table">
-                <thead>
-                  <tr>
-                    <th>Nombre</th>
-                    <th>alert_id</th>
-                    <th>Estado</th>
-                    <th>Accion</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {awarioAlerts.map((alert) => {
-                    const isLinked = linkedAwarioAlertIds.has(alert.alert_id);
-                    return (
-                      <tr key={alert.alert_id}>
-                        <td>{alert.name ?? "(sin nombre)"}</td>
-                        <td>{alert.alert_id}</td>
-                        <td>{alert.is_active ? "active" : "inactive"}</td>
-                        <td>
-                          {canMutate ? (
-                            <button
-                              className="btn btn-outline"
-                              type="button"
-                              onClick={() => void onLinkAwarioAlert(alert.alert_id)}
-                              disabled={awarioLinkingAlertId === alert.alert_id}
-                            >
-                              {awarioLinkingAlertId === alert.alert_id
-                                ? "Vinculando..."
-                                : isLinked
-                                  ? "Re-vincular"
-                                  : "Vincular"}
-                            </button>
-                          ) : (
-                            <span className="term-meta">{isLinked ? "vinculada" : "-"}</span>
-                          )}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          ) : null}
-        </section>
-
-        <section className="panel" style={{ marginTop: 16 }}>
-          <div className="section-title-row">
-            <h3>Alertas vinculadas</h3>
-            <span className="term-meta">{awarioBindings.length} bindings</span>
-          </div>
-
-          {awarioLoading ? <p>Cargando bindings...</p> : null}
-          {!awarioLoading && awarioBindings.length === 0 ? <p>Sin bindings configurados.</p> : null}
-
-          {!awarioLoading && awarioBindings.length > 0 ? (
-            <div className="incident-table-wrapper" style={{ marginTop: 8 }}>
-              <table className="incident-table">
-                <thead>
-                  <tr>
-                    <th>alert_id</th>
-                    <th>status</th>
-                    <th>sync_state</th>
-                    <th>ultimo sync</th>
-                    <th>backfill</th>
-                    <th>error</th>
-                    <th>acciones</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {awarioBindings.map((binding) => (
-                    <tr key={binding.id}>
-                      <td>{binding.awario_alert_id}</td>
-                      <td>{binding.status}</td>
-                      <td>{binding.sync_state}</td>
-                      <td>{formatDateTime(binding.last_sync_at)}</td>
-                      <td>{formatBackfillState(binding)}</td>
-                      <td>{binding.last_sync_error ?? "-"}</td>
-                      <td>
-                        <div className="button-row">
-                          {canMutate ? (
-                            <button
-                              className="btn btn-outline"
-                              type="button"
-                              onClick={() => void onToggleAwarioBindingStatus(binding)}
-                              disabled={awarioBindingActionId === binding.id}
-                            >
-                              {awarioBindingActionId === binding.id
-                                ? "Actualizando..."
-                                : binding.status === "active"
-                                  ? "Pausar"
-                                  : "Reanudar"}
-                            </button>
-                          ) : null}
-                          {canMutate ? (
-                            <button
-                              className="btn btn-outline"
-                              type="button"
-                              onClick={() => void onRetryAwarioBackfill(binding.id)}
-                              disabled={awarioBindingActionId === binding.id || binding.status !== "active"}
-                            >
-                              Reintentar backfill
-                            </button>
-                          ) : null}
-                        </div>
-                        <details style={{ marginTop: 6 }}>
-                          <summary style={{ cursor: "pointer" }}>Detalle tecnico</summary>
-                          <pre style={{ whiteSpace: "pre-wrap", marginTop: 6 }}>{JSON.stringify(binding.metadata ?? {}, null, 2)}</pre>
-                        </details>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          ) : null}
-        </section>
-      </div>
+                {/* ── Linked Awario bindings ── */}
+                <Card
+                  title={
+                    <Flex justify="space-between" align="center">
+                      <span>Alertas vinculadas</span>
+                      <Text type="secondary">{awarioBindings.length} bindings</Text>
+                    </Flex>
+                  }
+                  style={{ marginBottom: 16 }}
+                >
+                  {awarioLoading ? (
+                    <Spin />
+                  ) : awarioBindings.length === 0 ? (
+                    <Text type="secondary">Sin bindings configurados.</Text>
+                  ) : (
+                    <Table
+                      dataSource={awarioBindings}
+                      columns={awarioBindingsColumns}
+                      rowKey="id"
+                      pagination={false}
+                      size="small"
+                      scroll={{ x: true }}
+                    />
+                  )}
+                </Card>
+              </>
+            )
+          }
+        ]}
+      />
     </section>
   );
 };

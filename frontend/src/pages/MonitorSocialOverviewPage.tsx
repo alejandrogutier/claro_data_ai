@@ -1,24 +1,24 @@
-import { useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
+import { useEffect, useMemo, useRef, useState, useCallback, type MouseEvent } from "react";
 import { useSearchParams } from "react-router-dom";
 import {
-  Bar,
-  BarChart,
-  CartesianGrid,
-  Cell,
-  Legend,
-  Line,
-  LineChart,
-  Pie,
-  PieChart,
-  ReferenceLine,
-  ResponsiveContainer,
-  Scatter,
-  ScatterChart,
-  Tooltip,
-  XAxis,
-  YAxis,
-  ZAxis
-} from "recharts";
+  Card, Row, Col, Tabs, Segmented, Select, Input, InputNumber, Button, Alert, Spin,
+  Empty, Table, Tag, Tooltip as AntTooltip, Popover, Descriptions, Typography, Checkbox, Space, Flex
+} from "antd";
+import {
+  ReloadOutlined, DownloadOutlined, FileExcelOutlined, InfoCircleOutlined,
+  SearchOutlined, ClearOutlined, FilterOutlined
+} from "@ant-design/icons";
+import { Group } from "@visx/group";
+import { Bar, LinePath, Pie, Circle, Line as VisxLine } from "@visx/shape";
+import { AxisBottom, AxisLeft, AxisRight } from "@visx/axis";
+import { scaleLinear, scaleBand, scaleOrdinal, scaleLog } from "@visx/scale";
+import { GridRows } from "@visx/grid";
+import { ParentSize } from "@visx/responsive";
+import { useTooltip, TooltipWithBounds, defaultStyles as defaultTooltipStyles } from "@visx/tooltip";
+import { localPoint } from "@visx/event";
+import { curveMonotoneX, curveLinear } from "@visx/curve";
+import { Text } from "@visx/text";
+import { LegendOrdinal } from "@visx/legend";
 import type {
   MonitorSocialAccountsResponse,
   MonitorSocialErBreakdownResponse,
@@ -50,6 +50,13 @@ import { useAuth } from "../auth/AuthContext";
 import PostsTab from "../components/social/PostsTab";
 import { computeER } from "../components/social/postsUtils";
 import type { PostRow } from "../components/social/postsTypes";
+import { PageHeader } from "../components/shared/PageHeader";
+import { KpiCard } from "../components/shared/KpiCard";
+import { SentimentTag } from "../components/shared/SentimentTag";
+import { StatusTag } from "../components/shared/StatusTag";
+import { SeverityTag } from "../components/shared/SeverityTag";
+
+const { Text: AntText } = Typography;
 
 const CHANNEL_OPTIONS: SocialChannel[] = ["facebook", "instagram", "linkedin", "tiktok", "x"];
 const PRESET_OPTIONS: SocialDatePreset[] = ["ytd", "90d", "30d", "y2024", "y2025", "last_quarter", "custom", "all"];
@@ -90,18 +97,16 @@ type ScatterMetric = "posts" | "exposure_total" | "engagement_total" | BaseMetri
 type BreakdownMetric = "posts" | "exposure_total" | "engagement_total" | BaseMetricTotal | "er_global" | DerivedMetricRate;
 type SecondaryKpiMetric = BaseMetricTotal | DerivedMetricRate;
 
-type KpiCard = {
+type KpiCardData = {
   id: string;
   title: string;
   value: string;
   previous: string;
   goal: string;
   status: string;
-  statusClass: string;
+  statusColor: string;
   info: string;
 };
-
-// PostRow imported from ../components/social/postsTypes
 
 type ChartTooltipEntry = {
   dataKey?: string | number;
@@ -156,139 +161,44 @@ const METRIC_META: Record<string, { label: string; format: NumberFormatMode }> =
 };
 
 const TREND_METRICS: TrendMetric[] = [
-  "posts",
-  "exposure_total",
-  "engagement_total",
-  "impressions_total",
-  "reach_total",
-  "clicks_total",
-  "likes_total",
-  "comments_total",
-  "shares_total",
-  "views_total",
-  "er_global",
-  "ctr",
-  "er_impressions",
-  "er_reach",
-  "view_rate",
-  "likes_share",
-  "comments_share",
-  "shares_share",
-  "riesgo_activo",
-  "shs"
+  "posts", "exposure_total", "engagement_total", "impressions_total", "reach_total",
+  "clicks_total", "likes_total", "comments_total", "shares_total", "views_total",
+  "er_global", "ctr", "er_impressions", "er_reach", "view_rate",
+  "likes_share", "comments_share", "shares_share", "riesgo_activo", "shs"
 ];
 const MIX_METRICS: MixMetric[] = [
-  "posts",
-  "exposure_total",
-  "engagement_total",
-  "impressions_total",
-  "reach_total",
-  "clicks_total",
-  "likes_total",
-  "comments_total",
-  "shares_total",
-  "views_total",
-  "er_global",
-  "ctr",
-  "er_impressions",
-  "er_reach",
-  "view_rate",
-  "likes_share",
-  "comments_share",
-  "shares_share",
-  "riesgo_activo",
-  "sov_interno"
+  "posts", "exposure_total", "engagement_total", "impressions_total", "reach_total",
+  "clicks_total", "likes_total", "comments_total", "shares_total", "views_total",
+  "er_global", "ctr", "er_impressions", "er_reach", "view_rate",
+  "likes_share", "comments_share", "shares_share", "riesgo_activo", "sov_interno"
 ];
 const ACCOUNT_METRICS: AccountMetric[] = [
-  "er_ponderado",
-  "posts",
-  "exposure_total",
-  "engagement_total",
-  "impressions_total",
-  "reach_total",
-  "clicks_total",
-  "likes_total",
-  "comments_total",
-  "shares_total",
-  "views_total",
-  "ctr",
-  "er_impressions",
-  "er_reach",
-  "view_rate",
-  "likes_share",
-  "comments_share",
-  "shares_share",
-  "riesgo_activo",
-  "sov_interno"
+  "er_ponderado", "posts", "exposure_total", "engagement_total", "impressions_total",
+  "reach_total", "clicks_total", "likes_total", "comments_total", "shares_total",
+  "views_total", "ctr", "er_impressions", "er_reach", "view_rate",
+  "likes_share", "comments_share", "shares_share", "riesgo_activo", "sov_interno"
 ];
 const SCATTER_METRICS: ScatterMetric[] = [
-  "exposure_total",
-  "engagement_total",
-  "impressions_total",
-  "reach_total",
-  "clicks_total",
-  "likes_total",
-  "comments_total",
-  "shares_total",
-  "views_total",
-  "er_global",
-  "ctr",
-  "er_impressions",
-  "er_reach",
-  "view_rate",
-  "likes_share",
-  "comments_share",
-  "shares_share",
-  "posts"
+  "exposure_total", "engagement_total", "impressions_total", "reach_total",
+  "clicks_total", "likes_total", "comments_total", "shares_total", "views_total",
+  "er_global", "ctr", "er_impressions", "er_reach", "view_rate",
+  "likes_share", "comments_share", "shares_share", "posts"
 ];
 const BREAKDOWN_METRICS: BreakdownMetric[] = [
-  "er_global",
-  "ctr",
-  "er_impressions",
-  "er_reach",
-  "view_rate",
-  "likes_share",
-  "comments_share",
-  "shares_share",
-  "exposure_total",
-  "engagement_total",
-  "impressions_total",
-  "reach_total",
-  "clicks_total",
-  "likes_total",
-  "comments_total",
-  "shares_total",
-  "views_total",
-  "posts"
+  "er_global", "ctr", "er_impressions", "er_reach", "view_rate",
+  "likes_share", "comments_share", "shares_share", "exposure_total", "engagement_total",
+  "impressions_total", "reach_total", "clicks_total", "likes_total", "comments_total",
+  "shares_total", "views_total", "posts"
 ];
 const SECONDARY_KPI_METRICS: SecondaryKpiMetric[] = [
-  "impressions_total",
-  "reach_total",
-  "clicks_total",
-  "likes_total",
-  "comments_total",
-  "shares_total",
-  "views_total",
-  "ctr",
-  "er_impressions",
-  "er_reach",
-  "view_rate",
-  "likes_share",
-  "comments_share",
-  "shares_share"
+  "impressions_total", "reach_total", "clicks_total", "likes_total", "comments_total",
+  "shares_total", "views_total", "ctr", "er_impressions", "er_reach", "view_rate",
+  "likes_share", "comments_share", "shares_share"
 ];
 const TIME_GRANULARITY_OPTIONS: TimeGranularity[] = ["day", "week", "month", "quarter", "semester"];
 const ADDITIVE_METRICS = [
-  "posts",
-  "exposure_total",
-  "engagement_total",
-  "impressions_total",
-  "reach_total",
-  "clicks_total",
-  "likes_total",
-  "comments_total",
-  "shares_total",
-  "views_total"
+  "posts", "exposure_total", "engagement_total", "impressions_total", "reach_total",
+  "clicks_total", "likes_total", "comments_total", "shares_total", "views_total"
 ];
 const LOG_SCALE_FLOOR = 0.01;
 
@@ -335,24 +245,14 @@ const formatDate = (value: string | null | undefined): string => {
   if (!value) return "n/a";
   const parsed = new Date(value);
   if (Number.isNaN(parsed.getTime())) return value;
-  return new Intl.DateTimeFormat("es-CO", {
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit"
-  }).format(parsed);
+  return new Intl.DateTimeFormat("es-CO", { year: "numeric", month: "2-digit", day: "2-digit" }).format(parsed);
 };
 
 const formatDateTime = (value: string | null | undefined): string => {
   if (!value) return "n/a";
   const parsed = new Date(value);
   if (Number.isNaN(parsed.getTime())) return value;
-  return new Intl.DateTimeFormat("es-CO", {
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit"
-  }).format(parsed);
+  return new Intl.DateTimeFormat("es-CO", { year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" }).format(parsed);
 };
 
 const truncate = (value: string, max = 28): string => (value.length <= max ? value : `${value.slice(0, Math.max(1, max - 3))}...`);
@@ -412,12 +312,7 @@ const normalizePostType = (value: string): string => {
 const parseCsvList = (raw: string | null): string[] => {
   if (!raw) return [];
   return Array.from(
-    new Set(
-      raw
-        .split(",")
-        .map((item) => item.trim())
-        .filter((item) => item.length > 0)
-    )
+    new Set(raw.split(",").map((item) => item.trim()).filter((item) => item.length > 0))
   );
 };
 
@@ -517,63 +412,36 @@ const toIsoWeekInfo = (value: Date): { isoYear: number; week: number; weekStart:
   const date = toDateOnlyUtc(value);
   const dayNr = (date.getUTCDay() + 6) % 7;
   const weekStart = addDaysUtc(date, -dayNr);
-
   const thursday = addDaysUtc(weekStart, 3);
   const isoYear = thursday.getUTCFullYear();
   const week1 = new Date(Date.UTC(isoYear, 0, 4));
   const week1DayNr = (week1.getUTCDay() + 6) % 7;
   const week1Monday = addDaysUtc(week1, -week1DayNr);
   const week = 1 + Math.round((weekStart.getTime() - week1Monday.getTime()) / 604_800_000);
-
   return { isoYear, week, weekStart };
 };
 
 const toTimeBucketMeta = (value: Date, granularity: TimeGranularity): { key: string; label: string; start: Date; end: Date } => {
   const date = toDateOnlyUtc(value);
   if (granularity === "day") {
-    return {
-      key: formatDateOnlyUtc(date),
-      label: formatDateOnlyUtc(date),
-      start: date,
-      end: addDaysUtc(date, 1)
-    };
+    return { key: formatDateOnlyUtc(date), label: formatDateOnlyUtc(date), start: date, end: addDaysUtc(date, 1) };
   }
   if (granularity === "week") {
     const info = toIsoWeekInfo(date);
-    return {
-      key: `${info.isoYear}-W${String(info.week).padStart(2, "0")}`,
-      label: `${info.isoYear}-W${String(info.week).padStart(2, "0")}`,
-      start: info.weekStart,
-      end: addDaysUtc(info.weekStart, 7)
-    };
+    return { key: `${info.isoYear}-W${String(info.week).padStart(2, "0")}`, label: `${info.isoYear}-W${String(info.week).padStart(2, "0")}`, start: info.weekStart, end: addDaysUtc(info.weekStart, 7) };
   }
   if (granularity === "month") {
     const start = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), 1));
-    return {
-      key: `${start.getUTCFullYear()}-${String(start.getUTCMonth() + 1).padStart(2, "0")}`,
-      label: `${start.getUTCFullYear()}-${String(start.getUTCMonth() + 1).padStart(2, "0")}`,
-      start,
-      end: addMonthsUtc(start, 1)
-    };
+    return { key: `${start.getUTCFullYear()}-${String(start.getUTCMonth() + 1).padStart(2, "0")}`, label: `${start.getUTCFullYear()}-${String(start.getUTCMonth() + 1).padStart(2, "0")}`, start, end: addMonthsUtc(start, 1) };
   }
   if (granularity === "quarter") {
     const quarter = Math.floor(date.getUTCMonth() / 3) + 1;
     const start = new Date(Date.UTC(date.getUTCFullYear(), (quarter - 1) * 3, 1));
-    return {
-      key: `${start.getUTCFullYear()}-Q${quarter}`,
-      label: `${start.getUTCFullYear()}-Q${quarter}`,
-      start,
-      end: addMonthsUtc(start, 3)
-    };
+    return { key: `${start.getUTCFullYear()}-Q${quarter}`, label: `${start.getUTCFullYear()}-Q${quarter}`, start, end: addMonthsUtc(start, 3) };
   }
   const semester = date.getUTCMonth() < 6 ? 1 : 2;
   const start = new Date(Date.UTC(date.getUTCFullYear(), semester === 1 ? 0 : 6, 1));
-  return {
-    key: `${start.getUTCFullYear()}-S${semester}`,
-    label: `${start.getUTCFullYear()}-S${semester}`,
-    start,
-    end: addMonthsUtc(start, 6)
-  };
+  return { key: `${start.getUTCFullYear()}-S${semester}`, label: `${start.getUTCFullYear()}-S${semester}`, start, end: addMonthsUtc(start, 6) };
 };
 
 const aggregateMetricByPosts = (sum: number, weightedSum: number, posts: number, metric: string): number => {
@@ -589,39 +457,14 @@ const aggregateTrendSeriesRows = <
     posts: number;
     [key: string]: string | number | null | undefined;
   }
->(
-  rows: T[],
-  granularity: TimeGranularity,
-  metrics: string[]
-): T[] => {
+>(rows: T[], granularity: TimeGranularity, metrics: string[]): T[] => {
   if (granularity !== "quarter" && granularity !== "semester") return rows;
-
-  const byBucket = new Map<
-    string,
-    {
-      label: string;
-      start: Date;
-      end: Date;
-      posts: number;
-      sums: Record<string, number>;
-      weightedSums: Record<string, number>;
-    }
-  >();
-
+  const byBucket = new Map<string, { label: string; start: Date; end: Date; posts: number; sums: Record<string, number>; weightedSums: Record<string, number> }>();
   for (const row of rows) {
     const date = parseTrendBucketDate(row.bucket_start ?? null, row.bucket_label);
     if (!date) continue;
     const bucket = toTimeBucketMeta(date, granularity);
-    const current =
-      byBucket.get(bucket.key) ??
-      {
-        label: bucket.label,
-        start: bucket.start,
-        end: bucket.end,
-        posts: 0,
-        sums: {},
-        weightedSums: {}
-      };
+    const current = byBucket.get(bucket.key) ?? { label: bucket.label, start: bucket.start, end: bucket.end, posts: 0, sums: {}, weightedSums: {} };
     const posts = Number(row.posts ?? 0);
     current.posts += posts;
     for (const metric of metrics) {
@@ -631,15 +474,9 @@ const aggregateTrendSeriesRows = <
     }
     byBucket.set(bucket.key, current);
   }
-
   const ordered = Array.from(byBucket.values()).sort((a, b) => a.start.getTime() - b.start.getTime());
   return ordered.map((item) => {
-    const base: Record<string, string | number | null | undefined> = {
-      bucket_start: item.start.toISOString(),
-      bucket_end: item.end.toISOString(),
-      bucket_label: item.label,
-      posts: roundMetric(item.posts)
-    };
+    const base: Record<string, string | number | null | undefined> = { bucket_start: item.start.toISOString(), bucket_end: item.end.toISOString(), bucket_label: item.label, posts: roundMetric(item.posts) };
     for (const metric of metrics) {
       base[metric] = aggregateMetricByPosts(item.sums[metric] ?? 0, item.weightedSums[metric] ?? 0, item.posts, metric);
     }
@@ -683,41 +520,26 @@ const toLogSafeValue = (value: number): number => {
 };
 
 const CHART_QUESTION_BY_KEY: Record<string, string> = {
-  trend: "¿Qué responde?: ¿Cómo evolucionan exposición, interacciones y ER en el período?",
-  trend_by_dimension: "¿Qué responde?: ¿Cómo evoluciona la métrica seleccionada por cada dimensión?",
-  mix: "¿Qué responde?: ¿Qué canal aporta más y cómo se comporta su segunda métrica?",
-  ranking: "¿Qué responde?: ¿Qué cuentas lideran según las métricas seleccionadas?",
-  gap: "¿Qué responde?: ¿Qué tan lejos está cada canal de su meta ER?",
-  scatter: "¿Qué responde?: ¿Qué grupos destacan al cruzar dos métricas seleccionadas?",
-  heatmap: "¿Qué responde?: ¿Qué días y meses concentran mejor rendimiento?",
-  topic_breakdown: "¿Qué responde?: ¿Cómo se compone cada tema según la dimensión secundaria elegida?",
-  breakdown: "¿Qué responde?: ¿Qué dimensión explica mejor la métrica seleccionada?",
-  share: "¿Qué responde?: ¿Cómo se distribuye el SOV interno entre cuentas?"
+  trend: "Cómo evolucionan exposición, interacciones y ER en el período?",
+  trend_by_dimension: "Cómo evoluciona la métrica seleccionada por cada dimensión?",
+  mix: "Qué canal aporta más y cómo se comporta su segunda métrica?",
+  ranking: "Qué cuentas lideran según las métricas seleccionadas?",
+  gap: "Qué tan lejos está cada canal de su meta ER?",
+  scatter: "Qué grupos destacan al cruzar dos métricas seleccionadas?",
+  heatmap: "Qué días y meses concentran mejor rendimiento?",
+  topic_breakdown: "Cómo se compone cada tema según la dimensión secundaria elegida?",
+  breakdown: "Qué dimensión explica mejor la métrica seleccionada?",
+  share: "Cómo se distribuye el SOV interno entre cuentas?"
 };
 
 const CHANNEL_SERIES_COLORS: Record<SocialChannel, string> = {
-  facebook: "#1d4ed8",
-  instagram: "#c026d3",
-  linkedin: "#0369a1",
-  tiktok: "#0f766e",
-  x: "#1d1d1b"
+  facebook: "#1d4ed8", instagram: "#c026d3", linkedin: "#0369a1", tiktok: "#0f766e", x: "#1d1d1b"
 };
 
 const DIMENSION_SERIES_COLORS = ["#0072B2", "#E69F00", "#009E73", "#56B4E9", "#D55E00", "#CC79A7", "#F0E442", "#000000", "#999999", "#44AA99"];
 const TOPIC_SEGMENT_COLORS = [
-  "#e30613",
-  "#2563eb",
-  "#0f766e",
-  "#f59e0b",
-  "#7c3aed",
-  "#0891b2",
-  "#be123c",
-  "#475569",
-  "#059669",
-  "#ea580c",
-  "#0284c7",
-  "#a16207",
-  "#334155"
+  "#e30613", "#2563eb", "#0f766e", "#f59e0b", "#7c3aed", "#0891b2",
+  "#be123c", "#475569", "#059669", "#ea580c", "#0284c7", "#a16207", "#334155"
 ];
 
 const toHeatmapMetricKey = (metric: SocialHeatmapMetric | undefined): string => {
@@ -737,13 +559,11 @@ const toHeatmapMetricKey = (metric: SocialHeatmapMetric | undefined): string => 
   return "engagement_total";
 };
 
-const toDeltaClass = (value: number): string => {
-  if (value > 0) return "text-emerald-700";
-  if (value < 0) return "text-rose-700";
-  return "text-slate-500";
+const toDeltaColor = (value: number): string => {
+  if (value > 0) return "#15803d";
+  if (value < 0) return "#be123c";
+  return "#64748b";
 };
-
-// toPostSortLabel moved to ../components/social/postsUtils.ts
 
 const toAccountsSortLabel = (value: SocialAccountsSort): string => {
   if (value === "er_desc") return "ER desc";
@@ -755,11 +575,11 @@ const toAccountsSortLabel = (value: SocialAccountsSort): string => {
   return "Riesgo desc";
 };
 
-const toRiskTagClass = (risk: number): string => {
-  if (risk >= 80) return "bg-rose-100 text-rose-700";
-  if (risk >= 60) return "bg-amber-100 text-amber-700";
-  if (risk >= 40) return "bg-orange-100 text-orange-700";
-  return "bg-emerald-100 text-emerald-700";
+const toRiskTagColor = (risk: number): string => {
+  if (risk >= 80) return "red";
+  if (risk >= 60) return "orange";
+  if (risk >= 40) return "gold";
+  return "green";
 };
 
 const toSlaBySeverity = (severity: string): string => {
@@ -805,27 +625,660 @@ const getErrorKind = (error: unknown): MonitorSocialUiError => {
   return "error_retriable";
 };
 
-const KpiInfo = ({ id, text }: { id: string; text: string }) => (
-  <div className="group relative inline-flex">
-    <button
-      type="button"
-      className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-slate-300 bg-white text-[11px] font-bold text-slate-600"
-      aria-describedby={id}
-    >
-      i
-    </button>
-    <div
-      id={id}
-      role="tooltip"
-      className="pointer-events-none absolute left-1/2 top-7 z-20 hidden w-56 -translate-x-1/2 rounded-lg border border-slate-200 bg-white p-2 text-xs text-slate-700 shadow-lg group-hover:block group-focus-within:block"
-    >
-      {text}
-    </div>
-  </div>
-);
+/* ────────────────────────────────────────────────────────
+   visx tooltip styles
+   ──────────────────────────────────────────────────────── */
+const tooltipStyles: React.CSSProperties = {
+  ...defaultTooltipStyles,
+  background: "#fff",
+  border: "1px solid #e2e8f0",
+  borderRadius: 8,
+  padding: "8px 12px",
+  fontSize: 12,
+  boxShadow: "0 4px 12px rgba(0,0,0,0.1)",
+  minWidth: 160,
+  zIndex: 50,
+};
 
+/* ────────────────────────────────────────────────────────
+   Inline visx chart components
+   ──────────────────────────────────────────────────────── */
+const CHART_MARGIN = { top: 10, right: 16, bottom: 40, left: 60 };
+const CHART_MARGIN_DUAL = { top: 10, right: 60, bottom: 40, left: 60 };
+
+type VisxDualLineChartProps = {
+  data: Record<string, unknown>[];
+  xKey: string;
+  leftKey: string;
+  rightKey: string;
+  leftLabel: string;
+  rightLabel: string;
+  leftColor: string;
+  rightColor: string;
+  formatLeftTick: (v: number) => string;
+  formatRightTick: (v: number) => string;
+  formatTooltipValue: (metric: string, v: number) => string;
+};
+
+const VisxDualLineChart = ({ data, xKey, leftKey, rightKey, leftLabel, rightLabel, leftColor, rightColor, formatLeftTick, formatRightTick, formatTooltipValue }: VisxDualLineChartProps) => {
+  const { tooltipData, tooltipLeft, tooltipTop, tooltipOpen, showTooltip, hideTooltip } = useTooltip<Record<string, unknown>>();
+
+  return (
+    <ParentSize>
+      {({ width, height }) => {
+        if (width < 10 || height < 10) return null;
+        const margin = CHART_MARGIN_DUAL;
+        const xMax = width - margin.left - margin.right;
+        const yMax = height - margin.top - margin.bottom;
+        if (xMax < 1 || yMax < 1) return null;
+
+        const xScale = scaleBand<string>({ domain: data.map((d) => String(d[xKey] ?? "")), range: [0, xMax], padding: 0.2 });
+        const leftValues = data.map((d) => Number(d[leftKey] ?? 0));
+        const rightValues = data.map((d) => Number(d[rightKey] ?? 0));
+        const leftMax = Math.max(...leftValues, 1);
+        const rightMax = Math.max(...rightValues, 1);
+        const yLeftScale = scaleLinear<number>({ domain: [0, leftMax * 1.1], range: [yMax, 0] });
+        const yRightScale = scaleLinear<number>({ domain: [0, rightMax * 1.1], range: [yMax, 0] });
+
+        return (
+          <div style={{ position: "relative" }}>
+            <svg width={width} height={height}>
+              <Group left={margin.left} top={margin.top}>
+                <GridRows scale={yLeftScale} width={xMax} stroke="#e2e8f0" strokeDasharray="3,3" />
+                <AxisBottom top={yMax} scale={xScale} tickLabelProps={() => ({ fontSize: 10, textAnchor: "end", angle: -30, dy: 4 })} numTicks={Math.min(data.length, 12)} />
+                <AxisLeft scale={yLeftScale} tickFormat={(v) => formatLeftTick(Number(v))} tickLabelProps={() => ({ fontSize: 10, textAnchor: "end", dx: -4 })} />
+                <AxisRight left={xMax} scale={yRightScale} tickFormat={(v) => formatRightTick(Number(v))} tickLabelProps={() => ({ fontSize: 10, textAnchor: "start", dx: 4 })} />
+                <LinePath
+                  data={data}
+                  x={(d) => (xScale(String(d[xKey] ?? "")) ?? 0) + xScale.bandwidth() / 2}
+                  y={(d) => yLeftScale(Number(d[leftKey] ?? 0))}
+                  stroke={leftColor}
+                  strokeWidth={2.5}
+                  curve={curveMonotoneX}
+                />
+                <LinePath
+                  data={data}
+                  x={(d) => (xScale(String(d[xKey] ?? "")) ?? 0) + xScale.bandwidth() / 2}
+                  y={(d) => yRightScale(Number(d[rightKey] ?? 0))}
+                  stroke={rightColor}
+                  strokeWidth={2.5}
+                  curve={curveMonotoneX}
+                />
+                {data.map((d, i) => {
+                  const cx = (xScale(String(d[xKey] ?? "")) ?? 0) + xScale.bandwidth() / 2;
+                  return (
+                    <rect
+                      key={i}
+                      x={cx - xScale.bandwidth() / 2}
+                      y={0}
+                      width={xScale.bandwidth()}
+                      height={yMax}
+                      fill="transparent"
+                      onMouseMove={(event) => {
+                        const point = localPoint(event) ?? { x: 0, y: 0 };
+                        showTooltip({ tooltipData: d, tooltipLeft: point.x, tooltipTop: point.y });
+                      }}
+                      onMouseLeave={() => hideTooltip()}
+                    />
+                  );
+                })}
+              </Group>
+            </svg>
+            {tooltipOpen && tooltipData && (
+              <TooltipWithBounds left={tooltipLeft} top={tooltipTop} style={tooltipStyles}>
+                <div style={{ fontWeight: 600, color: "#1e293b" }}>{String(tooltipData[xKey] ?? "")}</div>
+                <div style={{ color: leftColor, marginTop: 4 }}>{leftLabel}: <strong>{formatTooltipValue(leftKey, Number(tooltipData[leftKey] ?? 0))}</strong></div>
+                <div style={{ color: rightColor, marginTop: 2 }}>{rightLabel}: <strong>{formatTooltipValue(rightKey, Number(tooltipData[rightKey] ?? 0))}</strong></div>
+              </TooltipWithBounds>
+            )}
+          </div>
+        );
+      }}
+    </ParentSize>
+  );
+};
+
+type VisxBarLineChartProps = {
+  data: Record<string, unknown>[];
+  xKey: string;
+  barKey: string;
+  lineKey: string;
+  barLabel: string;
+  lineLabel: string;
+  barColor: string;
+  lineColor: string;
+  formatXTick?: (v: string) => string;
+  formatLeftTick: (v: number) => string;
+  formatRightTick: (v: number) => string;
+  formatTooltipValue: (metric: string, v: number) => string;
+  barAxis: AxisSide;
+  lineAxis: AxisSide;
+};
+
+const VisxBarLineChart = ({ data, xKey, barKey, lineKey, barLabel, lineLabel, barColor, lineColor, formatXTick, formatLeftTick, formatRightTick, formatTooltipValue, barAxis, lineAxis }: VisxBarLineChartProps) => {
+  const { tooltipData, tooltipLeft, tooltipTop, tooltipOpen, showTooltip, hideTooltip } = useTooltip<Record<string, unknown>>();
+
+  return (
+    <ParentSize>
+      {({ width, height }) => {
+        if (width < 10 || height < 10) return null;
+        const margin = CHART_MARGIN_DUAL;
+        const xMax = width - margin.left - margin.right;
+        const yMax = height - margin.top - margin.bottom;
+        if (xMax < 1 || yMax < 1) return null;
+
+        const xScale = scaleBand<string>({ domain: data.map((d) => String(d[xKey] ?? "")), range: [0, xMax], padding: 0.3 });
+        const leftValues = data.map((d) => Number(d[barAxis === "left" ? barKey : lineKey] ?? 0));
+        const rightValues = data.map((d) => Number(d[lineAxis === "right" ? lineKey : barKey] ?? 0));
+        const leftMax = Math.max(...leftValues, 1);
+        const rightMax = Math.max(...rightValues, 1);
+        const yLeftScale = scaleLinear<number>({ domain: [0, leftMax * 1.1], range: [yMax, 0] });
+        const yRightScale = scaleLinear<number>({ domain: [0, rightMax * 1.1], range: [yMax, 0] });
+
+        const getBarY = barAxis === "left" ? yLeftScale : yRightScale;
+        const getLineY = lineAxis === "left" ? yLeftScale : yRightScale;
+
+        return (
+          <div style={{ position: "relative" }}>
+            <svg width={width} height={height}>
+              <Group left={margin.left} top={margin.top}>
+                <GridRows scale={yLeftScale} width={xMax} stroke="#e2e8f0" strokeDasharray="3,3" />
+                <AxisBottom top={yMax} scale={xScale} tickFormat={formatXTick ? (v) => formatXTick(String(v)) : undefined} tickLabelProps={() => ({ fontSize: 10, textAnchor: "end", angle: -30, dy: 4 })} />
+                <AxisLeft scale={yLeftScale} tickFormat={(v) => formatLeftTick(Number(v))} tickLabelProps={() => ({ fontSize: 10, textAnchor: "end", dx: -4 })} />
+                <AxisRight left={xMax} scale={yRightScale} tickFormat={(v) => formatRightTick(Number(v))} tickLabelProps={() => ({ fontSize: 10, textAnchor: "start", dx: 4 })} />
+                {data.map((d, i) => {
+                  const x = xScale(String(d[xKey] ?? "")) ?? 0;
+                  const barVal = Number(d[barKey] ?? 0);
+                  const barY = getBarY(barVal);
+                  return (
+                    <Bar
+                      key={i}
+                      x={x}
+                      y={barY}
+                      width={xScale.bandwidth()}
+                      height={Math.max(0, yMax - barY)}
+                      fill={barColor}
+                      onMouseMove={(event) => {
+                        const point = localPoint(event) ?? { x: 0, y: 0 };
+                        showTooltip({ tooltipData: d, tooltipLeft: point.x + margin.left, tooltipTop: point.y });
+                      }}
+                      onMouseLeave={() => hideTooltip()}
+                    />
+                  );
+                })}
+                <LinePath
+                  data={data}
+                  x={(d) => (xScale(String(d[xKey] ?? "")) ?? 0) + xScale.bandwidth() / 2}
+                  y={(d) => getLineY(Number(d[lineKey] ?? 0))}
+                  stroke={lineColor}
+                  strokeWidth={3}
+                  curve={curveMonotoneX}
+                />
+                {data.map((d, i) => {
+                  const cx = (xScale(String(d[xKey] ?? "")) ?? 0) + xScale.bandwidth() / 2;
+                  const cy = getLineY(Number(d[lineKey] ?? 0));
+                  return <circle key={`dot-${i}`} cx={cx} cy={cy} r={3} fill={lineColor} />;
+                })}
+              </Group>
+            </svg>
+            {tooltipOpen && tooltipData && (
+              <TooltipWithBounds left={tooltipLeft} top={tooltipTop} style={tooltipStyles}>
+                <div style={{ fontWeight: 600, color: "#1e293b" }}>{formatXTick ? formatXTick(String(tooltipData[xKey] ?? "")) : String(tooltipData[xKey] ?? "")}</div>
+                <div style={{ color: barColor, marginTop: 4 }}>{barLabel}: <strong>{formatTooltipValue(barKey, Number(tooltipData[barKey] ?? 0))}</strong></div>
+                <div style={{ color: lineColor, marginTop: 2 }}>{lineLabel}: <strong>{formatTooltipValue(lineKey, Number(tooltipData[lineKey] ?? 0))}</strong></div>
+              </TooltipWithBounds>
+            )}
+          </div>
+        );
+      }}
+    </ParentSize>
+  );
+};
+
+type VisxMultiLineChartProps = {
+  data: Record<string, unknown>[];
+  xKey: string;
+  series: Array<{ key: string; label: string; color: string }>;
+  metric: string;
+  formatYTick: (v: number) => string;
+  formatTooltipValue: (v: number) => string;
+};
+
+const VisxMultiLineChart = ({ data, xKey, series, metric, formatYTick, formatTooltipValue }: VisxMultiLineChartProps) => {
+  const { tooltipData, tooltipLeft, tooltipTop, tooltipOpen, showTooltip, hideTooltip } = useTooltip<Record<string, unknown>>();
+
+  return (
+    <ParentSize>
+      {({ width, height }) => {
+        if (width < 10 || height < 10) return null;
+        const margin = CHART_MARGIN;
+        const xMax = width - margin.left - margin.right;
+        const yMax = height - margin.top - margin.bottom;
+        if (xMax < 1 || yMax < 1) return null;
+
+        const xScale = scaleBand<string>({ domain: data.map((d) => String(d[xKey] ?? "")), range: [0, xMax], padding: 0.1 });
+        const allValues = data.flatMap((d) => series.map((s) => Number(d[s.key] ?? 0)).filter((v) => Number.isFinite(v)));
+        const yMaxVal = Math.max(...allValues, 1);
+        const yScale = scaleLinear<number>({ domain: [0, yMaxVal * 1.1], range: [yMax, 0] });
+
+        return (
+          <div style={{ position: "relative" }}>
+            <svg width={width} height={height}>
+              <Group left={margin.left} top={margin.top}>
+                <GridRows scale={yScale} width={xMax} stroke="#e2e8f0" strokeDasharray="3,3" />
+                <AxisBottom top={yMax} scale={xScale} tickLabelProps={() => ({ fontSize: 10, textAnchor: "end", angle: -30, dy: 4 })} numTicks={Math.min(data.length, 12)} />
+                <AxisLeft scale={yScale} tickFormat={(v) => formatYTick(Number(v))} tickLabelProps={() => ({ fontSize: 10, textAnchor: "end", dx: -4 })} />
+                {series.map((s) => (
+                  <LinePath
+                    key={s.key}
+                    data={data.filter((d) => d[s.key] !== null && d[s.key] !== undefined)}
+                    x={(d) => (xScale(String(d[xKey] ?? "")) ?? 0) + xScale.bandwidth() / 2}
+                    y={(d) => yScale(Number(d[s.key] ?? 0))}
+                    stroke={s.color}
+                    strokeWidth={2.4}
+                    curve={curveLinear}
+                  />
+                ))}
+                {data.map((d, i) => {
+                  const cx = (xScale(String(d[xKey] ?? "")) ?? 0) + xScale.bandwidth() / 2;
+                  return (
+                    <rect
+                      key={i}
+                      x={cx - xScale.bandwidth() / 2}
+                      y={0}
+                      width={xScale.bandwidth()}
+                      height={yMax}
+                      fill="transparent"
+                      onMouseMove={(event) => {
+                        const point = localPoint(event) ?? { x: 0, y: 0 };
+                        showTooltip({ tooltipData: d, tooltipLeft: point.x, tooltipTop: point.y });
+                      }}
+                      onMouseLeave={() => hideTooltip()}
+                    />
+                  );
+                })}
+              </Group>
+            </svg>
+            {tooltipOpen && tooltipData && (
+              <TooltipWithBounds left={tooltipLeft} top={tooltipTop} style={tooltipStyles}>
+                <div style={{ fontWeight: 600, color: "#1e293b" }}>{String(tooltipData[xKey] ?? "")}</div>
+                {series.map((s) => {
+                  const rawKey = `raw_${s.key}`;
+                  const val = Number(tooltipData[rawKey] ?? tooltipData[s.key] ?? 0);
+                  return (
+                    <div key={s.key} style={{ color: s.color, marginTop: 2 }}>
+                      {s.label}: <strong>{formatTooltipValue(val)}</strong>
+                    </div>
+                  );
+                })}
+              </TooltipWithBounds>
+            )}
+          </div>
+        );
+      }}
+    </ParentSize>
+  );
+};
+
+type VisxHorizontalStackedBarChartProps = {
+  data: Record<string, unknown>[];
+  yKey: string;
+  segments: Array<{ key: string; label: string; color: string }>;
+  normalize100: boolean;
+  metric: string;
+  formatXTick: (v: number) => string;
+  onBarClick?: (topicKey: string) => void;
+  chartHeight: number;
+};
+
+const VisxHorizontalStackedBarChart = ({ data, yKey, segments, normalize100, metric, formatXTick, onBarClick, chartHeight }: VisxHorizontalStackedBarChartProps) => {
+  const { tooltipData, tooltipLeft, tooltipTop, tooltipOpen, showTooltip, hideTooltip } = useTooltip<{ row: Record<string, unknown>; segment: { key: string; label: string; color: string } }>();
+
+  return (
+    <ParentSize>
+      {({ width }) => {
+        const height = chartHeight;
+        if (width < 10 || height < 10) return null;
+        const margin = { top: 10, right: 16, bottom: 40, left: 190 };
+        const xMax = width - margin.left - margin.right;
+        const yMax = height - margin.top - margin.bottom;
+        if (xMax < 1 || yMax < 1) return null;
+
+        const yScale = scaleBand<string>({ domain: data.map((d) => String(d[yKey] ?? "")), range: [0, yMax], padding: 0.2 });
+        const maxX = normalize100 ? 100 : Math.max(...data.flatMap((d) => {
+          let total = 0;
+          for (const s of segments) total += Number(d[s.key] ?? 0);
+          return [total];
+        }), 1);
+        const xScale = scaleLinear<number>({ domain: [0, maxX * 1.05], range: [0, xMax] });
+
+        return (
+          <div style={{ position: "relative" }}>
+            <svg width={width} height={height}>
+              <Group left={margin.left} top={margin.top}>
+                <GridRows scale={yScale} width={xMax} stroke="#e2e8f0" strokeDasharray="3,3" />
+                <AxisBottom top={yMax} scale={xScale} tickFormat={(v) => formatXTick(Number(v))} tickLabelProps={() => ({ fontSize: 10, textAnchor: "middle" })} />
+                <AxisLeft scale={yScale} tickFormat={(v) => truncate(String(v), 28)} tickLabelProps={() => ({ fontSize: 10, textAnchor: "end", dx: -4 })} />
+                {data.map((d, i) => {
+                  let cumX = 0;
+                  const y = yScale(String(d[yKey] ?? "")) ?? 0;
+                  const barHeight = yScale.bandwidth();
+                  return segments.map((s) => {
+                    const val = Number(d[s.key] ?? 0);
+                    const barWidth = Math.max(0, xScale(val) - xScale(0));
+                    const barX = xScale(cumX);
+                    cumX += val;
+                    return (
+                      <rect
+                        key={`${i}-${s.key}`}
+                        x={barX}
+                        y={y}
+                        width={barWidth}
+                        height={barHeight}
+                        fill={s.color}
+                        style={{ cursor: onBarClick ? "pointer" : "default" }}
+                        onClick={() => onBarClick?.(String(d.topic_key ?? ""))}
+                        onMouseMove={(event) => {
+                          const point = localPoint(event) ?? { x: 0, y: 0 };
+                          showTooltip({ tooltipData: { row: d, segment: s }, tooltipLeft: point.x + margin.left, tooltipTop: point.y });
+                        }}
+                        onMouseLeave={() => hideTooltip()}
+                      />
+                    );
+                  });
+                })}
+              </Group>
+            </svg>
+            {tooltipOpen && tooltipData && (
+              <TooltipWithBounds left={tooltipLeft} top={tooltipTop} style={tooltipStyles}>
+                <div style={{ fontWeight: 600, color: "#1e293b" }}>{String(tooltipData.row[yKey] ?? "")}</div>
+                <div style={{ color: tooltipData.segment.color, marginTop: 4 }}>
+                  {tooltipData.segment.label}: <strong>{formatChartMetricValue(metric, Number(tooltipData.row[`raw_${tooltipData.segment.key}`] ?? tooltipData.row[tooltipData.segment.key] ?? 0))}</strong>
+                </div>
+                <div style={{ color: "#64748b", marginTop: 2 }}>Total: <strong>{formatChartMetricValue(metric, Number(tooltipData.row.metric_total ?? 0))}</strong></div>
+              </TooltipWithBounds>
+            )}
+          </div>
+        );
+      }}
+    </ParentSize>
+  );
+};
+
+type VisxHorizontalBarChartProps = {
+  data: Array<{ label: string; metric_value: number; posts: number; exposure_total: number }>;
+  metricLabel: string;
+  formatTick: (v: number) => string;
+};
+
+const VisxHorizontalBarChart = ({ data, metricLabel, formatTick }: VisxHorizontalBarChartProps) => {
+  const { tooltipData, tooltipLeft, tooltipTop, tooltipOpen, showTooltip, hideTooltip } = useTooltip<(typeof data)[0]>();
+
+  return (
+    <ParentSize>
+      {({ width, height }) => {
+        if (width < 10 || height < 10) return null;
+        const margin = { top: 10, right: 16, bottom: 40, left: 190 };
+        const xMax = width - margin.left - margin.right;
+        const yMax = height - margin.top - margin.bottom;
+        if (xMax < 1 || yMax < 1) return null;
+
+        const yScale = scaleBand<string>({ domain: data.map((d) => d.label), range: [0, yMax], padding: 0.2 });
+        const xMaxVal = Math.max(...data.map((d) => d.metric_value), 1);
+        const xScale = scaleLinear<number>({ domain: [0, xMaxVal * 1.1], range: [0, xMax] });
+
+        return (
+          <div style={{ position: "relative" }}>
+            <svg width={width} height={height}>
+              <Group left={margin.left} top={margin.top}>
+                <GridRows scale={yScale} width={xMax} stroke="#e2e8f0" strokeDasharray="3,3" />
+                <AxisBottom top={yMax} scale={xScale} tickFormat={(v) => formatTick(Number(v))} tickLabelProps={() => ({ fontSize: 10, textAnchor: "middle" })} />
+                <AxisLeft scale={yScale} tickFormat={(v) => truncate(String(v), 24)} tickLabelProps={() => ({ fontSize: 10, textAnchor: "end", dx: -4 })} />
+                {data.map((d, i) => {
+                  const y = yScale(d.label) ?? 0;
+                  const barWidth = Math.max(0, xScale(d.metric_value));
+                  return (
+                    <Bar
+                      key={i}
+                      x={0}
+                      y={y}
+                      width={barWidth}
+                      height={yScale.bandwidth()}
+                      fill="#7c3aed"
+                      onMouseMove={(event) => {
+                        const point = localPoint(event) ?? { x: 0, y: 0 };
+                        showTooltip({ tooltipData: d, tooltipLeft: point.x + margin.left, tooltipTop: point.y });
+                      }}
+                      onMouseLeave={() => hideTooltip()}
+                    />
+                  );
+                })}
+              </Group>
+            </svg>
+            {tooltipOpen && tooltipData && (
+              <TooltipWithBounds left={tooltipLeft} top={tooltipTop} style={tooltipStyles}>
+                <div style={{ fontWeight: 600, color: "#1e293b" }}>{tooltipData.label}</div>
+                <div style={{ marginTop: 4 }}>{metricLabel}: <strong>{formatTick(tooltipData.metric_value)}</strong></div>
+                <div style={{ marginTop: 2 }}>Posts: <strong>{formatCompactAxisNumber(tooltipData.posts)}</strong></div>
+                <div style={{ marginTop: 2 }}>Exposición: <strong>{formatCompactAxisNumber(tooltipData.exposure_total)}</strong></div>
+              </TooltipWithBounds>
+            )}
+          </div>
+        );
+      }}
+    </ParentSize>
+  );
+};
+
+type VisxScatterChartProps = {
+  data: Array<{ label: string; x_value: number; y_value: number; posts: number; z: number }>;
+  xLabel: string;
+  yLabel: string;
+  xMetric: string;
+  yMetric: string;
+};
+
+const VisxScatterChart = ({ data, xLabel, yLabel, xMetric, yMetric }: VisxScatterChartProps) => {
+  const { tooltipData, tooltipLeft, tooltipTop, tooltipOpen, showTooltip, hideTooltip } = useTooltip<(typeof data)[0]>();
+
+  return (
+    <ParentSize>
+      {({ width, height }) => {
+        if (width < 10 || height < 10) return null;
+        const margin = { top: 10, right: 16, bottom: 50, left: 60 };
+        const xMax = width - margin.left - margin.right;
+        const yMax = height - margin.top - margin.bottom;
+        if (xMax < 1 || yMax < 1) return null;
+
+        const xMaxVal = Math.max(...data.map((d) => d.x_value), 1);
+        const yMaxVal = Math.max(...data.map((d) => d.y_value), 1);
+        const xScale = scaleLinear<number>({ domain: [0, xMaxVal * 1.1], range: [0, xMax] });
+        const yScale = scaleLinear<number>({ domain: [0, yMaxVal * 1.1], range: [yMax, 0] });
+
+        return (
+          <div style={{ position: "relative" }}>
+            <svg width={width} height={height}>
+              <Group left={margin.left} top={margin.top}>
+                <GridRows scale={yScale} width={xMax} stroke="#e2e8f0" strokeDasharray="3,3" />
+                <AxisBottom top={yMax} scale={xScale} tickFormat={(v) => formatChartAxisByMetrics([xMetric], Number(v))} label={xLabel} labelProps={{ fontSize: 11, dy: 10 }} tickLabelProps={() => ({ fontSize: 10, textAnchor: "middle" })} />
+                <AxisLeft scale={yScale} tickFormat={(v) => formatChartAxisByMetrics([yMetric], Number(v))} label={yLabel} labelProps={{ fontSize: 11, dx: -10 }} tickLabelProps={() => ({ fontSize: 10, textAnchor: "end", dx: -4 })} />
+                {data.map((d, i) => {
+                  const r = Math.max(4, Math.min(20, Math.sqrt(d.z) * 2));
+                  return (
+                    <circle
+                      key={i}
+                      cx={xScale(d.x_value)}
+                      cy={yScale(d.y_value)}
+                      r={r}
+                      fill="#0f766e"
+                      fillOpacity={0.6}
+                      stroke="#0f766e"
+                      strokeWidth={1}
+                      onMouseMove={(event) => {
+                        const point = localPoint(event) ?? { x: 0, y: 0 };
+                        showTooltip({ tooltipData: d, tooltipLeft: point.x + margin.left, tooltipTop: point.y });
+                      }}
+                      onMouseLeave={() => hideTooltip()}
+                    />
+                  );
+                })}
+              </Group>
+            </svg>
+            {tooltipOpen && tooltipData && (
+              <TooltipWithBounds left={tooltipLeft} top={tooltipTop} style={tooltipStyles}>
+                <div style={{ fontWeight: 600, color: "#1e293b" }}>{tooltipData.label}</div>
+                <div style={{ marginTop: 4 }}>Posts: <strong>{formatCompactAxisNumber(tooltipData.posts)}</strong></div>
+                <div style={{ marginTop: 2 }}>{xLabel}: <strong>{formatChartMetricValue(xMetric, tooltipData.x_value)}</strong></div>
+                <div style={{ marginTop: 2 }}>{yLabel}: <strong>{formatChartMetricValue(yMetric, tooltipData.y_value)}</strong></div>
+              </TooltipWithBounds>
+            )}
+          </div>
+        );
+      }}
+    </ParentSize>
+  );
+};
+
+type VisxPieChartProps = {
+  data: Array<{ name: string; value: number }>;
+  colors: string[];
+};
+
+const VisxPieChart = ({ data, colors }: VisxPieChartProps) => {
+  const { tooltipData, tooltipLeft, tooltipTop, tooltipOpen, showTooltip, hideTooltip } = useTooltip<(typeof data)[0]>();
+
+  return (
+    <ParentSize>
+      {({ width, height }) => {
+        if (width < 10 || height < 10) return null;
+        const radius = Math.min(width, height) / 2 - 30;
+        if (radius < 10) return null;
+        const centerX = width / 2;
+        const centerY = height / 2;
+
+        return (
+          <div style={{ position: "relative" }}>
+            <svg width={width} height={height}>
+              <Group top={centerY} left={centerX}>
+                <Pie
+                  data={data}
+                  pieValue={(d) => d.value}
+                  outerRadius={radius}
+                  innerRadius={0}
+                  padAngle={0.02}
+                >
+                  {(pie) =>
+                    pie.arcs.map((arc, i) => {
+                      const [cx, cy] = pie.path.centroid(arc);
+                      return (
+                        <g key={i}>
+                          <path
+                            d={pie.path(arc) ?? ""}
+                            fill={colors[i % colors.length]}
+                            onMouseMove={(event) => {
+                              const point = localPoint(event) ?? { x: 0, y: 0 };
+                              showTooltip({ tooltipData: arc.data, tooltipLeft: point.x, tooltipTop: point.y });
+                            }}
+                            onMouseLeave={() => hideTooltip()}
+                          />
+                          {arc.endAngle - arc.startAngle > 0.3 && (
+                            <Text x={cx} y={cy} textAnchor="middle" verticalAnchor="middle" fontSize={10} fill="#fff">
+                              {truncate(arc.data.name, 12)}
+                            </Text>
+                          )}
+                        </g>
+                      );
+                    })
+                  }
+                </Pie>
+              </Group>
+            </svg>
+            {tooltipOpen && tooltipData && (
+              <TooltipWithBounds left={tooltipLeft} top={tooltipTop} style={tooltipStyles}>
+                <div style={{ fontWeight: 600, color: "#1e293b" }}>{tooltipData.name}</div>
+                <div style={{ marginTop: 4 }}>SOV: <strong>{formatAxisPercentNoDecimals(tooltipData.value)}</strong></div>
+              </TooltipWithBounds>
+            )}
+          </div>
+        );
+      }}
+    </ParentSize>
+  );
+};
+
+type VisxRiskTrendChartProps = {
+  data: Array<{ date: string; negativos: number; riesgo_activo: number; sentimiento_neto: number }>;
+  thresholdY: number;
+};
+
+const VisxRiskTrendChart = ({ data, thresholdY }: VisxRiskTrendChartProps) => {
+  const { tooltipData, tooltipLeft, tooltipTop, tooltipOpen, showTooltip, hideTooltip } = useTooltip<(typeof data)[0]>();
+
+  return (
+    <ParentSize>
+      {({ width, height }) => {
+        if (width < 10 || height < 10) return null;
+        const margin = CHART_MARGIN_DUAL;
+        const xMax = width - margin.left - margin.right;
+        const yMax = height - margin.top - margin.bottom;
+        if (xMax < 1 || yMax < 1) return null;
+
+        const xScale = scaleBand<string>({ domain: data.map((d) => d.date), range: [0, xMax], padding: 0.1 });
+        const leftMax = Math.max(...data.map((d) => d.negativos), 1);
+        const rightMax = Math.max(...data.map((d) => Math.max(Math.abs(d.riesgo_activo), Math.abs(d.sentimiento_neto))), 1);
+        const yLeftScale = scaleLinear<number>({ domain: [0, leftMax * 1.1], range: [yMax, 0] });
+        const yRightScale = scaleLinear<number>({ domain: [-rightMax * 1.1, rightMax * 1.1], range: [yMax, 0] });
+
+        return (
+          <div style={{ position: "relative" }}>
+            <svg width={width} height={height}>
+              <Group left={margin.left} top={margin.top}>
+                <GridRows scale={yLeftScale} width={xMax} stroke="#e2e8f0" strokeDasharray="3,3" />
+                <AxisBottom top={yMax} scale={xScale} tickLabelProps={() => ({ fontSize: 10, textAnchor: "end", angle: -30, dy: 4 })} numTicks={Math.min(data.length, 12)} />
+                <AxisLeft scale={yLeftScale} tickLabelProps={() => ({ fontSize: 10, textAnchor: "end", dx: -4 })} />
+                <AxisRight left={xMax} scale={yRightScale} tickFormat={(v) => formatAxisPercentNoDecimals(Number(v))} tickLabelProps={() => ({ fontSize: 10, textAnchor: "start", dx: 4 })} />
+                {/* Threshold line */}
+                <line x1={0} x2={xMax} y1={yRightScale(thresholdY)} y2={yRightScale(thresholdY)} stroke="#dc2626" strokeDasharray="5,4" strokeWidth={1.5} />
+                <Text x={xMax - 4} y={yRightScale(thresholdY) - 6} fontSize={10} fill="#dc2626" textAnchor="end">Umbral</Text>
+                <LinePath data={data} x={(d) => (xScale(d.date) ?? 0) + xScale.bandwidth() / 2} y={(d) => yLeftScale(d.negativos)} stroke="#b91c1c" strokeWidth={2} curve={curveMonotoneX} />
+                <LinePath data={data} x={(d) => (xScale(d.date) ?? 0) + xScale.bandwidth() / 2} y={(d) => yRightScale(d.riesgo_activo)} stroke="#f59f00" strokeWidth={2} curve={curveMonotoneX} />
+                <LinePath data={data} x={(d) => (xScale(d.date) ?? 0) + xScale.bandwidth() / 2} y={(d) => yRightScale(d.sentimiento_neto)} stroke="#0f766e" strokeWidth={2} curve={curveMonotoneX} />
+                {data.map((d, i) => (
+                  <rect
+                    key={i}
+                    x={(xScale(d.date) ?? 0)}
+                    y={0}
+                    width={xScale.bandwidth()}
+                    height={yMax}
+                    fill="transparent"
+                    onMouseMove={(event) => {
+                      const point = localPoint(event) ?? { x: 0, y: 0 };
+                      showTooltip({ tooltipData: d, tooltipLeft: point.x, tooltipTop: point.y });
+                    }}
+                    onMouseLeave={() => hideTooltip()}
+                  />
+                ))}
+              </Group>
+            </svg>
+            {tooltipOpen && tooltipData && (
+              <TooltipWithBounds left={tooltipLeft} top={tooltipTop} style={tooltipStyles}>
+                <div style={{ fontWeight: 600, color: "#1e293b" }}>{tooltipData.date}</div>
+                <div style={{ color: "#b91c1c", marginTop: 4 }}>Negativos: <strong>{formatCompactAxisNumber(tooltipData.negativos)}</strong></div>
+                <div style={{ color: "#f59f00", marginTop: 2 }}>Riesgo activo: <strong>{formatAxisPercentNoDecimals(tooltipData.riesgo_activo)}</strong></div>
+                <div style={{ color: "#0f766e", marginTop: 2 }}>Sentimiento neto: <strong>{formatAxisPercentNoDecimals(tooltipData.sentimiento_neto)}</strong></div>
+              </TooltipWithBounds>
+            )}
+          </div>
+        );
+      }}
+    </ParentSize>
+  );
+};
+
+/* ────────────────────────────────────────────────────────
+   SmartMultiSelect (using Popover instead of <details>)
+   ──────────────────────────────────────────────────────── */
 type SmartMultiSelectProps = {
-  className?: string;
   label: string;
   summary: string;
   secondary: string;
@@ -839,77 +1292,51 @@ type SmartMultiSelectProps = {
   toLabel?: (value: string) => string;
 };
 
-const SmartMultiSelect = ({
-  className,
-  label,
-  summary,
-  secondary,
-  options,
-  selected,
-  search,
-  placeholder,
-  onSearch,
-  onToggle,
-  onClear,
-  toLabel
-}: SmartMultiSelectProps) => (
-  <details className={`group relative min-w-0 ${className ?? ""}`}>
-    <summary className="list-none cursor-pointer rounded-xl border border-slate-200 bg-white px-3 py-2 shadow-sm transition hover:border-slate-300">
-      <div className="flex items-start justify-between gap-2 min-w-0">
-        <div className="min-w-0">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{label}</p>
-          <p className="truncate text-sm font-semibold text-slate-800">{summary}</p>
-          <p className="truncate text-xs text-slate-500">{secondary}</p>
+const SmartMultiSelect = ({ label, summary, secondary, options, selected, search, placeholder, onSearch, onToggle, onClear, toLabel }: SmartMultiSelectProps) => (
+  <Popover
+    trigger="click"
+    placement="bottomLeft"
+    content={
+      <div style={{ width: 280 }}>
+        <Input size="small" value={search} onChange={(e) => onSearch(e.target.value)} placeholder={placeholder} prefix={<SearchOutlined />} allowClear />
+        <div style={{ marginTop: 8, display: "flex", flexWrap: "wrap", gap: 4 }}>
+          {selected.length > 0 ? selected.map((item) => (
+            <Tag key={item} color="red">{toLabel ? toLabel(item) : item}</Tag>
+          )) : <AntText type="secondary" style={{ fontSize: 12 }}>Sin selección</AntText>}
         </div>
-        <span className="mt-1 text-xs text-slate-400">▾</span>
+        <div style={{ marginTop: 8, maxHeight: 200, overflow: "auto", border: "1px solid #f0f0f0", borderRadius: 6, padding: 4 }}>
+          {options.length === 0 ? <AntText type="secondary" style={{ fontSize: 12, padding: 8 }}>Sin resultados.</AntText> : null}
+          {options.map((option) => {
+            const checked = selected.includes(option);
+            return (
+              <div
+                key={option}
+                onClick={() => onToggle(option)}
+                style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "4px 8px", borderRadius: 4, cursor: "pointer", background: checked ? "#fff1f2" : "transparent", color: checked ? "#be123c" : "#334155", fontSize: 13 }}
+              >
+                <span>{toLabel ? toLabel(option) : option}</span>
+                <span style={{ fontSize: 11 }}>{checked ? "✓" : "+"}</span>
+              </div>
+            );
+          })}
+        </div>
+        <div style={{ marginTop: 8, textAlign: "right" }}>
+          <Button size="small" onClick={onClear} icon={<ClearOutlined />}>Limpiar</Button>
+        </div>
       </div>
-    </summary>
-    <div className="absolute z-30 mt-2 w-full min-w-[260px] rounded-xl border border-slate-200 bg-white p-3 shadow-2xl">
-      <input
-        value={search}
-        onChange={(event) => onSearch(event.target.value)}
-        placeholder={placeholder}
-        className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none ring-claro-red/25 focus:border-claro-red focus:ring-2"
-      />
-      <div className="mt-2 flex flex-wrap gap-1">
-        {selected.length > 0 ? (
-          selected.map((item) => (
-            <span key={item} className="inline-flex items-center rounded-full bg-red-50 px-2 py-1 text-[11px] font-semibold text-red-700">
-              {toLabel ? toLabel(item) : item}
-            </span>
-          ))
-        ) : (
-          <span className="text-xs text-slate-500">Sin selección</span>
-        )}
-      </div>
-      <div className="mt-2 max-h-52 overflow-auto rounded-lg border border-slate-100 p-1">
-        {options.length === 0 ? <p className="p-2 text-xs text-slate-500">Sin resultados.</p> : null}
-        {options.map((option) => {
-          const checked = selected.includes(option);
-          return (
-            <button
-              key={option}
-              type="button"
-              onClick={() => onToggle(option)}
-              className={`flex w-full items-center justify-between rounded-md px-2 py-1.5 text-left text-sm ${
-                checked ? "bg-red-50 text-red-700" : "hover:bg-slate-50 text-slate-700"
-              }`}
-            >
-              <span>{toLabel ? toLabel(option) : option}</span>
-              <span className="text-xs">{checked ? "✓" : "+"}</span>
-            </button>
-          );
-        })}
-      </div>
-      <div className="mt-2 flex justify-end">
-        <button type="button" onClick={onClear} className="rounded-md border border-slate-200 px-2 py-1 text-xs font-semibold text-slate-600 hover:bg-slate-50">
-          Limpiar
-        </button>
-      </div>
-    </div>
-  </details>
+    }
+  >
+    <Card size="small" hoverable style={{ cursor: "pointer", minWidth: 0 }}>
+      <div style={{ fontSize: 11, fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.5, color: "#64748b" }}>{label}</div>
+      <div style={{ fontSize: 13, fontWeight: 600, color: "#1e293b", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{summary}</div>
+      <div style={{ fontSize: 11, color: "#64748b", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{secondary}</div>
+    </Card>
+  </Popover>
 );
 
+/* ────────────────────────────────────────────────────────
+   Heatmap component
+   ──────────────────────────────────────────────────────── */
 const Heatmap = ({ data }: { data: MonitorSocialHeatmapResponse | null }) => {
   const weekdays = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"];
   const months = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"];
@@ -938,27 +1365,22 @@ const Heatmap = ({ data }: { data: MonitorSocialHeatmapResponse | null }) => {
   };
 
   return (
-    <div ref={containerRef} className="relative space-y-2">
-      <div className="grid grid-cols-8 gap-1 text-xs">
+    <div ref={containerRef} style={{ position: "relative" }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(8, 1fr)", gap: 4, fontSize: 12 }}>
         <div />
         {weekdays.map((day) => (
-          <div key={day} className="text-center text-slate-500">
-            {day}
-          </div>
+          <div key={day} style={{ textAlign: "center", color: "#64748b" }}>{day}</div>
         ))}
         {months.map((month, monthIndex) => (
-          <div key={month} className="contents">
-            <div key={`${month}-label`} className="flex items-center justify-end pr-1 text-slate-500">
-              {month}
-            </div>
+          <div key={month} style={{ display: "contents" }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", paddingRight: 4, color: "#64748b" }}>{month}</div>
             {weekdays.map((_day, dayIndex) => {
               const item = byKey.get(`${monthIndex + 1}-${dayIndex + 1}`);
               const value = item?.value ?? 0;
               return (
                 <div
                   key={`${month}-${dayIndex}`}
-                  className="h-6 rounded"
-                  style={{ background: toColor(value) }}
+                  style={{ height: 24, borderRadius: 4, background: toColor(value) }}
                   onMouseEnter={(event) => onHoverCell(event, `${month} ${weekdays[dayIndex]}`, value, item?.posts ?? 0)}
                   onMouseMove={(event) => onHoverCell(event, `${month} ${weekdays[dayIndex]}`, value, item?.posts ?? 0)}
                   onMouseLeave={() => setHovered(null)}
@@ -968,23 +1390,23 @@ const Heatmap = ({ data }: { data: MonitorSocialHeatmapResponse | null }) => {
           </div>
         ))}
       </div>
-      <p className="text-xs text-slate-500">
+      <div style={{ fontSize: 12, color: "#64748b", marginTop: 8 }}>
         Escala color: {formatMetricValue(tooltipMetric, min)} - {formatMetricValue(tooltipMetric, max)}
-      </p>
+      </div>
       {hovered ? (
-        <div
-          className="pointer-events-none absolute z-20 w-[165px] rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-xs shadow-lg"
-          style={{ left: hovered.x, top: hovered.y, transform: "translateY(-105%)" }}
-        >
-          <p className="font-semibold text-slate-800">{hovered.label}</p>
-          <p className="text-slate-600">Valor: {formatChartMetricValue(tooltipMetric, hovered.value)}</p>
-          <p className="text-slate-600">Posts: {formatCompactAxisNumber(hovered.posts)}</p>
+        <div style={{ position: "absolute", zIndex: 20, width: 165, borderRadius: 8, border: "1px solid #e2e8f0", background: "#fff", padding: "6px 8px", fontSize: 12, boxShadow: "0 4px 12px rgba(0,0,0,0.1)", left: hovered.x, top: hovered.y, transform: "translateY(-105%)", pointerEvents: "none" }}>
+          <div style={{ fontWeight: 600, color: "#1e293b" }}>{hovered.label}</div>
+          <div style={{ color: "#475569" }}>Valor: {formatChartMetricValue(tooltipMetric, hovered.value)}</div>
+          <div style={{ color: "#475569" }}>Posts: {formatCompactAxisNumber(hovered.posts)}</div>
         </div>
       ) : null}
     </div>
   );
 };
 
+/* ════════════════════════════════════════════════════════
+   MAIN COMPONENT
+   ════════════════════════════════════════════════════════ */
 export const MonitorSocialOverviewPage = () => {
   const client = useApiClient();
   const { session } = useAuth();
@@ -1102,13 +1524,8 @@ export const MonitorSocialOverviewPage = () => {
   const [minPostsInput, setMinPostsInput] = useState(String(minPosts));
   const [minExposureInput, setMinExposureInput] = useState(String(minExposure));
 
-  useEffect(() => {
-    setMinPostsInput(String(minPosts));
-  }, [minPosts]);
-
-  useEffect(() => {
-    setMinExposureInput(String(minExposure));
-  }, [minExposure]);
+  useEffect(() => { setMinPostsInput(String(minPosts)); }, [minPosts]);
+  useEffect(() => { setMinExposureInput(String(minExposure)); }, [minExposure]);
 
   const setQueryPatch = (patch: Record<string, string | null | undefined>) => {
     const next = new URLSearchParams(searchParams);
@@ -1120,17 +1537,13 @@ export const MonitorSocialOverviewPage = () => {
   };
 
   const applyPreset = (value: SocialDatePreset) => {
-    if (value === "custom") {
-      setQueryPatch({ preset: value, from: from ?? "2026-01-01", to: to ?? new Date().toISOString().slice(0, 10) });
-      return;
-    }
+    if (value === "custom") { setQueryPatch({ preset: value, from: from ?? "2026-01-01", to: to ?? new Date().toISOString().slice(0, 10) }); return; }
     setQueryPatch({ preset: value, from: null, to: null });
   };
 
   const commonQuery = useMemo(() => {
     const query: Record<string, string | number | undefined> = {
-      preset,
-      channel: selectedChannels.length > 0 ? selectedChannels.join(",") : undefined,
+      preset, channel: selectedChannels.length > 0 ? selectedChannels.join(",") : undefined,
       account: selectedAccounts.length > 0 ? selectedAccounts.join(",") : undefined,
       post_type: selectedPostTypes.length > 0 ? selectedPostTypes.join(",") : undefined,
       campaign: selectedCampaigns.length > 0 ? selectedCampaigns.join(",") : undefined,
@@ -1141,12 +1554,7 @@ export const MonitorSocialOverviewPage = () => {
       comparison_mode: comparisonMode,
       comparison_days: comparisonMode === "exact_days" ? comparisonDays : undefined
     };
-
-    if (preset === "custom") {
-      if (from) query.from = from;
-      if (to) query.to = to;
-    }
-
+    if (preset === "custom") { if (from) query.from = from; if (to) query.to = to; }
     return query;
   }, [preset, selectedChannels, selectedAccounts, selectedPostTypes, selectedCampaigns, selectedStrategies, selectedHashtags, selectedTopics, selectedSentiment, comparisonMode, comparisonDays, from, to]);
 
@@ -1155,32 +1563,16 @@ export const MonitorSocialOverviewPage = () => {
       const row = item as unknown as PostRow;
       const raw = item as unknown as Record<string, unknown>;
       return {
-        id: row.id,
-        published_at: row.published_at,
-        channel: row.channel,
-        account_name: row.account_name,
-        post_type: row.post_type,
-        title: row.title,
-        post_url: row.post_url,
-        text: row.text ?? null,
-        image_url: (raw.image_url as string | null) ?? null,
-        exposure: Number(row.exposure ?? 0),
-        engagement_total: Number(row.engagement_total ?? 0),
-        likes: Number(row.likes ?? 0),
-        comments: Number(row.comments ?? 0),
-        awario_comments_count: Number(raw.awario_comments_count ?? 0),
-        shares: Number(row.shares ?? 0),
-        views: Number(row.views ?? 0),
-        impressions: Number(raw.impressions ?? 0),
-        reach: Number(raw.reach ?? 0),
-        clicks: Number(raw.clicks ?? 0),
-        saves: Number(raw.saves ?? 0),
-        sentiment: row.sentiment,
-        sentiment_confidence: (raw.sentiment_confidence as number | null) ?? null,
-        source_score: Number(raw.source_score ?? 0),
-        campaign: (raw.campaign as string | null) ?? null,
-        strategies: (raw.strategies as string[]) ?? [],
-        hashtags: (raw.hashtags as string[]) ?? [],
+        id: row.id, published_at: row.published_at, channel: row.channel, account_name: row.account_name,
+        post_type: row.post_type, title: row.title, post_url: row.post_url, text: row.text ?? null,
+        image_url: (raw.image_url as string | null) ?? null, exposure: Number(row.exposure ?? 0),
+        engagement_total: Number(row.engagement_total ?? 0), likes: Number(row.likes ?? 0),
+        comments: Number(row.comments ?? 0), awario_comments_count: Number(raw.awario_comments_count ?? 0),
+        shares: Number(row.shares ?? 0), views: Number(row.views ?? 0), impressions: Number(raw.impressions ?? 0),
+        reach: Number(raw.reach ?? 0), clicks: Number(raw.clicks ?? 0), saves: Number(raw.saves ?? 0),
+        sentiment: row.sentiment, sentiment_confidence: (raw.sentiment_confidence as number | null) ?? null,
+        source_score: Number(raw.source_score ?? 0), campaign: (raw.campaign as string | null) ?? null,
+        strategies: (raw.strategies as string[]) ?? [], hashtags: (raw.hashtags as string[]) ?? [],
         topics: (raw.topics as Array<{ key: string; label: string; confidence: number; rank: number }>) ?? []
       };
     });
@@ -1191,318 +1583,149 @@ export const MonitorSocialOverviewPage = () => {
   };
 
   const loadCoreDashboard = async () => {
-    setLoading(true);
-    setError(null);
-    setUiError("none");
-
+    setLoading(true); setError(null); setUiError("none");
     try {
       const [overviewResponse, runsResponse, etlResponse, targetsResponse] = await Promise.all([
         client.getMonitorSocialOverview({ ...commonQuery, trend_granularity: apiTrendGranularity }),
-        client.listMonitorSocialRuns(20),
-        client.getMonitorSocialEtlQuality(20),
+        client.listMonitorSocialRuns(20), client.getMonitorSocialEtlQuality(20),
         client.getMonitorSocialErTargets({ ...commonQuery, year: 2026 })
       ]);
-      setOverview(overviewResponse);
-      setRuns(runsResponse.items ?? []);
-      setEtlData(etlResponse);
-      setErTargets(targetsResponse);
-    } catch (requestError) {
-      applyRequestError(requestError);
-      setOverview(null);
-      setRuns([]);
-      setEtlData(null);
-      setErTargets(null);
-    } finally {
-      setLoading(false);
-    }
+      setOverview(overviewResponse); setRuns(runsResponse.items ?? []); setEtlData(etlResponse); setErTargets(targetsResponse);
+    } catch (requestError) { applyRequestError(requestError); setOverview(null); setRuns([]); setEtlData(null); setErTargets(null); }
+    finally { setLoading(false); }
   };
 
   const loadFacets = async () => {
     setLoadingFacets(true);
-    try {
-      const response = await client.getMonitorSocialFacets(commonQuery);
-      setFacetsData(response);
-    } catch (requestError) {
-      applyRequestError(requestError);
-      setFacetsData(null);
-    } finally {
-      setLoadingFacets(false);
-    }
+    try { const response = await client.getMonitorSocialFacets(commonQuery); setFacetsData(response); }
+    catch (requestError) { applyRequestError(requestError); setFacetsData(null); }
+    finally { setLoadingFacets(false); }
   };
 
   const loadAccounts = async () => {
     setLoadingAccounts(true);
     try {
       const [response, pageRes] = await Promise.all([
-        client.getMonitorSocialAccounts({
-          ...commonQuery,
-          min_posts: minPosts,
-          min_exposure: minExposure,
-          sort: accountsSort,
-          limit: accountsLimit,
-          cursor: accountsCursor
-        }),
-        client.getMonitorSocialPageMetrics({
-          channels: commonQuery.channel as string | undefined
-        })
+        client.getMonitorSocialAccounts({ ...commonQuery, min_posts: minPosts, min_exposure: minExposure, sort: accountsSort, limit: accountsLimit, cursor: accountsCursor }),
+        client.getMonitorSocialPageMetrics({ channels: commonQuery.channel as string | undefined })
       ]);
       setAccountsData(response);
       const pm = new Map<string, { followers: number; newFollowers: number; pageReach: number; pageViews: number }>();
       for (const item of pageRes.items) {
         const key = `${item.channel}:${item.accountName}`;
         const existing = pm.get(key);
-        if (!existing || item.followers > existing.followers) {
-          pm.set(key, { followers: item.followers, newFollowers: item.newFollowers, pageReach: item.pageReach, pageViews: item.pageViews });
-        }
+        if (!existing || item.followers > existing.followers) pm.set(key, { followers: item.followers, newFollowers: item.newFollowers, pageReach: item.pageReach, pageViews: item.pageViews });
       }
       setPageMetricsData(pm);
-    } catch (requestError) {
-      applyRequestError(requestError);
-      setAccountsData(null);
-    } finally {
-      setLoadingAccounts(false);
-    }
+    } catch (requestError) { applyRequestError(requestError); setAccountsData(null); }
+    finally { setLoadingAccounts(false); }
   };
 
   const loadRisk = async () => {
     setLoadingRisk(true);
-    try {
-      const response = await client.getMonitorSocialRisk(commonQuery);
-      setRiskData(response);
-    } catch (requestError) {
-      applyRequestError(requestError);
-      setRiskData(null);
-    } finally {
-      setLoadingRisk(false);
-    }
+    try { const response = await client.getMonitorSocialRisk(commonQuery); setRiskData(response); }
+    catch (requestError) { applyRequestError(requestError); setRiskData(null); }
+    finally { setLoadingRisk(false); }
   };
 
   const loadPostsFirstPage = async () => {
     setLoadingPosts(true);
     try {
-      const response = await client.listMonitorSocialPosts({
-        ...commonQuery,
-        sort: postsSort,
-        limit: 50
-      });
+      const response = await client.listMonitorSocialPosts({ ...commonQuery, sort: postsSort, limit: 50 });
       setPosts(normalizePosts(response.items ?? []));
-      setPostsCursor(response.page_info.next_cursor ?? null);
-      setPostsHasNext(Boolean(response.page_info.has_next));
-    } catch (requestError) {
-      applyRequestError(requestError);
-      setPosts([]);
-      setPostsCursor(null);
-      setPostsHasNext(false);
-    } finally {
-      setLoadingPosts(false);
-    }
+      setPostsCursor(response.page_info.next_cursor ?? null); setPostsHasNext(Boolean(response.page_info.has_next));
+    } catch (requestError) { applyRequestError(requestError); setPosts([]); setPostsCursor(null); setPostsHasNext(false); }
+    finally { setLoadingPosts(false); }
   };
 
   const loadHeatmap = async () => {
-    try {
-      const response = await client.getMonitorSocialHeatmap({ ...commonQuery, metric: heatmapMetric });
-      setHeatmapData(response);
-    } catch (requestError) {
-      applyRequestError(requestError);
-      setHeatmapData(null);
-    }
+    try { const response = await client.getMonitorSocialHeatmap({ ...commonQuery, metric: heatmapMetric }); setHeatmapData(response); }
+    catch (requestError) { applyRequestError(requestError); setHeatmapData(null); }
   };
 
   const loadScatter = async () => {
-    try {
-      const response = await client.getMonitorSocialScatter({ ...commonQuery, dimension: scatterDimension });
-      setScatterData(response);
-    } catch (requestError) {
-      applyRequestError(requestError);
-      setScatterData(null);
-    }
+    try { const response = await client.getMonitorSocialScatter({ ...commonQuery, dimension: scatterDimension }); setScatterData(response); }
+    catch (requestError) { applyRequestError(requestError); setScatterData(null); }
   };
 
   const loadTrendByDimension = async () => {
-    setLoadingTrendByDimension(true);
-    setTrendByDimensionError(null);
+    setLoadingTrendByDimension(true); setTrendByDimensionError(null);
     try {
-      const response = await client.getMonitorSocialTrendByDimension({
-        ...commonQuery,
-        trend_granularity: apiTrendGranularity,
-        dimension: trendByDimensionDimension,
-        metric: trendByDimensionMetric,
-        series_limit: 30
-      });
+      const response = await client.getMonitorSocialTrendByDimension({ ...commonQuery, trend_granularity: apiTrendGranularity, dimension: trendByDimensionDimension, metric: trendByDimensionMetric, series_limit: 30 });
       setTrendByDimensionData(response);
-    } catch (requestError) {
-      applyRequestError(requestError);
-      setTrendByDimensionError((requestError as Error)?.message ?? "No fue posible cargar la tendencia por dimensión");
-      setTrendByDimensionData(null);
-    } finally {
-      setLoadingTrendByDimension(false);
-    }
+    } catch (requestError) { applyRequestError(requestError); setTrendByDimensionError((requestError as Error)?.message ?? "No fue posible cargar la tendencia por dimensión"); setTrendByDimensionData(null); }
+    finally { setLoadingTrendByDimension(false); }
   };
 
   const loadTopicBreakdown = async () => {
-    setLoadingTopicBreakdown(true);
-    setTopicBreakdownError(null);
+    setLoadingTopicBreakdown(true); setTopicBreakdownError(null);
     try {
-      const response = await client.getMonitorSocialTopicBreakdown({
-        ...commonQuery,
-        dimension: topicBreakdownDimension,
-        metric: topicBreakdownMetric,
-        topic_limit: 15,
-        segment_limit: 12
-      });
+      const response = await client.getMonitorSocialTopicBreakdown({ ...commonQuery, dimension: topicBreakdownDimension, metric: topicBreakdownMetric, topic_limit: 15, segment_limit: 12 });
       setTopicBreakdownData(response);
-    } catch (requestError) {
-      applyRequestError(requestError);
-      setTopicBreakdownError((requestError as Error)?.message ?? "No fue posible cargar distribución por tema");
-      setTopicBreakdownData(null);
-    } finally {
-      setLoadingTopicBreakdown(false);
-    }
+    } catch (requestError) { applyRequestError(requestError); setTopicBreakdownError((requestError as Error)?.message ?? "No fue posible cargar distribución por tema"); setTopicBreakdownData(null); }
+    finally { setLoadingTopicBreakdown(false); }
   };
 
   const loadBreakdown = async () => {
-    try {
-      const response = await client.getMonitorSocialErBreakdown({ ...commonQuery, dimension: breakdownDimension });
-      setBreakdownData(response);
-    } catch (requestError) {
-      applyRequestError(requestError);
-      setBreakdownData(null);
-    }
+    try { const response = await client.getMonitorSocialErBreakdown({ ...commonQuery, dimension: breakdownDimension }); setBreakdownData(response); }
+    catch (requestError) { applyRequestError(requestError); setBreakdownData(null); }
   };
 
-  useEffect(() => {
-    void loadCoreDashboard();
-  }, [client, commonQuery, apiTrendGranularity, reloadVersion]);
-
-  useEffect(() => {
-    void loadFacets();
-  }, [client, commonQuery, reloadVersion]);
-
-  useEffect(() => {
-    void loadAccounts();
-  }, [client, commonQuery, minPosts, minExposure, accountsSort, accountsLimit, accountsCursor, reloadVersion]);
-
-  useEffect(() => {
-    void loadRisk();
-  }, [client, commonQuery, reloadVersion]);
-
-  useEffect(() => {
-    void loadPostsFirstPage();
-  }, [client, commonQuery, postsSort, reloadVersion]);
-
-  useEffect(() => {
-    void loadHeatmap();
-  }, [client, commonQuery, heatmapMetric, reloadVersion]);
-
-  useEffect(() => {
-    void loadScatter();
-  }, [client, commonQuery, scatterDimension, reloadVersion]);
-
-  useEffect(() => {
-    void loadTrendByDimension();
-  }, [client, commonQuery, trendByDimensionDimension, trendByDimensionMetric, apiTrendGranularity, reloadVersion]);
-
-  useEffect(() => {
-    void loadTopicBreakdown();
-  }, [client, commonQuery, topicBreakdownDimension, topicBreakdownMetric, reloadVersion]);
-
-  useEffect(() => {
-    void loadBreakdown();
-  }, [client, commonQuery, breakdownDimension, reloadVersion]);
+  useEffect(() => { void loadCoreDashboard(); }, [client, commonQuery, apiTrendGranularity, reloadVersion]);
+  useEffect(() => { void loadFacets(); }, [client, commonQuery, reloadVersion]);
+  useEffect(() => { void loadAccounts(); }, [client, commonQuery, minPosts, minExposure, accountsSort, accountsLimit, accountsCursor, reloadVersion]);
+  useEffect(() => { void loadRisk(); }, [client, commonQuery, reloadVersion]);
+  useEffect(() => { void loadPostsFirstPage(); }, [client, commonQuery, postsSort, reloadVersion]);
+  useEffect(() => { void loadHeatmap(); }, [client, commonQuery, heatmapMetric, reloadVersion]);
+  useEffect(() => { void loadScatter(); }, [client, commonQuery, scatterDimension, reloadVersion]);
+  useEffect(() => { void loadTrendByDimension(); }, [client, commonQuery, trendByDimensionDimension, trendByDimensionMetric, apiTrendGranularity, reloadVersion]);
+  useEffect(() => { void loadTopicBreakdown(); }, [client, commonQuery, topicBreakdownDimension, topicBreakdownMetric, reloadVersion]);
+  useEffect(() => { void loadBreakdown(); }, [client, commonQuery, breakdownDimension, reloadVersion]);
 
   useEffect(() => {
     if (!pendingRunId) return undefined;
-
     const timer = setInterval(() => {
-      client
-        .listMonitorSocialRuns(20)
-        .then((response) => {
-          const items = response.items ?? [];
-          setRuns(items);
-          const target = items.find((item) => item.id === pendingRunId);
-          if (!target) return;
-          if (target.status === "completed" || target.status === "failed") {
-            setPendingRunId(null);
-            setReloadVersion((current) => current + 1);
-          }
-        })
-        .catch((pollError) => {
-          applyRequestError(pollError);
-          setPendingRunId(null);
-        });
+      client.listMonitorSocialRuns(20).then((response) => {
+        const items = response.items ?? []; setRuns(items);
+        const target = items.find((item) => item.id === pendingRunId);
+        if (!target) return;
+        if (target.status === "completed" || target.status === "failed") { setPendingRunId(null); setReloadVersion((c) => c + 1); }
+      }).catch((pollError) => { applyRequestError(pollError); setPendingRunId(null); });
     }, 4000);
-
     return () => clearInterval(timer);
   }, [client, pendingRunId]);
 
   const loadMorePosts = async () => {
     if (!postsHasNext || !postsCursor || loadingMorePosts) return;
-    setLoadingMorePosts(true);
-    setError(null);
-    setUiError("none");
-
+    setLoadingMorePosts(true); setError(null); setUiError("none");
     try {
-      const response = await client.listMonitorSocialPosts({
-        ...commonQuery,
-        sort: postsSort,
-        limit: 50,
-        cursor: postsCursor
-      });
+      const response = await client.listMonitorSocialPosts({ ...commonQuery, sort: postsSort, limit: 50, cursor: postsCursor });
       setPosts((current) => [...current, ...normalizePosts(response.items ?? [])]);
-      setPostsCursor(response.page_info.next_cursor ?? null);
-      setPostsHasNext(Boolean(response.page_info.has_next));
-    } catch (loadError) {
-      applyRequestError(loadError);
-    } finally {
-      setLoadingMorePosts(false);
-    }
+      setPostsCursor(response.page_info.next_cursor ?? null); setPostsHasNext(Boolean(response.page_info.has_next));
+    } catch (loadError) { applyRequestError(loadError); }
+    finally { setLoadingMorePosts(false); }
   };
 
   const triggerRun = async () => {
     if (!canRefresh || refreshingRun) return;
-    setRefreshingRun(true);
-    setError(null);
-    setUiError("none");
-    try {
-      const accepted = await client.createMonitorSocialRun({ force: false });
-      setPendingRunId(accepted.run_id);
-      setReloadVersion((current) => current + 1);
-    } catch (runError) {
-      applyRequestError(runError);
-    } finally {
-      setRefreshingRun(false);
-    }
+    setRefreshingRun(true); setError(null); setUiError("none");
+    try { const accepted = await client.createMonitorSocialRun({ force: false }); setPendingRunId(accepted.run_id); setReloadVersion((c) => c + 1); }
+    catch (runError) { applyRequestError(runError); }
+    finally { setRefreshingRun(false); }
   };
 
   const exportFilteredCsv = async () => {
     if (!canExport || exportingCsv) return;
-    setExportingCsv(true);
-    setError(null);
-    setUiError("none");
+    setExportingCsv(true); setError(null); setUiError("none");
     try {
-      const allPosts: PostRow[] = [];
-      let cursor: string | undefined;
-      let hasNext = true;
-
+      const allPosts: PostRow[] = []; let cursor: string | undefined; let hasNext = true;
       while (hasNext) {
-        const page = await client.listMonitorSocialPosts({
-          ...commonQuery,
-          sort: postsSort,
-          limit: 200,
-          cursor
-        });
-
+        const page = await client.listMonitorSocialPosts({ ...commonQuery, sort: postsSort, limit: 200, cursor });
         allPosts.push(...normalizePosts(page.items ?? []));
         const nextCursor = page.page_info.next_cursor ?? undefined;
-        hasNext = Boolean(page.page_info.has_next && nextCursor);
-        cursor = nextCursor;
+        hasNext = Boolean(page.page_info.has_next && nextCursor); cursor = nextCursor;
       }
-
-      const ov = overview as unknown as {
-        kpis?: Record<string, number>;
-        previous_period?: Record<string, number>;
-      };
-
+      const ov = overview as unknown as { kpis?: Record<string, number>; previous_period?: Record<string, number> };
       const rows: string[] = [];
       rows.push("section,metric,value");
       rows.push(`resumen,generated_at,${csvEscape(new Date().toISOString())}`);
@@ -1513,103 +1736,39 @@ export const MonitorSocialOverviewPage = () => {
       rows.push(`resumen,exposure_total,${csvEscape(ov.kpis?.exposure_total ?? 0)}`);
       rows.push(`resumen,exposure_previous,${csvEscape(ov.previous_period?.exposure_total ?? 0)}`);
       rows.push("");
-      rows.push(
-        [
-          "id",
-          "published_at",
-          "channel",
-          "account_name",
-          "post_type",
-          "campaign",
-          "strategies",
-          "hashtags",
-          "title",
-          "post_url",
-          "sentiment",
-          "exposure",
-          "engagement_total",
-          "post_er",
-          "likes",
-          "comments",
-          "shares",
-          "views"
-        ].join(",")
-      );
-
+      rows.push(["id","published_at","channel","account_name","post_type","campaign","strategies","hashtags","title","post_url","sentiment","exposure","engagement_total","post_er","likes","comments","shares","views"].join(","));
       for (const post of allPosts) {
         const er = (post.engagement_total / Math.max(post.exposure, 1)) * 100;
-        rows.push(
-          [
-            csvEscape(post.id),
-            csvEscape(post.published_at),
-            csvEscape(post.channel),
-            csvEscape(post.account_name),
-            csvEscape(post.post_type ?? "unknown"),
-            csvEscape(post.campaign ?? ""),
-            csvEscape((post.strategies ?? []).join("|")),
-            csvEscape((post.hashtags ?? []).join("|")),
-            csvEscape(post.title),
-            csvEscape(post.post_url),
-            csvEscape(post.sentiment),
-            csvEscape(post.exposure),
-            csvEscape(post.engagement_total),
-            csvEscape(er.toFixed(4)),
-            csvEscape(post.likes),
-            csvEscape(post.comments),
-            csvEscape(post.shares),
-            csvEscape(post.views)
-          ].join(",")
-        );
+        rows.push([csvEscape(post.id),csvEscape(post.published_at),csvEscape(post.channel),csvEscape(post.account_name),csvEscape(post.post_type ?? "unknown"),csvEscape(post.campaign ?? ""),csvEscape((post.strategies ?? []).join("|")),csvEscape((post.hashtags ?? []).join("|")),csvEscape(post.title),csvEscape(post.post_url),csvEscape(post.sentiment),csvEscape(post.exposure),csvEscape(post.engagement_total),csvEscape(er.toFixed(4)),csvEscape(post.likes),csvEscape(post.comments),csvEscape(post.shares),csvEscape(post.views)].join(","));
       }
-
       const filename = `social-overview-${new Date().toISOString().slice(0, 19).replaceAll(":", "-")}.csv`;
       downloadTextFile(rows.join("\n"), filename, "text/csv;charset=utf-8;");
-    } catch (csvError) {
-      applyRequestError(csvError);
-    } finally {
-      setExportingCsv(false);
-    }
+    } catch (csvError) { applyRequestError(csvError); }
+    finally { setExportingCsv(false); }
   };
 
   const exportExcel = async () => {
     if (!canExport || exportingExcel) return;
-    setExportingExcel(true);
-    setError(null);
-    setUiError("none");
+    setExportingExcel(true); setError(null); setUiError("none");
     try {
-      const blob = await client.downloadMonitorSocialExcel({
-        ...commonQuery,
-        sort: postsSort,
-        min_posts: minPosts,
-        min_exposure: minExposure
-      });
+      const blob = await client.downloadMonitorSocialExcel({ ...commonQuery, sort: postsSort, min_posts: minPosts, min_exposure: minExposure });
       const filename = `social-analytics-${new Date().toISOString().slice(0, 19).replaceAll(":", "-")}.xlsx`;
       downloadBlobFile(blob, filename);
-    } catch (downloadError) {
-      applyRequestError(downloadError);
-    } finally {
-      setExportingExcel(false);
-    }
+    } catch (downloadError) { applyRequestError(downloadError); }
+    finally { setExportingExcel(false); }
   };
 
   const toggleMultiValue = (key: string, values: string[], value: string) => {
     const normalized = value.trim();
     const exists = values.includes(normalized);
     const next = exists ? values.filter((item) => item !== normalized) : [...values, normalized];
-    setQueryPatch({
-      [key]: next.length > 0 ? next.join(",") : null,
-      accounts_cursor: null
-    });
+    setQueryPatch({ [key]: next.length > 0 ? next.join(",") : null, accounts_cursor: null });
   };
 
   const openPostsByTopic = (topicKey: string) => {
     const normalized = topicKey.trim().toLowerCase();
     if (!normalized) return;
-    setQueryPatch({
-      tab: "posts",
-      topic: normalized,
-      accounts_cursor: null
-    });
+    setQueryPatch({ tab: "posts", topic: normalized, accounts_cursor: null });
   };
 
   const toggleTrendByDimensionSeries = (label: string) => {
@@ -1622,29 +1781,12 @@ export const MonitorSocialOverviewPage = () => {
     });
   };
 
+  /* ── Normalized overview ── */
   const normalizedOverview = (overview ?? {}) as unknown as {
     kpis?: Record<string, number | string | null>;
     previous_period?: Record<string, number>;
-    target_progress?: {
-      target_shs?: number;
-      quarterly_sov_target_pp?: number;
-      er_by_channel?: Array<{
-        channel: SocialChannel;
-        baseline_2025_er: number;
-        target_2026_er: number;
-        current_er: number;
-        gap: number;
-        progress_pct: number;
-        source: "auto" | "manual";
-      }>;
-    };
-    comparison?: {
-      label?: string;
-      current_window_start?: string;
-      current_window_end?: string;
-      previous_window_start?: string;
-      previous_window_end?: string;
-    };
+    target_progress?: { target_shs?: number; quarterly_sov_target_pp?: number; er_by_channel?: Array<{ channel: SocialChannel; baseline_2025_er: number; target_2026_er: number; current_er: number; gap: number; progress_pct: number; source: "auto" | "manual" }> };
+    comparison?: { label?: string; current_window_start?: string; current_window_end?: string; previous_window_start?: string; previous_window_end?: string };
     trend_series?: Array<Record<string, unknown>>;
     by_channel?: Array<Record<string, unknown>>;
     reconciliation_status?: string;
@@ -1654,6 +1796,7 @@ export const MonitorSocialOverviewPage = () => {
     window_end?: string;
   };
 
+  /* ── Trend series ── */
   const trendSeries = useMemo(() => {
     const raw = normalizedOverview.trend_series;
     if (raw && raw.length > 0) {
@@ -1661,125 +1804,46 @@ export const MonitorSocialOverviewPage = () => {
         bucket_start: typeof item.bucket_start === "string" ? item.bucket_start : null,
         bucket_end: typeof item.bucket_end === "string" ? item.bucket_end : null,
         bucket_label: String(item.bucket_label ?? ""),
-        posts: Number(item.posts ?? 0),
-        exposure_total: Number(item.exposure_total ?? 0),
-        engagement_total: Number(item.engagement_total ?? 0),
-        impressions_total: Number(item.impressions_total ?? 0),
-        reach_total: Number(item.reach_total ?? 0),
-        clicks_total: Number(item.clicks_total ?? 0),
-        likes_total: Number(item.likes_total ?? 0),
-        comments_total: Number(item.comments_total ?? 0),
-        shares_total: Number(item.shares_total ?? 0),
-        views_total: Number(item.views_total ?? 0),
-        er_global: Number(item.er_global ?? 0),
-        ctr: Number(item.ctr ?? 0),
-        er_impressions: Number(item.er_impressions ?? 0),
-        er_reach: Number(item.er_reach ?? 0),
-        view_rate: Number(item.view_rate ?? 0),
-        likes_share: Number(item.likes_share ?? 0),
-        comments_share: Number(item.comments_share ?? 0),
-        shares_share: Number(item.shares_share ?? 0),
-        riesgo_activo: Number(item.riesgo_activo ?? 0),
-        shs: Number(item.shs ?? 0)
+        posts: Number(item.posts ?? 0), exposure_total: Number(item.exposure_total ?? 0),
+        engagement_total: Number(item.engagement_total ?? 0), impressions_total: Number(item.impressions_total ?? 0),
+        reach_total: Number(item.reach_total ?? 0), clicks_total: Number(item.clicks_total ?? 0),
+        likes_total: Number(item.likes_total ?? 0), comments_total: Number(item.comments_total ?? 0),
+        shares_total: Number(item.shares_total ?? 0), views_total: Number(item.views_total ?? 0),
+        er_global: Number(item.er_global ?? 0), ctr: Number(item.ctr ?? 0),
+        er_impressions: Number(item.er_impressions ?? 0), er_reach: Number(item.er_reach ?? 0),
+        view_rate: Number(item.view_rate ?? 0), likes_share: Number(item.likes_share ?? 0),
+        comments_share: Number(item.comments_share ?? 0), shares_share: Number(item.shares_share ?? 0),
+        riesgo_activo: Number(item.riesgo_activo ?? 0), shs: Number(item.shs ?? 0)
       }));
-      return aggregateTrendSeriesRows(
-        rows,
-        timeGranularity,
-        TREND_METRICS.filter((metric) => metric !== "posts")
-      );
+      return aggregateTrendSeriesRows(rows, timeGranularity, TREND_METRICS.filter((m) => m !== "posts"));
     }
     return [];
   }, [normalizedOverview, timeGranularity]);
 
-  const channelData = useMemo(
-    () =>
-      (normalizedOverview.by_channel ?? []).map((item) => ({
-        channel: String(item.channel ?? "facebook") as SocialChannel,
-        posts: Number(item.posts ?? 0),
-        exposure_total: Number(item.exposure_total ?? 0),
-        engagement_total: Number(item.engagement_total ?? 0),
-        impressions_total: Number(item.impressions_total ?? 0),
-        reach_total: Number(item.reach_total ?? 0),
-        clicks_total: Number(item.clicks_total ?? 0),
-        likes_total: Number(item.likes_total ?? 0),
-        comments_total: Number(item.comments_total ?? 0),
-        shares_total: Number(item.shares_total ?? 0),
-        views_total: Number(item.views_total ?? 0),
-        er_global: Number(item.er_global ?? 0),
-        ctr: Number(item.ctr ?? 0),
-        er_impressions: Number(item.er_impressions ?? 0),
-        er_reach: Number(item.er_reach ?? 0),
-        view_rate: Number(item.view_rate ?? 0),
-        likes_share: Number(item.likes_share ?? 0),
-        comments_share: Number(item.comments_share ?? 0),
-        shares_share: Number(item.shares_share ?? 0),
-        riesgo_activo: Number(item.riesgo_activo ?? 0),
-        sov_interno: Number(item.sov_interno ?? 0)
-      })),
-    [normalizedOverview]
-  );
+  const channelData = useMemo(() => (normalizedOverview.by_channel ?? []).map((item) => ({
+    channel: String(item.channel ?? "facebook") as SocialChannel,
+    posts: Number(item.posts ?? 0), exposure_total: Number(item.exposure_total ?? 0),
+    engagement_total: Number(item.engagement_total ?? 0), impressions_total: Number(item.impressions_total ?? 0),
+    reach_total: Number(item.reach_total ?? 0), clicks_total: Number(item.clicks_total ?? 0),
+    likes_total: Number(item.likes_total ?? 0), comments_total: Number(item.comments_total ?? 0),
+    shares_total: Number(item.shares_total ?? 0), views_total: Number(item.views_total ?? 0),
+    er_global: Number(item.er_global ?? 0), ctr: Number(item.ctr ?? 0),
+    er_impressions: Number(item.er_impressions ?? 0), er_reach: Number(item.er_reach ?? 0),
+    view_rate: Number(item.view_rate ?? 0), likes_share: Number(item.likes_share ?? 0),
+    comments_share: Number(item.comments_share ?? 0), shares_share: Number(item.shares_share ?? 0),
+    riesgo_activo: Number(item.riesgo_activo ?? 0), sov_interno: Number(item.sov_interno ?? 0)
+  })), [normalizedOverview]);
 
-  const accountOptions = useMemo(() => {
-    const values = new Set<string>();
-    for (const item of facetsData?.facets?.account ?? []) values.add(item.value);
-    for (const row of selectedAccounts) values.add(row);
-    return Array.from(values).sort((a, b) => a.localeCompare(b));
-  }, [facetsData, selectedAccounts]);
+  /* ── Facet options ── */
+  const accountOptions = useMemo(() => { const v = new Set<string>(); for (const i of facetsData?.facets?.account ?? []) v.add(i.value); for (const r of selectedAccounts) v.add(r); return Array.from(v).sort((a, b) => a.localeCompare(b)); }, [facetsData, selectedAccounts]);
+  const postTypeOptions = useMemo(() => { const v = new Set<string>(["unknown"]); for (const i of facetsData?.facets?.post_type ?? []) v.add(normalizePostType(i.value)); for (const r of selectedPostTypes) v.add(normalizePostType(r)); return Array.from(v).sort((a, b) => a.localeCompare(b)); }, [facetsData, selectedPostTypes]);
+  const campaignOptions = useMemo(() => { const v = new Set<string>(); for (const i of facetsData?.facets?.campaign ?? []) v.add(i.value.toLowerCase()); for (const r of selectedCampaigns) v.add(r); return Array.from(v).sort((a, b) => a.localeCompare(b)); }, [facetsData, selectedCampaigns]);
+  const strategyOptions = useMemo(() => { const v = new Set<string>(); for (const i of facetsData?.facets?.strategy ?? []) v.add(i.value.toLowerCase()); for (const r of selectedStrategies) v.add(r); return Array.from(v).sort((a, b) => a.localeCompare(b)); }, [facetsData, selectedStrategies]);
+  const hashtagOptions = useMemo(() => { const v = new Set<string>(); for (const i of facetsData?.facets?.hashtag ?? []) v.add(i.value.toLowerCase().replace(/^#+/, "")); for (const r of selectedHashtags) v.add(r); return Array.from(v).sort((a, b) => a.localeCompare(b)); }, [facetsData, selectedHashtags]);
+  const topicOptions = useMemo(() => { const v = new Set<string>(); for (const i of facetsData?.facets?.topic ?? []) v.add(i.value.toLowerCase()); for (const r of selectedTopics) v.add(r); return Array.from(v).sort((a, b) => a.localeCompare(b)); }, [facetsData, selectedTopics]);
 
-  const postTypeOptions = useMemo(() => {
-    const values = new Set<string>(["unknown"]);
-    for (const item of facetsData?.facets?.post_type ?? []) values.add(normalizePostType(item.value));
-    for (const row of selectedPostTypes) values.add(normalizePostType(row));
-    return Array.from(values).sort((a, b) => a.localeCompare(b));
-  }, [facetsData, selectedPostTypes]);
-
-  const campaignOptions = useMemo(() => {
-    const values = new Set<string>();
-    for (const item of facetsData?.facets?.campaign ?? []) values.add(item.value.toLowerCase());
-    for (const row of selectedCampaigns) values.add(row);
-    return Array.from(values).sort((a, b) => a.localeCompare(b));
-  }, [facetsData, selectedCampaigns]);
-
-  const strategyOptions = useMemo(() => {
-    const values = new Set<string>();
-    for (const item of facetsData?.facets?.strategy ?? []) values.add(item.value.toLowerCase());
-    for (const row of selectedStrategies) values.add(row);
-    return Array.from(values).sort((a, b) => a.localeCompare(b));
-  }, [facetsData, selectedStrategies]);
-
-  const hashtagOptions = useMemo(() => {
-    const values = new Set<string>();
-    for (const item of facetsData?.facets?.hashtag ?? []) values.add(item.value.toLowerCase().replace(/^#+/, ""));
-    for (const row of selectedHashtags) values.add(row);
-    return Array.from(values).sort((a, b) => a.localeCompare(b));
-  }, [facetsData, selectedHashtags]);
-
-  const topicOptions = useMemo(() => {
-    const values = new Set<string>();
-    for (const item of facetsData?.facets?.topic ?? []) values.add(item.value.toLowerCase());
-    for (const row of selectedTopics) values.add(row);
-    return Array.from(values).sort((a, b) => a.localeCompare(b));
-  }, [facetsData, selectedTopics]);
-
-  const normalizeSearchToken = (value: string): string =>
-    value
-      .trim()
-      .normalize("NFKD")
-      .replace(/[\u0300-\u036f]/g, "")
-      .toLocaleLowerCase("es-CO")
-      .replace(/[^\p{L}\p{N}\s]+/gu, " ")
-      .replace(/\s+/g, " ");
-
-  const filterBySearch = (values: string[], term: string): string[] => {
-    const normalizedTerm = normalizeSearchToken(term);
-    const compactTerm = normalizedTerm.replace(/\s+/g, "");
-    if (!normalizedTerm) return values;
-    return values.filter((item) => {
-      const normalizedItem = normalizeSearchToken(item);
-      const compactItem = normalizedItem.replace(/\s+/g, "");
-      return normalizedItem.includes(normalizedTerm) || compactItem.includes(compactTerm);
-    });
-  };
+  const normalizeSearchToken = (value: string): string => value.trim().normalize("NFKD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase("es-CO").replace(/[^\p{L}\p{N}\s]+/gu, " ").replace(/\s+/g, " ");
+  const filterBySearch = (values: string[], term: string): string[] => { const nt = normalizeSearchToken(term); const ct = nt.replace(/\s+/g, ""); if (!nt) return values; return values.filter((item) => { const ni = normalizeSearchToken(item); return ni.includes(nt) || ni.replace(/\s+/g, "").includes(ct); }); };
 
   const filteredChannelOptions = useMemo(() => filterBySearch(CHANNEL_OPTIONS, channelSearch), [channelSearch]);
   const filteredAccountOptions = useMemo(() => filterBySearch(accountOptions, accountSearch), [accountOptions, accountSearch]);
@@ -1790,2395 +1854,617 @@ export const MonitorSocialOverviewPage = () => {
   const filteredTopicOptions = useMemo(() => filterBySearch(topicOptions, topicSearch), [topicOptions, topicSearch]);
 
   const dataStatus = useMemo(() => {
-    if (loading) return "loading";
-    if (uiError === "permission_denied") return "permission_denied";
-    if (error) return "error";
-    if ((normalizedOverview.kpis?.posts as number | undefined) === 0 && posts.length === 0) return "empty";
+    if (loading) return "loading"; if (uiError === "permission_denied") return "permission_denied";
+    if (error) return "error"; if ((normalizedOverview.kpis?.posts as number | undefined) === 0 && posts.length === 0) return "empty";
     if ((normalizedOverview.reconciliation_status ?? "ok") !== "ok") return "recon_warning";
     if (Boolean(normalizedOverview.diagnostics?.insufficient_data)) return "partial_data";
-    if (riskData?.stale_data) return "stale_data";
-    return "ready";
+    if (riskData?.stale_data) return "stale_data"; return "ready";
   }, [loading, uiError, error, normalizedOverview, posts.length, riskData?.stale_data]);
 
-  const topAccountsDual = useMemo(() => {
-    const rows = [...(accountsData?.items ?? [])]
-      .sort((a, b) => Number(b[accountBarMetric]) - Number(a[accountBarMetric]))
-      .slice(0, 10)
-      .map((item) => ({
-        account_name: item.account_name,
-        posts: Number(item.posts ?? 0),
-        exposure_total: Number(item.exposure_total ?? 0),
-        engagement_total: Number(item.engagement_total ?? 0),
-        impressions_total: Number(item.impressions_total ?? 0),
-        reach_total: Number(item.reach_total ?? 0),
-        clicks_total: Number(item.clicks_total ?? 0),
-        likes_total: Number(item.likes_total ?? 0),
-        comments_total: Number(item.comments_total ?? 0),
-        shares_total: Number(item.shares_total ?? 0),
-        views_total: Number(item.views_total ?? 0),
-        er_ponderado: Number(item.er_ponderado ?? 0),
-        ctr: Number(item.ctr ?? 0),
-        er_impressions: Number(item.er_impressions ?? 0),
-        er_reach: Number(item.er_reach ?? 0),
-        view_rate: Number(item.view_rate ?? 0),
-        likes_share: Number(item.likes_share ?? 0),
-        comments_share: Number(item.comments_share ?? 0),
-        shares_share: Number(item.shares_share ?? 0),
-        riesgo_activo: Number(item.riesgo_activo ?? 0),
-        sov_interno: Number(item.sov_interno ?? 0)
-      }));
-    return rows;
-  }, [accountsData, accountBarMetric]);
+  /* ── Chart data derivations ── */
+  const topAccountsDual = useMemo(() => [...(accountsData?.items ?? [])].sort((a, b) => Number(b[accountBarMetric]) - Number(a[accountBarMetric])).slice(0, 10).map((item) => ({
+    account_name: item.account_name, posts: Number(item.posts ?? 0), exposure_total: Number(item.exposure_total ?? 0),
+    engagement_total: Number(item.engagement_total ?? 0), impressions_total: Number(item.impressions_total ?? 0),
+    reach_total: Number(item.reach_total ?? 0), clicks_total: Number(item.clicks_total ?? 0),
+    likes_total: Number(item.likes_total ?? 0), comments_total: Number(item.comments_total ?? 0),
+    shares_total: Number(item.shares_total ?? 0), views_total: Number(item.views_total ?? 0),
+    er_ponderado: Number(item.er_ponderado ?? 0), ctr: Number(item.ctr ?? 0),
+    er_impressions: Number(item.er_impressions ?? 0), er_reach: Number(item.er_reach ?? 0),
+    view_rate: Number(item.view_rate ?? 0), likes_share: Number(item.likes_share ?? 0),
+    comments_share: Number(item.comments_share ?? 0), shares_share: Number(item.shares_share ?? 0),
+    riesgo_activo: Number(item.riesgo_activo ?? 0), sov_interno: Number(item.sov_interno ?? 0)
+  })), [accountsData, accountBarMetric]);
 
-  const topAccountsAxisValues = useMemo(() => {
-    const leftValues: number[] = [];
-    const rightValues: number[] = [];
-    for (const item of topAccountsDual) {
-      const barValue = Number(item[accountBarMetric]);
-      const lineValue = Number(item[accountLineMetric]);
-      if (accountBarAxis === "left") leftValues.push(barValue);
-      else rightValues.push(barValue);
-      if (accountLineAxis === "left") leftValues.push(lineValue);
-      else rightValues.push(lineValue);
-    }
-    return { leftValues, rightValues };
-  }, [topAccountsDual, accountBarMetric, accountLineMetric, accountBarAxis, accountLineAxis]);
-
-  const topAccountsLeftScale = useMemo(
-    () => resolveScale(topAccountsLeftScaleMode, topAccountsAxisValues.leftValues),
-    [topAccountsLeftScaleMode, topAccountsAxisValues]
-  );
-  const topAccountsRightScale = useMemo(
-    () => resolveScale(topAccountsRightScaleMode, topAccountsAxisValues.rightValues),
-    [topAccountsRightScaleMode, topAccountsAxisValues]
-  );
-
-  const topAccountsLeftMetrics = useMemo(() => {
-    const metrics: AccountMetric[] = [];
-    if (accountBarAxis === "left") metrics.push(accountBarMetric);
-    if (accountLineAxis === "left") metrics.push(accountLineMetric);
-    return Array.from(new Set(metrics));
-  }, [accountBarAxis, accountLineAxis, accountBarMetric, accountLineMetric]);
-
-  const topAccountsRightMetrics = useMemo(() => {
-    const metrics: AccountMetric[] = [];
-    if (accountBarAxis === "right") metrics.push(accountBarMetric);
-    if (accountLineAxis === "right") metrics.push(accountLineMetric);
-    return Array.from(new Set(metrics));
-  }, [accountBarAxis, accountLineAxis, accountBarMetric, accountLineMetric]);
-
-  const trendAxisValues = useMemo(() => {
-    const leftValues = trendSeries.map((item) => Number(item[trendLeftMetric]));
-    const rightValues = trendSeries.map((item) => Number(item[trendRightMetric]));
-    return { leftValues, rightValues };
-  }, [trendSeries, trendLeftMetric, trendRightMetric]);
-
-  const trendLeftScale = useMemo(() => resolveScale("auto", trendAxisValues.leftValues), [trendAxisValues.leftValues]);
-  const trendRightScale = useMemo(() => resolveScale("auto", trendAxisValues.rightValues), [trendAxisValues.rightValues]);
-
-  const trendLeftMetrics = useMemo(() => [trendLeftMetric], [trendLeftMetric]);
-  const trendRightMetrics = useMemo(() => [trendRightMetric], [trendRightMetric]);
-
-  const trendByDimensionSeries = useMemo(() => {
-    return (trendByDimensionData?.series ?? []).map((series, index) => {
-      const normalized = series.label.trim().toLowerCase();
-      const channelColor =
-        trendByDimensionDimension === "channel" && CHANNEL_OPTIONS.includes(normalized as SocialChannel)
-          ? CHANNEL_SERIES_COLORS[normalized as SocialChannel]
-          : null;
-      const points = aggregateTrendSeriesRows(
-        (series.points ?? []).map((point) => ({
-          bucket_start: point.bucket_start,
-          bucket_end: point.bucket_end,
-          bucket_label: point.bucket_label,
-          posts: Number(point.posts ?? 0),
-          value: Number(point.value ?? 0)
-        })),
-        timeGranularity,
-        ["value"]
-      );
-      const postsTotal = points.reduce((acc, point) => acc + Number(point.posts ?? 0), 0);
-      const additiveTotal = points.reduce((acc, point) => acc + Number(point.value ?? 0), 0);
-      const weightedTotal = points.reduce((acc, point) => acc + Number(point.value ?? 0) * Math.max(Number(point.posts ?? 0), 0), 0);
-      const metricTotal = ADDITIVE_METRICS.includes(trendByDimensionMetric)
-        ? roundMetric(additiveTotal)
-        : roundMetric(weightedTotal / Math.max(postsTotal, 1));
-      return {
-        ...series,
-        metric_total: metricTotal,
-        posts_total: postsTotal,
-        points,
-        key: `series_${index}`,
-        color: channelColor ?? DIMENSION_SERIES_COLORS[index % DIMENSION_SERIES_COLORS.length]
-      };
-    });
-  }, [trendByDimensionData, trendByDimensionDimension, timeGranularity, trendByDimensionMetric]);
+  const trendByDimensionSeries = useMemo(() => (trendByDimensionData?.series ?? []).map((series, index) => {
+    const normalized = series.label.trim().toLowerCase();
+    const channelColor = trendByDimensionDimension === "channel" && CHANNEL_OPTIONS.includes(normalized as SocialChannel) ? CHANNEL_SERIES_COLORS[normalized as SocialChannel] : null;
+    const points = aggregateTrendSeriesRows((series.points ?? []).map((p) => ({ bucket_start: p.bucket_start, bucket_end: p.bucket_end, bucket_label: p.bucket_label, posts: Number(p.posts ?? 0), value: Number(p.value ?? 0) })), timeGranularity, ["value"]);
+    const postsTotal = points.reduce((acc, p) => acc + Number(p.posts ?? 0), 0);
+    const additiveTotal = points.reduce((acc, p) => acc + Number(p.value ?? 0), 0);
+    const weightedTotal = points.reduce((acc, p) => acc + Number(p.value ?? 0) * Math.max(Number(p.posts ?? 0), 0), 0);
+    const metricTotal = ADDITIVE_METRICS.includes(trendByDimensionMetric) ? roundMetric(additiveTotal) : roundMetric(weightedTotal / Math.max(postsTotal, 1));
+    return { ...series, metric_total: metricTotal, posts_total: postsTotal, points, key: `series_${index}`, color: channelColor ?? DIMENSION_SERIES_COLORS[index % DIMENSION_SERIES_COLORS.length] };
+  }), [trendByDimensionData, trendByDimensionDimension, timeGranularity, trendByDimensionMetric]);
 
   useEffect(() => {
-    if (trendByDimensionSeries.length === 0) {
-      setVisibleTrendByDimensionSeries([]);
-      return;
-    }
-    if (trendByDimensionDimension === "channel") {
-      setVisibleTrendByDimensionSeries(trendByDimensionSeries.map((item) => item.label));
-      return;
-    }
-    setVisibleTrendByDimensionSeries(trendByDimensionSeries.slice(0, 8).map((item) => item.label));
+    if (trendByDimensionSeries.length === 0) { setVisibleTrendByDimensionSeries([]); return; }
+    if (trendByDimensionDimension === "channel") { setVisibleTrendByDimensionSeries(trendByDimensionSeries.map((i) => i.label)); return; }
+    setVisibleTrendByDimensionSeries(trendByDimensionSeries.slice(0, 8).map((i) => i.label));
   }, [trendByDimensionSeries, trendByDimensionDimension, trendByDimensionMetric]);
 
-  const filteredTrendByDimensionSeries = useMemo(() => {
-    const options = trendByDimensionSeries.map((item) => item.label);
-    return filterBySearch(options, trendByDimensionSeriesSearch);
-  }, [trendByDimensionSeries, trendByDimensionSeriesSearch]);
-
-  const trendByDimensionVisibleSeries = useMemo(
-    () => trendByDimensionSeries.filter((item) => visibleTrendByDimensionSeries.includes(item.label)),
-    [trendByDimensionSeries, visibleTrendByDimensionSeries]
-  );
-
-  const trendByDimensionSeriesByKey = useMemo(() => {
-    return new Map(trendByDimensionSeries.map((item) => [item.key, item]));
-  }, [trendByDimensionSeries]);
+  const filteredTrendByDimensionSeries = useMemo(() => filterBySearch(trendByDimensionSeries.map((i) => i.label), trendByDimensionSeriesSearch), [trendByDimensionSeries, trendByDimensionSeriesSearch]);
+  const trendByDimensionVisibleSeries = useMemo(() => trendByDimensionSeries.filter((i) => visibleTrendByDimensionSeries.includes(i.label)), [trendByDimensionSeries, visibleTrendByDimensionSeries]);
 
   const trendByDimensionChartData = useMemo(() => {
     if (trendByDimensionSeries.length === 0) return [];
-    const useLogSafeValues = trendByDimensionScaleMode === "log";
-    const buckets = new Map<
-      string,
-      {
-        bucketLabel: string;
-        values: Record<string, number>;
-      }
-    >();
-
+    const buckets = new Map<string, { bucketLabel: string; values: Record<string, number> }>();
     for (const series of trendByDimensionSeries) {
       for (const point of series.points) {
-        const bucketKey = point.bucket_start;
-        const current = buckets.get(bucketKey) ?? {
-          bucketLabel: point.bucket_label,
-          values: {}
-        };
+        const bk = point.bucket_start;
+        const current = buckets.get(bk) ?? { bucketLabel: point.bucket_label, values: {} };
         current.bucketLabel = current.bucketLabel || point.bucket_label;
         current.values[series.key] = Number(point.value ?? 0);
-        buckets.set(bucketKey, current);
+        buckets.set(bk, current);
       }
     }
-
-    const orderedBucketKeys = Array.from(buckets.keys()).sort();
-    return orderedBucketKeys.map((bucketKey, index) => {
-      const current = buckets.get(bucketKey);
-      const row: Record<string, string | number | null> = {
-        bucket_label: current?.bucketLabel ?? `Bucket ${index + 1}`
-      };
+    return Array.from(buckets.keys()).sort().map((bk, i) => {
+      const current = buckets.get(bk);
+      const row: Record<string, string | number | null> = { bucket_label: current?.bucketLabel ?? `Bucket ${i + 1}` };
       for (const series of trendByDimensionSeries) {
         if (current && Object.prototype.hasOwnProperty.call(current.values, series.key)) {
           const rawValue = Number(current.values[series.key] ?? 0);
-          row[`raw_${series.key}`] = rawValue;
-          row[series.key] = useLogSafeValues ? toLogSafeValue(rawValue) : rawValue;
-        } else {
-          row[`raw_${series.key}`] = null;
-          row[series.key] = null;
-        }
+          row[`raw_${series.key}`] = rawValue; row[series.key] = rawValue;
+        } else { row[`raw_${series.key}`] = null; row[series.key] = null; }
       }
       return row;
     });
   }, [trendByDimensionSeries, trendByDimensionScaleMode]);
 
-  const trendByDimensionAxisValues = useMemo(
-    () => trendByDimensionVisibleSeries.flatMap((series) => series.points.map((point) => Number(point.value ?? 0))),
-    [trendByDimensionVisibleSeries]
-  );
-  const trendByDimensionHasNonPositiveValues = useMemo(
-    () => trendByDimensionAxisValues.some((value) => !Number.isFinite(value) || value <= 0),
-    [trendByDimensionAxisValues]
-  );
-  const trendByDimensionScale = useMemo(
-    () => {
-      if (trendByDimensionScaleMode === "linear") return "linear";
-      if (trendByDimensionScaleMode === "log") return "log";
-      return trendByDimensionHasNonPositiveValues ? "linear" : resolveScale("auto", trendByDimensionAxisValues);
-    },
-    [trendByDimensionAxisValues, trendByDimensionHasNonPositiveValues, trendByDimensionScaleMode]
-  );
-  const trendByDimensionLogAdjustedValues = useMemo(
-    () => trendByDimensionScaleMode === "log" && trendByDimensionHasNonPositiveValues,
-    [trendByDimensionScaleMode, trendByDimensionHasNonPositiveValues]
-  );
-
-  const topicBreakdownSegments = useMemo(
-    () =>
-      (topicBreakdownData?.segments_order ?? []).map((segment, index) => ({
-        ...segment,
-        color: TOPIC_SEGMENT_COLORS[index % TOPIC_SEGMENT_COLORS.length]
-      })),
-    [topicBreakdownData]
-  );
-
-  const topicBreakdownSegmentByKey = useMemo(
-    () => new Map(topicBreakdownSegments.map((segment) => [segment.key, segment])),
-    [topicBreakdownSegments]
-  );
+  const topicBreakdownSegments = useMemo(() => (topicBreakdownData?.segments_order ?? []).map((s, i) => ({ ...s, color: TOPIC_SEGMENT_COLORS[i % TOPIC_SEGMENT_COLORS.length] })), [topicBreakdownData]);
 
   const topicBreakdownChartData = useMemo(() => {
     const segments = topicBreakdownData?.segments_order ?? [];
     return (topicBreakdownData?.items ?? []).map((item) => {
-      const valuesByKey = new Map(item.segments.map((segment) => [segment.key, Number(segment.metric_value ?? 0)]));
-      const row: Record<string, string | number> = {
-        topic_key: item.topic_key,
-        topic_label: item.topic_label,
-        metric_total: Number(item.metric_total ?? 0),
-        posts_total: Number(item.posts_total ?? 0)
-      };
-
+      const valuesByKey = new Map(item.segments.map((s) => [s.key, Number(s.metric_value ?? 0)]));
+      const row: Record<string, string | number> = { topic_key: item.topic_key, topic_label: item.topic_label, metric_total: Number(item.metric_total ?? 0), posts_total: Number(item.posts_total ?? 0) };
       let total = 0;
-      for (const segment of segments) {
-        const value = valuesByKey.get(segment.key) ?? 0;
-        row[`raw_${segment.key}`] = value;
-        total += value;
-        row[segment.key] = value;
-      }
-
-      if (topicBreakdownNormalize100) {
-        const denominator = Math.max(total, 0.00001);
-        for (const segment of segments) {
-          row[segment.key] = (Number(row[segment.key] ?? 0) / denominator) * 100;
-        }
-      }
-
+      for (const s of segments) { const v = valuesByKey.get(s.key) ?? 0; row[`raw_${s.key}`] = v; total += v; row[s.key] = v; }
+      if (topicBreakdownNormalize100) { const denom = Math.max(total, 0.00001); for (const s of segments) row[s.key] = (Number(row[s.key] ?? 0) / denom) * 100; }
       return row;
     });
   }, [topicBreakdownData, topicBreakdownNormalize100]);
 
-  const topicBreakdownAxisValues = useMemo(() => {
-    if (topicBreakdownNormalize100) return [100];
-    return topicBreakdownChartData.flatMap((row) => topicBreakdownSegments.map((segment) => Number(row[segment.key] ?? 0)));
-  }, [topicBreakdownChartData, topicBreakdownSegments, topicBreakdownNormalize100]);
+  const topicBreakdownChartHeight = useMemo(() => Math.max(320, topicBreakdownChartData.length * 34 + 90), [topicBreakdownChartData.length]);
 
-  const topicBreakdownScale = "linear";
+  const erGapByChannel = useMemo(() => (erTargets?.items ?? []).map((i) => ({ channel: i.channel, current_er: i.current_er, target_2026_er: i.target_2026_er, gap: i.gap, source: i.source })), [erTargets]);
+  const hasVisibleTargetByChannel = useMemo(() => erGapByChannel.some((i) => Math.abs(i.target_2026_er) > 0.0001), [erGapByChannel]);
 
-  const topicBreakdownChartHeight = useMemo(
-    () => Math.max(320, topicBreakdownChartData.length * 34 + 90),
-    [topicBreakdownChartData.length]
-  );
-
-  const erGapByChannel = useMemo(
-    () =>
-      (erTargets?.items ?? []).map((item) => ({
-        channel: item.channel,
-        current_er: item.current_er,
-        target_2026_er: item.target_2026_er,
-        gap: item.gap,
-        source: item.source
-      })),
-    [erTargets]
-  );
-
-  const hasVisibleTargetByChannel = useMemo(() => erGapByChannel.some((item) => Math.abs(item.target_2026_er) > 0.0001), [erGapByChannel]);
-
-  const mixAxisValues = useMemo(() => {
-    const leftValues: number[] = [];
-    const rightValues: number[] = [];
-    for (const item of channelData) {
-      const barValue = Number(item[mixBarMetric]);
-      const lineValue = Number(item[mixLineMetric]);
-      if (mixBarAxis === "left") leftValues.push(barValue);
-      else rightValues.push(barValue);
-      if (mixLineAxis === "left") leftValues.push(lineValue);
-      else rightValues.push(lineValue);
-    }
-    return { leftValues, rightValues };
-  }, [channelData, mixBarMetric, mixLineMetric, mixBarAxis, mixLineAxis]);
-
-  const mixLeftScale = useMemo(() => resolveScale("auto", mixAxisValues.leftValues), [mixAxisValues.leftValues]);
-  const mixRightScale = useMemo(() => resolveScale("auto", mixAxisValues.rightValues), [mixAxisValues.rightValues]);
-
-  const mixLeftMetrics = useMemo(() => {
-    const metrics: MixMetric[] = [];
-    if (mixBarAxis === "left") metrics.push(mixBarMetric);
-    if (mixLineAxis === "left") metrics.push(mixLineMetric);
-    return Array.from(new Set(metrics));
-  }, [mixBarAxis, mixLineAxis, mixBarMetric, mixLineMetric]);
-
-  const mixRightMetrics = useMemo(() => {
-    const metrics: MixMetric[] = [];
-    if (mixBarAxis === "right") metrics.push(mixBarMetric);
-    if (mixLineAxis === "right") metrics.push(mixLineMetric);
-    return Array.from(new Set(metrics));
-  }, [mixBarAxis, mixLineAxis, mixBarMetric, mixLineMetric]);
-
-  const breakdownChartData = useMemo(
-    () =>
-      [...(breakdownData?.items ?? [])]
-        .map((item) => ({
-          ...item,
-          metric_value: Number(item[breakdownMetric] ?? 0)
-        }))
-        .sort((a, b) => Number(b.metric_value) - Number(a.metric_value) || Number(b.posts) - Number(a.posts))
-        .slice(0, 100),
-    [breakdownData, breakdownMetric]
-  );
-
-  const breakdownScale = useMemo(
-    () => resolveScale(breakdownScaleMode, breakdownChartData.map((item) => Number(item.metric_value))),
-    [breakdownScaleMode, breakdownChartData]
-  );
+  const breakdownChartData = useMemo(() => [...(breakdownData?.items ?? [])].map((i) => ({ ...i, metric_value: Number(i[breakdownMetric] ?? 0) })).sort((a, b) => Number(b.metric_value) - Number(a.metric_value) || Number(b.posts) - Number(a.posts)).slice(0, 100), [breakdownData, breakdownMetric]);
 
   const sovPieData = useMemo(() => {
     const sorted = [...(accountsData?.items ?? [])].sort((a, b) => b.sov_interno - a.sov_interno);
-    const top = sorted.slice(0, 6).map((item) => ({ name: item.account_name, value: item.sov_interno }));
-    const others = sorted.slice(6).reduce((acc, item) => acc + item.sov_interno, 0);
+    const top = sorted.slice(0, 6).map((i) => ({ name: i.account_name, value: i.sov_interno }));
+    const others = sorted.slice(6).reduce((acc, i) => acc + i.sov_interno, 0);
     if (others > 0.001) top.push({ name: "Otros", value: others });
     return top;
   }, [accountsData]);
 
   const pieColors = ["#e30613", "#1d4ed8", "#0f766e", "#f59f00", "#9333ea", "#64748b"];
 
-  const scatterValues = useMemo(() => {
-    const xValues = (scatterData?.items ?? []).map((item) => Number(item[scatterXMetric] ?? 0));
-    const yValues = (scatterData?.items ?? []).map((item) => Number(item[scatterYMetric] ?? 0));
-    return { xValues, yValues };
-  }, [scatterData, scatterXMetric, scatterYMetric]);
-
-  const scatterXScale = useMemo(() => resolveScale("auto", scatterValues.xValues), [scatterValues.xValues]);
-  const scatterYScale = useMemo(() => resolveScale("auto", scatterValues.yValues), [scatterValues.yValues]);
-
-  const scatterChartData = useMemo(
-    () =>
-      (scatterData?.items ?? []).map((item) => ({
-        label: item.label,
-        posts: Number(item.posts ?? 0),
-        exposure_total: Number(item.exposure_total ?? 0),
-        engagement_total: Number(item.engagement_total ?? 0),
-        impressions_total: Number(item.impressions_total ?? 0),
-        reach_total: Number(item.reach_total ?? 0),
-        clicks_total: Number(item.clicks_total ?? 0),
-        likes_total: Number(item.likes_total ?? 0),
-        comments_total: Number(item.comments_total ?? 0),
-        shares_total: Number(item.shares_total ?? 0),
-        views_total: Number(item.views_total ?? 0),
-        er_global: Number(item.er_global ?? 0),
-        ctr: Number(item.ctr ?? 0),
-        er_impressions: Number(item.er_impressions ?? 0),
-        er_reach: Number(item.er_reach ?? 0),
-        view_rate: Number(item.view_rate ?? 0),
-        likes_share: Number(item.likes_share ?? 0),
-        comments_share: Number(item.comments_share ?? 0),
-        shares_share: Number(item.shares_share ?? 0),
-        x_value: Number(item[scatterXMetric] ?? 0),
-        y_value: Number(item[scatterYMetric] ?? 0),
-        z: Math.max(1, Number(item.posts ?? 0))
-      })),
-    [scatterData, scatterXMetric, scatterYMetric]
-  );
+  const scatterChartData = useMemo(() => (scatterData?.items ?? []).map((i) => ({
+    label: i.label, posts: Number(i.posts ?? 0), x_value: Number(i[scatterXMetric] ?? 0),
+    y_value: Number(i[scatterYMetric] ?? 0), z: Math.max(1, Number(i.posts ?? 0)),
+    exposure_total: Number(i.exposure_total ?? 0), engagement_total: Number(i.engagement_total ?? 0),
+    er_global: Number(i.er_global ?? 0)
+  })), [scatterData, scatterXMetric, scatterYMetric]);
 
   const riskSentimentTrendData = useMemo(() => {
-    const rows = (riskData?.sentiment_trend ?? []).map((item) => ({
-      date: String(item.date ?? ""),
-      clasificados: Number(item.clasificados ?? 0),
-      positivos: Number(item.positivos ?? 0),
-      negativos: Number(item.negativos ?? 0),
-      neutrales: Number(item.neutrales ?? 0),
-      sentimiento_neto: Number(item.sentimiento_neto ?? 0),
-      riesgo_activo: Number(item.riesgo_activo ?? 0)
+    const rows = (riskData?.sentiment_trend ?? []).map((i) => ({
+      date: String(i.date ?? ""), clasificados: Number(i.clasificados ?? 0), positivos: Number(i.positivos ?? 0),
+      negativos: Number(i.negativos ?? 0), neutrales: Number(i.neutrales ?? 0),
+      sentimiento_neto: Number(i.sentimiento_neto ?? 0), riesgo_activo: Number(i.riesgo_activo ?? 0)
     }));
-
     if (timeGranularity === "day") return rows;
-
-    const buckets = new Map<
-      string,
-      {
-        label: string;
-        start: Date;
-        clasificados: number;
-        positivos: number;
-        negativos: number;
-        neutrales: number;
-      }
-    >();
-
+    const buckets = new Map<string, { label: string; start: Date; clasificados: number; positivos: number; negativos: number; neutrales: number }>();
     for (const row of rows) {
       const parsedDate = /^\d{4}-\d{2}-\d{2}$/u.test(row.date) ? new Date(`${row.date}T00:00:00.000Z`) : new Date(row.date);
       if (Number.isNaN(parsedDate.getTime())) continue;
       const bucket = toTimeBucketMeta(parsedDate, timeGranularity);
-      const current =
-        buckets.get(bucket.key) ??
-        {
-          label: bucket.label,
-          start: bucket.start,
-          clasificados: 0,
-          positivos: 0,
-          negativos: 0,
-          neutrales: 0
-        };
-      current.clasificados += row.clasificados;
-      current.positivos += row.positivos;
-      current.negativos += row.negativos;
-      current.neutrales += row.neutrales;
+      const current = buckets.get(bucket.key) ?? { label: bucket.label, start: bucket.start, clasificados: 0, positivos: 0, negativos: 0, neutrales: 0 };
+      current.clasificados += row.clasificados; current.positivos += row.positivos; current.negativos += row.negativos; current.neutrales += row.neutrales;
       buckets.set(bucket.key, current);
     }
-
-    return Array.from(buckets.values())
-      .sort((a, b) => a.start.getTime() - b.start.getTime())
-      .map((item) => ({
-        date: item.label,
-        clasificados: item.clasificados,
-        positivos: item.positivos,
-        negativos: item.negativos,
-        neutrales: item.neutrales,
-        sentimiento_neto: roundMetric(((item.positivos - item.negativos) / Math.max(item.clasificados, 1)) * 100),
-        riesgo_activo: roundMetric((item.negativos / Math.max(item.clasificados, 1)) * 100)
-      }));
+    return Array.from(buckets.values()).sort((a, b) => a.start.getTime() - b.start.getTime()).map((i) => ({
+      date: i.label, clasificados: i.clasificados, positivos: i.positivos, negativos: i.negativos, neutrales: i.neutrales,
+      sentimiento_neto: roundMetric(((i.positivos - i.negativos) / Math.max(i.clasificados, 1)) * 100),
+      riesgo_activo: roundMetric((i.negativos / Math.max(i.clasificados, 1)) * 100)
+    }));
   }, [riskData, timeGranularity]);
 
-  const riskTopChannels = useMemo(
-    () =>
-      [...(riskData?.by_channel ?? [])]
-        .sort((a, b) => b.riesgo_activo - a.riesgo_activo || b.negativos - a.negativos)
-        .slice(0, 8),
-    [riskData]
-  );
-
-  const riskTopAccounts = useMemo(
-    () =>
-      [...(riskData?.by_account ?? [])]
-        .sort((a, b) => b.riesgo_activo - a.riesgo_activo || b.negativos - a.negativos)
-        .slice(0, 8),
-    [riskData]
-  );
+  const riskTopChannels = useMemo(() => [...(riskData?.by_channel ?? [])].sort((a, b) => b.riesgo_activo - a.riesgo_activo || b.negativos - a.negativos).slice(0, 8), [riskData]);
+  const riskTopAccounts = useMemo(() => [...(riskData?.by_account ?? [])].sort((a, b) => b.riesgo_activo - a.riesgo_activo || b.negativos - a.negativos).slice(0, 8), [riskData]);
 
   const targetErGlobal = useMemo(() => {
     const rows = normalizedOverview.target_progress?.er_by_channel ?? [];
     if (rows.length === 0) return 0;
-    return rows.reduce((acc, row) => acc + Number(row.target_2026_er ?? 0), 0) / rows.length;
+    return rows.reduce((acc, r) => acc + Number(r.target_2026_er ?? 0), 0) / rows.length;
   }, [normalizedOverview]);
 
-  const kpiCards = useMemo<KpiCard[]>(() => {
-    const kpis = normalizedOverview.kpis ?? {};
-    const prev = normalizedOverview.previous_period ?? {};
-    const targetProgress = normalizedOverview.target_progress ?? {};
-
-    const postsCurrent = Number(kpis.posts ?? 0);
-    const postsPrev = Number(prev.posts ?? 0);
-
-    const exposureCurrent = Number(kpis.exposure_total ?? 0);
-    const exposurePrev = Number(prev.exposure_total ?? 0);
-
-    const erCurrent = Number(kpis.er_global ?? 0);
-    const erPrev = Number(prev.er_global ?? 0);
-
-    const riesgoCurrent = Number(kpis.riesgo_activo ?? 0);
-    const riesgoPrev = Number(prev.riesgo_activo ?? 0);
-
-    const shsCurrent = Number(kpis.shs ?? 0);
-    const shsPrev = Number(prev.shs ?? 0);
-    const targetShs = Number(targetProgress.target_shs ?? 0);
-
-    const sovCurrent = Number(kpis.focus_account_sov ?? 0);
-    const sovPrev = Number(prev.focus_account_sov ?? 0);
-    const targetSovPp = Number(targetProgress.quarterly_sov_target_pp ?? 0);
-
+  const kpiCards = useMemo<KpiCardData[]>(() => {
+    const kpis = normalizedOverview.kpis ?? {}; const prev = normalizedOverview.previous_period ?? {}; const tp = normalizedOverview.target_progress ?? {};
+    const pc = Number(kpis.posts ?? 0); const pp = Number(prev.posts ?? 0);
+    const ec = Number(kpis.exposure_total ?? 0); const ep = Number(prev.exposure_total ?? 0);
+    const erc = Number(kpis.er_global ?? 0); const erp = Number(prev.er_global ?? 0);
+    const rc = Number(kpis.riesgo_activo ?? 0); const rp = Number(prev.riesgo_activo ?? 0);
+    const sc = Number(kpis.shs ?? 0); const sp = Number(prev.shs ?? 0); const ts = Number(tp.target_shs ?? 0);
+    const sovc = Number(kpis.focus_account_sov ?? 0); const sovp = Number(prev.focus_account_sov ?? 0); const tsp = Number(tp.quarterly_sov_target_pp ?? 0);
     return [
-      {
-        id: "posts",
-        title: "Posts",
-        value: formatNumber(postsCurrent),
-        previous: formatNumber(postsPrev),
-        goal: "Meta: --",
-        status: `Vs anterior: ${formatNumber(postsCurrent - postsPrev)}`,
-        statusClass: toDeltaClass(postsCurrent - postsPrev),
-        info: KPI_INFO.posts
-      },
-      {
-        id: "exposure_total",
-        title: "Exposición",
-        value: formatNumber(exposureCurrent),
-        previous: formatNumber(exposurePrev),
-        goal: "Meta: --",
-        status: `Vs anterior: ${formatNumber(exposureCurrent - exposurePrev)}`,
-        statusClass: toDeltaClass(exposureCurrent - exposurePrev),
-        info: KPI_INFO.exposure_total
-      },
-      {
-        id: "er_global",
-        title: "ER Global",
-        value: formatPercent(erCurrent),
-        previous: formatPercent(erPrev),
-        goal: `Meta: ${formatPercent(targetErGlobal)}`,
-        status: `Gap meta: ${formatPercent(erCurrent - targetErGlobal)}`,
-        statusClass: toDeltaClass(erCurrent - targetErGlobal),
-        info: KPI_INFO.er_global
-      },
-      {
-        id: "riesgo_activo",
-        title: "Riesgo activo",
-        value: formatPercent(riesgoCurrent),
-        previous: formatPercent(riesgoPrev),
-        goal: `Umbral: ${formatPercent(Number((overview as unknown as { settings?: { risk_threshold?: number } })?.settings?.risk_threshold ?? 0))}`,
-        status: `Vs anterior: ${formatPercent(riesgoCurrent - riesgoPrev)}`,
-        statusClass: toDeltaClass(-(riesgoCurrent - riesgoPrev)),
-        info: KPI_INFO.riesgo_activo
-      },
-      {
-        id: "shs",
-        title: "SHS (social)",
-        value: formatScore(shsCurrent),
-        previous: formatScore(shsPrev),
-        goal: `Meta: ${formatScore(targetShs)}`,
-        status: `Gap meta: ${formatScore(shsCurrent - targetShs)}`,
-        statusClass: toDeltaClass(shsCurrent - targetShs),
-        info: KPI_INFO.shs
-      },
-      {
-        id: "focus_account_sov",
-        title: "SOV interno",
-        value: formatPercent(sovCurrent),
-        previous: formatPercent(sovPrev),
-        goal: `Meta trimestral: +${formatScore(targetSovPp)} pp`,
-        status: `Cuenta foco: ${String(kpis.focus_account ?? "n/a")}`,
-        statusClass: "text-slate-600",
-        info: KPI_INFO.focus_account_sov
-      }
+      { id: "posts", title: "Posts", value: formatNumber(pc), previous: formatNumber(pp), goal: "Meta: --", status: `Vs anterior: ${formatNumber(pc - pp)}`, statusColor: toDeltaColor(pc - pp), info: KPI_INFO.posts },
+      { id: "exposure_total", title: "Exposición", value: formatNumber(ec), previous: formatNumber(ep), goal: "Meta: --", status: `Vs anterior: ${formatNumber(ec - ep)}`, statusColor: toDeltaColor(ec - ep), info: KPI_INFO.exposure_total },
+      { id: "er_global", title: "ER Global", value: formatPercent(erc), previous: formatPercent(erp), goal: `Meta: ${formatPercent(targetErGlobal)}`, status: `Gap meta: ${formatPercent(erc - targetErGlobal)}`, statusColor: toDeltaColor(erc - targetErGlobal), info: KPI_INFO.er_global },
+      { id: "riesgo_activo", title: "Riesgo activo", value: formatPercent(rc), previous: formatPercent(rp), goal: `Umbral: ${formatPercent(Number((overview as unknown as { settings?: { risk_threshold?: number } })?.settings?.risk_threshold ?? 0))}`, status: `Vs anterior: ${formatPercent(rc - rp)}`, statusColor: toDeltaColor(-(rc - rp)), info: KPI_INFO.riesgo_activo },
+      { id: "shs", title: "SHS (social)", value: formatScore(sc), previous: formatScore(sp), goal: `Meta: ${formatScore(ts)}`, status: `Gap meta: ${formatScore(sc - ts)}`, statusColor: toDeltaColor(sc - ts), info: KPI_INFO.shs },
+      { id: "focus_account_sov", title: "SOV interno", value: formatPercent(sovc), previous: formatPercent(sovp), goal: `Meta trimestral: +${formatScore(tsp)} pp`, status: `Cuenta foco: ${String(kpis.focus_account ?? "n/a")}`, statusColor: "#64748b", info: KPI_INFO.focus_account_sov }
     ];
   }, [normalizedOverview, targetErGlobal, overview]);
 
-  const secondaryKpis = useMemo(
-    () =>
-      SECONDARY_KPI_METRICS.map((metric) => {
-        const current = Number(normalizedOverview.kpis?.[metric] ?? 0);
-        const previous = Number(normalizedOverview.previous_period?.[metric] ?? 0);
-        const delta = current - previous;
-        return {
-          metric,
-          label: METRIC_META[metric]?.label ?? metric,
-          value: formatMetricValue(metric, current),
-          delta,
-          deltaLabel: `${delta >= 0 ? "+" : ""}${formatMetricValue(metric, delta)}`
-        };
-      }),
-    [normalizedOverview]
-  );
+  const secondaryKpis = useMemo(() => SECONDARY_KPI_METRICS.map((metric) => {
+    const current = Number(normalizedOverview.kpis?.[metric] ?? 0);
+    const previous = Number(normalizedOverview.previous_period?.[metric] ?? 0);
+    const delta = current - previous;
+    return { metric, label: METRIC_META[metric]?.label ?? metric, value: formatMetricValue(metric, current), delta, deltaLabel: `${delta >= 0 ? "+" : ""}${formatMetricValue(metric, delta)}` };
+  }), [normalizedOverview]);
+
+  /* ── Accounts table columns ── */
+  const accountColumns = useMemo(() => [
+    { title: "Cuenta", dataIndex: "account_name", key: "account_name", fixed: "left" as const, width: 160 },
+    { title: "Canales", key: "channels", width: 120, render: (_: unknown, item: Record<string, unknown>) => (((item.channel_mix as string[]) ?? []).map((ch: string) => toChannelLabel(ch as SocialChannel)).join(", ")) },
+    { title: "Followers", key: "followers", width: 100, render: (_: unknown, item: Record<string, unknown>) => formatNumber(((item.channel_mix as string[]) ?? []).reduce((sum: number, ch: string) => sum + (pageMetricsData.get(`${ch}:${item.account_name}`)?.followers ?? 0), 0)) },
+    { title: "Page Reach", key: "pageReach", width: 100, render: (_: unknown, item: Record<string, unknown>) => formatNumber(((item.channel_mix as string[]) ?? []).reduce((sum: number, ch: string) => sum + (pageMetricsData.get(`${ch}:${item.account_name}`)?.pageReach ?? 0), 0)) },
+    { title: "Posts", dataIndex: "posts", key: "posts", width: 80, render: (v: number) => formatNumber(v) },
+    { title: "Exposición", dataIndex: "exposure_total", key: "exposure_total", width: 110, render: (v: number) => formatNumber(v) },
+    { title: "Interacciones", dataIndex: "engagement_total", key: "engagement_total", width: 120, render: (v: number) => formatNumber(v) },
+    { title: "ER pond.", dataIndex: "er_ponderado", key: "er_ponderado", width: 90, render: (v: number) => formatPercent(v) },
+    { title: "Riesgo", dataIndex: "riesgo_activo", key: "riesgo_activo", width: 90, render: (v: number) => <Tag color={toRiskTagColor(v)}>{formatPercent(v)}</Tag> },
+    { title: "Delta exp.", dataIndex: "delta_exposure", key: "delta_exposure", width: 100, render: (v: number) => <span style={{ color: toDeltaColor(v) }}>{formatNumber(v)}</span> },
+    { title: "Delta eng.", dataIndex: "delta_engagement", key: "delta_engagement", width: 100, render: (v: number) => <span style={{ color: toDeltaColor(v) }}>{formatNumber(v)}</span> },
+    { title: "Delta ER", dataIndex: "delta_er", key: "delta_er", width: 90, render: (v: number) => <span style={{ color: toDeltaColor(v) }}>{formatPercent(v)}</span> },
+    { title: "SOV", dataIndex: "sov_interno", key: "sov_interno", width: 80, render: (v: number) => formatPercent(v) },
+    { title: "Threshold", dataIndex: "meets_threshold", key: "meets_threshold", width: 90, render: (v: boolean) => <StatusTag status={v ? "OK" : "Bajo"} /> },
+    { title: "Acción", key: "action", width: 100, render: (_: unknown, item: Record<string, unknown>) => <Button size="small" onClick={() => setQueryPatch({ tab: "posts", account: String(item.account_name) })}>Ver posts</Button> }
+  ], [pageMetricsData]);
+
+  /* ══════════════════════════════════════════════════
+     JSX RENDER
+     ══════════════════════════════════════════════════ */
+  const metricSelectOptions = (metrics: string[]) => metrics.map((m) => ({ label: METRIC_META[m]?.label ?? m, value: m }));
+
+  const clearAllFilters = () => setQueryPatch({
+    preset: "ytd", from: null, to: null, comparison_mode: "same_period_last_year", comparison_days: null,
+    channel: null, account: null, post_type: null, campaign: null, strategy: null, hashtag: null,
+    topic: null, sentiment: null, time_granularity: null, posts_sort: null, accounts_sort: null,
+    accounts_cursor: null, accounts_limit: null, min_posts: null, min_exposure: null
+  });
+
+  const tabItems = [
+    { key: "summary", label: "Resumen" }, { key: "accounts", label: "Cuentas" },
+    { key: "posts", label: "Posts" }, { key: "risk", label: "Riesgo" },
+    { key: "etl", label: "ETL" }, { key: "glossary", label: "Glosario" }
+  ];
 
   return (
-    <section className="space-y-4">
-      <header className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h2 className="text-3xl font-bold tracking-tight text-slate-900">Social Analytics</h2>
-          <p className="mt-1 text-sm text-slate-600">Dashboard comparativo 2026 vs 2025 con metas ER por canal y filtros inteligentes.</p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="rounded-full border border-red-200 bg-red-50 px-3 py-1 text-[11px] font-semibold uppercase tracking-wider text-red-700">No oficial</span>
-          <button className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50" type="button" onClick={() => setReloadVersion((current) => current + 1)} disabled={loading}>
-            Refrescar vista
-          </button>
-          <button className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50" type="button" onClick={() => void triggerRun()} disabled={!canRefresh || refreshingRun}>
-            {refreshingRun ? "Encolando..." : "Refresh manual ETL"}
-          </button>
-          <button className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50" type="button" onClick={() => void exportFilteredCsv()} disabled={!canExport || exportingCsv}>
-            {exportingCsv ? "Exportando..." : "Exportar CSV"}
-          </button>
-          <button className="rounded-lg bg-claro-red px-3 py-2 text-sm font-semibold text-white hover:brightness-95" type="button" onClick={() => void exportExcel()} disabled={!canExport || exportingExcel}>
-            {exportingExcel ? "Exportando..." : "Exportar Excel"}
-          </button>
-        </div>
-      </header>
+    <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+      <PageHeader
+        title="Social Analytics"
+        subtitle="Dashboard comparativo 2026 vs 2025 con metas ER por canal y filtros inteligentes."
+        extra={
+          <Space wrap>
+            <Tag color="red" style={{ fontWeight: 600, textTransform: "uppercase", letterSpacing: 1 }}>No oficial</Tag>
+            <Button icon={<ReloadOutlined />} onClick={() => setReloadVersion((c) => c + 1)} disabled={loading}>Refrescar vista</Button>
+            <Button onClick={() => void triggerRun()} disabled={!canRefresh || refreshingRun} loading={refreshingRun}>Refresh manual ETL</Button>
+            <Button icon={<DownloadOutlined />} onClick={() => void exportFilteredCsv()} disabled={!canExport || exportingCsv} loading={exportingCsv}>Exportar CSV</Button>
+            <Button type="primary" danger icon={<FileExcelOutlined />} onClick={() => void exportExcel()} disabled={!canExport || exportingExcel} loading={exportingExcel}>Exportar Excel</Button>
+          </Space>
+        }
+      />
 
-      {role === "Viewer" ? <div className="rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-blue-800">Rol Viewer: lectura habilitada.</div> : null}
-      {pendingRunId ? <div className="rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-blue-800">Corrida manual en progreso: {pendingRunId}</div> : null}
-      {error ? <div className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-800">{error}</div> : null}
-      {dataStatus === "permission_denied" ? (
-        <div className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-800">
-          Estado permission_denied: no tienes permisos para una o más consultas de Social Analytics.
-        </div>
-      ) : null}
-      {dataStatus === "stale_data" ? (
-        <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
-          Estado stale_data: la última ETL está fuera del umbral de frescura configurado para operación.
-        </div>
-      ) : null}
-      {dataStatus === "partial_data" ? <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">Estado partial_data: hay clasificación pendiente o muestra insuficiente.</div> : null}
-      {dataStatus === "recon_warning" ? <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">Estado recon_warning: la reconciliación S3-DB tiene deltas.</div> : null}
-      {dataStatus === "empty" ? <div className="rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-blue-800">Estado empty: no hay datos para los filtros seleccionados.</div> : null}
+      {role === "Viewer" && <Alert type="info" title="Rol Viewer: lectura habilitada." showIcon />}
+      {pendingRunId && <Alert type="info" title={`Corrida manual en progreso: ${pendingRunId}`} showIcon />}
+      {error && <Alert type="error" title={error} showIcon closable />}
+      {dataStatus === "permission_denied" && <Alert type="error" title="Estado permission_denied: no tienes permisos para una o más consultas de Social Analytics." showIcon />}
+      {dataStatus === "stale_data" && <Alert type="warning" title="Estado stale_data: la última ETL está fuera del umbral de frescura configurado para operación." showIcon />}
+      {dataStatus === "partial_data" && <Alert type="warning" title="Estado partial_data: hay clasificación pendiente o muestra insuficiente." showIcon />}
+      {dataStatus === "recon_warning" && <Alert type="warning" title="Estado recon_warning: la reconciliación S3-DB tiene deltas." showIcon />}
+      {dataStatus === "empty" && <Alert type="info" title="Estado empty: no hay datos para los filtros seleccionados." showIcon />}
 
-      <section className="rounded-2xl border border-slate-200 bg-white/90 p-4 shadow-panel">
-        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-          <div className="flex flex-wrap items-center gap-2">
-            <h3 className="text-base font-semibold text-slate-900">Filtros inteligentes</h3>
-            <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Drill-down temporal</span>
-            <div className="flex flex-wrap items-center gap-1">
-              {TIME_GRANULARITY_OPTIONS.map((option) => (
-                <button
-                  key={option}
-                  type="button"
-                  onClick={() => setQueryPatch({ time_granularity: option })}
-                  className={`rounded-full border px-2 py-1 text-xs font-semibold ${
-                    timeGranularity === option ? "border-red-600 bg-red-600 text-white" : "border-slate-200 text-slate-700 hover:bg-slate-50"
-                  }`}
-                >
-                  {toTimeGranularityLabel(option)}
-                </button>
-              ))}
-            </div>
-          </div>
-          <button
-            className="rounded-md border border-slate-200 px-2 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50"
-            type="button"
-            onClick={() =>
-              setQueryPatch({
-                preset: "ytd",
-                from: null,
-                to: null,
-                comparison_mode: "same_period_last_year",
-                comparison_days: null,
-                channel: null,
-                account: null,
-                post_type: null,
-                campaign: null,
-                strategy: null,
-                hashtag: null,
-                topic: null,
-                sentiment: null,
-                time_granularity: null,
-                posts_sort: null,
-                accounts_sort: null,
-                accounts_cursor: null,
-                accounts_limit: null,
-                min_posts: null,
-                min_exposure: null
-              })
-            }
-          >
-            Limpiar filtros
-          </button>
-        </div>
-
-        <div className="grid gap-3 xl:grid-cols-10">
-          <details className="group relative min-w-0 xl:col-span-2">
-            <summary className="list-none cursor-pointer rounded-xl border border-slate-200 bg-white px-3 py-2 shadow-sm">
-              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Periodo y comparación</p>
-              <p className="truncate text-sm font-semibold text-slate-800">
-                {toPresetLabel(preset)} | {toComparisonLabel(comparisonMode)} | {toTimeGranularityLabel(timeGranularity)}
-              </p>
-              <p className="truncate text-xs text-slate-500">
-                {formatDate((normalizedOverview.comparison?.current_window_start ?? normalizedOverview.window_start) as string | undefined)} - {" "}
-                {formatDate((normalizedOverview.comparison?.current_window_end ?? normalizedOverview.window_end) as string | undefined)}
-              </p>
-            </summary>
-            <div className="absolute z-30 mt-2 w-full rounded-xl border border-slate-200 bg-white p-3 shadow-2xl">
-              <div className="grid gap-2 md:grid-cols-2">
-                <label className="text-xs font-semibold text-slate-600">
-                  Desde
-                  <input
-                    type="date"
-                    value={from ?? ""}
-                    onChange={(event) => setQueryPatch({ preset: "custom", from: event.target.value || null })}
-                    className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
-                  />
-                </label>
-                <label className="text-xs font-semibold text-slate-600">
-                  Hasta
-                  <input
-                    type="date"
-                    value={to ?? ""}
-                    onChange={(event) => setQueryPatch({ preset: "custom", to: event.target.value || null })}
-                    className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
-                  />
-                </label>
+      {/* ── Filters ── */}
+      <Card size="small" title={<Flex align="center" gap={8}><FilterOutlined /> <span style={{ fontWeight: 600 }}>Filtros inteligentes</span></Flex>}
+        extra={<Space wrap>
+          <span style={{ fontSize: 11, fontWeight: 600, textTransform: "uppercase", color: "#64748b" }}>Drill-down temporal</span>
+          <Segmented size="small" value={timeGranularity} onChange={(v) => setQueryPatch({ time_granularity: v as string })}
+            options={TIME_GRANULARITY_OPTIONS.map((o) => ({ label: toTimeGranularityLabel(o), value: o }))} />
+          <Button size="small" icon={<ClearOutlined />} onClick={clearAllFilters}>Limpiar filtros</Button>
+        </Space>}
+      >
+        <Row gutter={[8, 8]}>
+          <Col xs={24} xl={5}>
+            <Popover trigger="click" placement="bottomLeft" content={
+              <div style={{ width: 300 }}>
+                <Space direction="vertical" style={{ width: "100%" }}>
+                  <Row gutter={8}><Col span={12}><div style={{ fontSize: 11, fontWeight: 600, color: "#64748b" }}>Desde</div><Input size="small" type="date" value={from ?? ""} onChange={(e) => setQueryPatch({ preset: "custom", from: e.target.value || null })} /></Col><Col span={12}><div style={{ fontSize: 11, fontWeight: 600, color: "#64748b" }}>Hasta</div><Input size="small" type="date" value={to ?? ""} onChange={(e) => setQueryPatch({ preset: "custom", to: e.target.value || null })} /></Col></Row>
+                  <Space wrap>{PRESET_OPTIONS.map((o) => <Button key={o} size="small" type={preset === o ? "primary" : "default"} danger={preset === o} onClick={() => applyPreset(o)}>{toPresetLabel(o)}</Button>)}</Space>
+                  <div style={{ fontSize: 11, fontWeight: 600, color: "#64748b" }}>Tipo comparación</div>
+                  <Select size="small" style={{ width: "100%" }} value={comparisonMode} onChange={(v) => setQueryPatch({ comparison_mode: v })} options={[{ label: "Mismo periodo del año pasado", value: "same_period_last_year" },{ label: "Última semana con coincidencia de días", value: "weekday_aligned_week" },{ label: "Última cantidad exacta de días", value: "exact_days" }]} />
+                  <div style={{ fontSize: 11, fontWeight: 600, color: "#64748b" }}>Días comparación</div>
+                  <InputNumber size="small" style={{ width: "100%" }} min={1} max={366} value={comparisonDays} disabled={comparisonMode !== "exact_days"} onChange={(v) => setQueryPatch({ comparison_days: String(Math.max(1, v ?? 30)) })} />
+                </Space>
               </div>
-
-              <div className="mt-2 flex flex-wrap gap-1">
-                {PRESET_OPTIONS.map((option) => (
-                  <button
-                    key={option}
-                    type="button"
-                    onClick={() => applyPreset(option)}
-                    className={`rounded-full border px-2 py-1 text-xs font-semibold ${preset === option ? "border-red-600 bg-red-600 text-white" : "border-slate-200 text-slate-700 hover:bg-slate-50"}`}
-                  >
-                    {toPresetLabel(option)}
-                  </button>
-                ))}
-              </div>
-
-              <div className="mt-3 grid gap-2 md:grid-cols-2">
-                <label className="text-xs font-semibold text-slate-600">
-                  Tipo comparación
-                  <select
-                    value={comparisonMode}
-                    onChange={(event) => setQueryPatch({ comparison_mode: event.target.value as SocialComparisonMode })}
-                    className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
-                  >
-                    <option value="same_period_last_year">Mismo periodo del año pasado</option>
-                    <option value="weekday_aligned_week">Última semana con coincidencia de días</option>
-                    <option value="exact_days">Última cantidad exacta de días</option>
-                  </select>
-                </label>
-
-                <label className="text-xs font-semibold text-slate-600">
-                  Días comparación
-                  <input
-                    type="number"
-                    min={1}
-                    max={366}
-                    value={comparisonDays}
-                    disabled={comparisonMode !== "exact_days"}
-                    onChange={(event) => setQueryPatch({ comparison_days: String(Math.max(1, Number.parseInt(event.target.value || "30", 10))) })}
-                    className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
-                  />
-                </label>
-                <label className="text-xs font-semibold text-slate-600">
-                  Drill-down temporal
-                  <select
-                    value={timeGranularity}
-                    onChange={(event) => setQueryPatch({ time_granularity: event.target.value as TimeGranularity })}
-                    className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
-                  >
-                    {TIME_GRANULARITY_OPTIONS.map((option) => (
-                      <option key={option} value={option}>
-                        {toTimeGranularityLabel(option)}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-              </div>
-            </div>
-          </details>
-
-          <SmartMultiSelect
-            className="xl:col-span-1"
-            label="Canal"
-            summary={selectedChannels.length > 0 ? `${selectedChannels.length} seleccionados` : "Todos"}
-            secondary={`${CHANNEL_OPTIONS.length} canales`}
-            options={filteredChannelOptions}
-            selected={selectedChannels}
-            search={channelSearch}
-            placeholder="Buscar canal"
-            onSearch={setChannelSearch}
-            onToggle={(value) => toggleMultiValue("channel", selectedChannels, value)}
-            onClear={() => setQueryPatch({ channel: null })}
-            toLabel={(value) => toChannelLabel(value as SocialChannel)}
-          />
-
-          <SmartMultiSelect
-            className="xl:col-span-1"
-            label="Cuenta"
-            summary={selectedAccounts.length > 0 ? `${selectedAccounts.length} seleccionadas` : "Todas"}
-            secondary={`${accountOptions.length} disponibles`}
-            options={filteredAccountOptions}
-            selected={selectedAccounts}
-            search={accountSearch}
-            placeholder="Buscar cuenta..."
-            onSearch={setAccountSearch}
-            onToggle={(value) => toggleMultiValue("account", selectedAccounts, value)}
-            onClear={() => setQueryPatch({ account: null })}
-          />
-
-          <SmartMultiSelect
-            className="xl:col-span-1"
-            label="Tipo de post"
-            summary={selectedPostTypes.length > 0 ? `${selectedPostTypes.length} seleccionados` : "Todos"}
-            secondary={`${postTypeOptions.length} tipos`}
-            options={filteredPostTypeOptions}
-            selected={selectedPostTypes}
-            search={postTypeSearch}
-            placeholder="Buscar tipo..."
-            onSearch={setPostTypeSearch}
-            onToggle={(value) => toggleMultiValue("post_type", selectedPostTypes, value)}
-            onClear={() => setQueryPatch({ post_type: null })}
-            toLabel={(value) => (value === "unknown" ? "Sin tipo" : value)}
-          />
-
-          <SmartMultiSelect
-            className="xl:col-span-1"
-            label="Campaña"
-            summary={selectedCampaigns.length > 0 ? `${selectedCampaigns.length} seleccionadas` : "Todas"}
-            secondary={`${campaignOptions.length} disponibles`}
-            options={filteredCampaignOptions}
-            selected={selectedCampaigns}
-            search={campaignSearch}
-            placeholder="Buscar campaña..."
-            onSearch={setCampaignSearch}
-            onToggle={(value) => toggleMultiValue("campaign", selectedCampaigns, value)}
-            onClear={() => setQueryPatch({ campaign: null })}
-          />
-
-          <SmartMultiSelect
-            className="xl:col-span-1"
-            label="Estrategia"
-            summary={selectedStrategies.length > 0 ? `${selectedStrategies.length} seleccionadas` : "Todas"}
-            secondary={`${strategyOptions.length} disponibles`}
-            options={filteredStrategyOptions}
-            selected={selectedStrategies}
-            search={strategySearch}
-            placeholder="Buscar estrategia..."
-            onSearch={setStrategySearch}
-            onToggle={(value) => toggleMultiValue("strategy", selectedStrategies, value)}
-            onClear={() => setQueryPatch({ strategy: null })}
-          />
-
-          <SmartMultiSelect
-            className="xl:col-span-1"
-            label="Hashtag"
-            summary={selectedHashtags.length > 0 ? `${selectedHashtags.length} seleccionados` : "Todos"}
-            secondary={`${hashtagOptions.length} disponibles`}
-            options={filteredHashtagOptions}
-            selected={selectedHashtags}
-            search={hashtagSearch}
-            placeholder="Buscar hashtag..."
-            onSearch={setHashtagSearch}
-            onToggle={(value) => toggleMultiValue("hashtag", selectedHashtags, value)}
-            onClear={() => setQueryPatch({ hashtag: null })}
-            toLabel={(value) => `#${value}`}
-          />
-
-          <SmartMultiSelect
-            className="xl:col-span-1"
-            label="Tema"
-            summary={selectedTopics.length > 0 ? `${selectedTopics.length} seleccionados` : "Todos"}
-            secondary={`${topicOptions.length} disponibles`}
-            options={filteredTopicOptions}
-            selected={selectedTopics}
-            search={topicSearch}
-            placeholder="Buscar tema..."
-            onSearch={setTopicSearch}
-            onToggle={(value) => toggleMultiValue("topic", selectedTopics, value)}
-            onClear={() => setQueryPatch({ topic: null })}
-            toLabel={toTopicFilterLabel}
-          />
-
-          <div className="rounded-xl border border-slate-200 bg-white px-3 py-2 shadow-sm xl:col-span-1">
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Sentimiento</p>
-            <select
-              value={selectedSentiment}
-              onChange={(event) => setQueryPatch({ sentiment: event.target.value === "all" ? null : event.target.value })}
-              className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
-            >
-              <option value="all">Todos</option>
-              <option value="positive">Positivo</option>
-              <option value="negative">Negativo</option>
-              <option value="neutral">Neutro</option>
-              <option value="unknown">Unknown</option>
-            </select>
-            <p className="mt-1 text-[11px] text-slate-500">
-              {loadingFacets ? "Actualizando facetas..." : `${formatNumber(facetsData?.totals?.posts ?? 0)} posts en universo filtrado`}
-            </p>
-          </div>
+            }>
+              <Card size="small" hoverable style={{ cursor: "pointer" }}>
+                <div style={{ fontSize: 11, fontWeight: 600, textTransform: "uppercase", color: "#64748b" }}>Periodo y comparación</div>
+                <div style={{ fontSize: 13, fontWeight: 600, color: "#1e293b", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{toPresetLabel(preset)} | {toTimeGranularityLabel(timeGranularity)}</div>
+                <div style={{ fontSize: 11, color: "#64748b" }}>{formatDate((normalizedOverview.comparison?.current_window_start ?? normalizedOverview.window_start) as string | undefined)} - {formatDate((normalizedOverview.comparison?.current_window_end ?? normalizedOverview.window_end) as string | undefined)}</div>
+              </Card>
+            </Popover>
+          </Col>
+          <Col xs={12} xl={2}><SmartMultiSelect label="Canal" summary={selectedChannels.length > 0 ? `${selectedChannels.length} sel.` : "Todos"} secondary={`${CHANNEL_OPTIONS.length} canales`} options={filteredChannelOptions} selected={selectedChannels} search={channelSearch} placeholder="Buscar canal" onSearch={setChannelSearch} onToggle={(v) => toggleMultiValue("channel", selectedChannels, v)} onClear={() => setQueryPatch({ channel: null })} toLabel={(v) => toChannelLabel(v as SocialChannel)} /></Col>
+          <Col xs={12} xl={2}><SmartMultiSelect label="Cuenta" summary={selectedAccounts.length > 0 ? `${selectedAccounts.length} sel.` : "Todas"} secondary={`${accountOptions.length} disp.`} options={filteredAccountOptions} selected={selectedAccounts} search={accountSearch} placeholder="Buscar cuenta..." onSearch={setAccountSearch} onToggle={(v) => toggleMultiValue("account", selectedAccounts, v)} onClear={() => setQueryPatch({ account: null })} /></Col>
+          <Col xs={12} xl={2}><SmartMultiSelect label="Tipo post" summary={selectedPostTypes.length > 0 ? `${selectedPostTypes.length} sel.` : "Todos"} secondary={`${postTypeOptions.length} tipos`} options={filteredPostTypeOptions} selected={selectedPostTypes} search={postTypeSearch} placeholder="Buscar tipo..." onSearch={setPostTypeSearch} onToggle={(v) => toggleMultiValue("post_type", selectedPostTypes, v)} onClear={() => setQueryPatch({ post_type: null })} toLabel={(v) => (v === "unknown" ? "Sin tipo" : v)} /></Col>
+          <Col xs={12} xl={2}><SmartMultiSelect label="Campaña" summary={selectedCampaigns.length > 0 ? `${selectedCampaigns.length} sel.` : "Todas"} secondary={`${campaignOptions.length} disp.`} options={filteredCampaignOptions} selected={selectedCampaigns} search={campaignSearch} placeholder="Buscar campaña..." onSearch={setCampaignSearch} onToggle={(v) => toggleMultiValue("campaign", selectedCampaigns, v)} onClear={() => setQueryPatch({ campaign: null })} /></Col>
+          <Col xs={12} xl={2}><SmartMultiSelect label="Estrategia" summary={selectedStrategies.length > 0 ? `${selectedStrategies.length} sel.` : "Todas"} secondary={`${strategyOptions.length} disp.`} options={filteredStrategyOptions} selected={selectedStrategies} search={strategySearch} placeholder="Buscar estrategia..." onSearch={setStrategySearch} onToggle={(v) => toggleMultiValue("strategy", selectedStrategies, v)} onClear={() => setQueryPatch({ strategy: null })} /></Col>
+          <Col xs={12} xl={2}><SmartMultiSelect label="Hashtag" summary={selectedHashtags.length > 0 ? `${selectedHashtags.length} sel.` : "Todos"} secondary={`${hashtagOptions.length} disp.`} options={filteredHashtagOptions} selected={selectedHashtags} search={hashtagSearch} placeholder="Buscar hashtag..." onSearch={setHashtagSearch} onToggle={(v) => toggleMultiValue("hashtag", selectedHashtags, v)} onClear={() => setQueryPatch({ hashtag: null })} toLabel={(v) => `#${v}`} /></Col>
+          <Col xs={12} xl={2}><SmartMultiSelect label="Tema" summary={selectedTopics.length > 0 ? `${selectedTopics.length} sel.` : "Todos"} secondary={`${topicOptions.length} disp.`} options={filteredTopicOptions} selected={selectedTopics} search={topicSearch} placeholder="Buscar tema..." onSearch={setTopicSearch} onToggle={(v) => toggleMultiValue("topic", selectedTopics, v)} onClear={() => setQueryPatch({ topic: null })} toLabel={toTopicFilterLabel} /></Col>
+          <Col xs={12} xl={3}>
+            <Card size="small">
+              <div style={{ fontSize: 11, fontWeight: 600, textTransform: "uppercase", color: "#64748b" }}>Sentimiento</div>
+              <Select size="small" style={{ width: "100%", marginTop: 4 }} value={selectedSentiment} onChange={(v) => setQueryPatch({ sentiment: v === "all" ? null : v })} options={[{ label: "Todos", value: "all" },{ label: "Positivo", value: "positive" },{ label: "Negativo", value: "negative" },{ label: "Neutro", value: "neutral" },{ label: "Unknown", value: "unknown" }]} />
+              <div style={{ fontSize: 11, color: "#64748b", marginTop: 4 }}>{loadingFacets ? "Actualizando facetas..." : `${formatNumber(facetsData?.totals?.posts ?? 0)} posts en universo filtrado`}</div>
+            </Card>
+          </Col>
+        </Row>
+        <div style={{ marginTop: 12, fontSize: 12, color: "#64748b" }}>
+          Drill-down temporal: <strong>{toTimeGranularityLabel(timeGranularity)}</strong> | Ventana activa: {formatDate((normalizedOverview.comparison?.current_window_start ?? normalizedOverview.window_start) as string | undefined)} - {formatDate((normalizedOverview.comparison?.current_window_end ?? normalizedOverview.window_end) as string | undefined)} | período comparado: {formatDate((normalizedOverview.comparison?.previous_window_start ?? "") as string | undefined)} - {formatDate((normalizedOverview.comparison?.previous_window_end ?? "") as string | undefined)}
         </div>
+      </Card>
 
-        <p className="mt-3 text-xs text-slate-500">
-          Drill-down temporal: <strong>{toTimeGranularityLabel(timeGranularity)}</strong> |{" "}
-          Ventana activa: {formatDate((normalizedOverview.comparison?.current_window_start ?? normalizedOverview.window_start) as string | undefined)} - {" "}
-          {formatDate((normalizedOverview.comparison?.current_window_end ?? normalizedOverview.window_end) as string | undefined)} | período comparado: {" "}
-          {formatDate((normalizedOverview.comparison?.previous_window_start ?? "") as string | undefined)} - {" "}
-          {formatDate((normalizedOverview.comparison?.previous_window_end ?? "") as string | undefined)}
-        </p>
-      </section>
+      {/* ── Tabs ── */}
+      <Tabs activeKey={tab} onChange={(key) => setQueryPatch({ tab: key })} items={tabItems} />
 
-      <section className="flex flex-wrap gap-2 rounded-2xl border border-slate-200 bg-white/90 p-3 shadow-panel">
-        {TAB_OPTIONS.map((option) => (
-          <button
-            key={option}
-            type="button"
-            className={`rounded-full px-3 py-1.5 text-sm font-semibold ${tab === option ? "bg-red-700 text-white" : "border border-slate-200 text-slate-700 hover:bg-slate-50"}`}
-            onClick={() => setQueryPatch({ tab: option })}
-          >
-            {option === "summary"
-              ? "Resumen"
-              : option === "accounts"
-                ? "Cuentas"
-                : option === "posts"
-                  ? "Posts"
-                  : option === "risk"
-                    ? "Riesgo"
-                    : option === "etl"
-                      ? "ETL"
-                      : "Glosario"}
-          </button>
-        ))}
-      </section>
-
-      {tab === "summary" ? (
-        <>
-          <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-6">
+      {/* ═══════ SUMMARY TAB ═══════ */}
+      {tab === "summary" && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+          <Row gutter={[12, 12]}>
             {kpiCards.map((card) => (
-              <article key={card.id} className="min-w-0 rounded-2xl border border-slate-200 bg-white p-4 shadow-panel">
-                <div className="flex items-center justify-between gap-2">
-                  <h3 className="truncate text-sm font-semibold text-slate-900">{card.title}</h3>
-                  <KpiInfo id={`kpi-info-${card.id}`} text={card.info} />
-                </div>
-                <p className="mt-2 text-3xl font-bold text-red-700">{card.value}</p>
-                <p className="truncate text-xs text-slate-600">Periodo anterior: {card.previous}</p>
-                <p className="mt-1 truncate text-xs text-slate-600">{card.goal}</p>
-                <p className={`mt-1 truncate text-xs font-semibold ${card.statusClass}`}>{card.status}</p>
-              </article>
+              <Col key={card.id} xs={12} md={8} xl={4}>
+                <KpiCard title={card.title} value={card.value} info={card.info} caption={`Periodo anterior: ${card.previous} | ${card.goal}`} valueStyle={{ color: "#a0000a" }} suffix={<span style={{ fontSize: 12, fontWeight: 600, color: card.statusColor }}>{card.status}</span>} />
+              </Col>
             ))}
-          </section>
+          </Row>
 
-          <section className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7">
+          <Row gutter={[8, 8]}>
             {secondaryKpis.map((item) => (
-              <article key={item.metric} className="min-w-0 rounded-xl border border-slate-200 bg-white px-3 py-2 shadow-panel">
-                <p className="truncate text-[11px] font-semibold uppercase tracking-wide text-slate-500">{item.label}</p>
-                <p className="mt-1 text-base font-bold text-slate-900">{item.value}</p>
-                <p className={`mt-0.5 text-[11px] font-semibold ${toDeltaClass(item.delta)}`}>Vs anterior: {item.deltaLabel}</p>
-              </article>
+              <Col key={item.metric} xs={12} sm={8} lg={6} xl={3}>
+                <Card size="small">
+                  <div style={{ fontSize: 11, fontWeight: 600, textTransform: "uppercase", color: "#64748b" }}>{item.label}</div>
+                  <div style={{ fontSize: 16, fontWeight: 700, color: "#1e293b", marginTop: 4 }}>{item.value}</div>
+                  <div style={{ fontSize: 11, fontWeight: 600, color: toDeltaColor(item.delta), marginTop: 2 }}>Vs anterior: {item.deltaLabel}</div>
+                </Card>
+              </Col>
             ))}
-          </section>
+          </Row>
 
-          <div className="space-y-3">
-            <div className="grid grid-cols-1 gap-3 xl:grid-cols-3">
-              <article className="min-w-0 rounded-2xl border border-slate-200 bg-white p-4 shadow-panel xl:col-span-2">
-                <div className="mb-2 flex flex-wrap items-start justify-between gap-2">
-                  <div className="min-w-0">
-                    <h3 className="text-base font-semibold text-slate-900">Tendencia</h3>
-                    <p className="text-xs text-slate-500">{CHART_QUESTION_BY_KEY.trend}</p>
-                  </div>
-                  <span className="rounded-full border border-slate-200 px-2 py-0.5 text-[10px] font-semibold text-slate-500">
-                    {normalizedOverview.comparison?.label ?? "Comparación activa"}
-                  </span>
+          {/* ── Trend + Mix ── */}
+          <Row gutter={[12, 12]}>
+            <Col xs={24} xl={16}>
+              <Card size="small" title="Tendencia" extra={<AntText type="secondary" style={{ fontSize: 11 }}>{normalizedOverview.comparison?.label ?? "Comparación activa"}</AntText>}>
+                <AntText type="secondary" style={{ fontSize: 12 }}>{CHART_QUESTION_BY_KEY.trend}</AntText>
+                <Row gutter={8} style={{ marginTop: 8, marginBottom: 8 }}>
+                  <Col span={12}><div style={{ fontSize: 11, fontWeight: 600, color: "#64748b" }}>Eje izquierdo</div><Select size="small" style={{ width: "100%" }} value={trendLeftMetric} onChange={(v) => setTrendLeftMetric(v as TrendMetric)} options={metricSelectOptions(TREND_METRICS)} /></Col>
+                  <Col span={12}><div style={{ fontSize: 11, fontWeight: 600, color: "#64748b" }}>Eje derecho</div><Select size="small" style={{ width: "100%" }} value={trendRightMetric} onChange={(v) => setTrendRightMetric(v as TrendMetric)} options={metricSelectOptions(TREND_METRICS)} /></Col>
+                </Row>
+                <div style={{ height: 320 }}>
+                  <VisxDualLineChart data={trendSeries} xKey="bucket_label" leftKey={trendLeftMetric} rightKey={trendRightMetric} leftLabel={METRIC_META[trendLeftMetric].label} rightLabel={METRIC_META[trendRightMetric].label} leftColor="#1d4ed8" rightColor="#e30613" formatLeftTick={(v) => formatChartAxisByMetrics([trendLeftMetric], v)} formatRightTick={(v) => formatChartAxisByMetrics([trendRightMetric], v)} formatTooltipValue={(m, v) => formatChartMetricValue(m, v)} />
                 </div>
-                <div className="mb-2 grid gap-2 sm:grid-cols-2">
-                  <label className="text-xs font-semibold text-slate-600">
-                    Eje izquierdo
-                    <select
-                      value={trendLeftMetric}
-                      onChange={(event) => setTrendLeftMetric(event.target.value as TrendMetric)}
-                      className="mt-1 w-full rounded-lg border border-slate-200 px-2 py-1.5 text-xs"
-                    >
-                      {TREND_METRICS.map((metric) => (
-                        <option key={metric} value={metric}>
-                          {METRIC_META[metric].label}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  <label className="text-xs font-semibold text-slate-600">
-                    Eje derecho
-                    <select
-                      value={trendRightMetric}
-                      onChange={(event) => setTrendRightMetric(event.target.value as TrendMetric)}
-                      className="mt-1 w-full rounded-lg border border-slate-200 px-2 py-1.5 text-xs"
-                    >
-                      {TREND_METRICS.map((metric) => (
-                        <option key={metric} value={metric}>
-                          {METRIC_META[metric].label}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
+              </Card>
+            </Col>
+            <Col xs={24} xl={8}>
+              <Card size="small" title="Mix por canal"><AntText type="secondary" style={{ fontSize: 12 }}>{CHART_QUESTION_BY_KEY.mix}</AntText>
+                <Row gutter={8} style={{ marginTop: 8, marginBottom: 8 }}>
+                  <Col span={12}><div style={{ fontSize: 11, fontWeight: 600, color: "#64748b" }}>Barra</div><Select size="small" style={{ width: "100%" }} value={mixBarMetric} onChange={(v) => setMixBarMetric(v as MixMetric)} options={metricSelectOptions(MIX_METRICS)} /></Col>
+                  <Col span={12}><div style={{ fontSize: 11, fontWeight: 600, color: "#64748b" }}>Línea</div><Select size="small" style={{ width: "100%" }} value={mixLineMetric} onChange={(v) => setMixLineMetric(v as MixMetric)} options={metricSelectOptions(MIX_METRICS)} /></Col>
+                </Row>
+                <div style={{ height: 320 }}>
+                  <VisxBarLineChart data={channelData} xKey="channel" barKey={mixBarMetric} lineKey={mixLineMetric} barLabel={METRIC_META[mixBarMetric].label} lineLabel={METRIC_META[mixLineMetric].label} barColor="#2563eb" lineColor="#0f766e" formatXTick={(v) => toChannelLabel(v as SocialChannel)} formatLeftTick={(v) => formatChartAxisByMetrics([mixBarMetric], v)} formatRightTick={(v) => formatChartAxisByMetrics([mixLineMetric], v)} formatTooltipValue={(m, v) => formatChartMetricValue(m, v)} barAxis={mixBarAxis} lineAxis={mixLineAxis} />
                 </div>
-                <div className="h-[320px] w-full min-w-0">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <LineChart data={trendSeries} margin={{ top: 8, right: 14, left: 4, bottom: 8 }}>
-                      <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis dataKey="bucket_label" minTickGap={16} />
-                      <YAxis
-                        yAxisId="left"
-                        width={76}
-                        scale={trendLeftScale}
-                        domain={resolveAxisDomain(trendLeftScale, trendAxisValues.leftValues)}
-                        tickFormatter={(value) => formatChartAxisByMetrics(trendLeftMetrics, Number(value))}
-                        label={{ value: METRIC_META[trendLeftMetric].label, angle: -90, position: "insideLeft", offset: 4, fontSize: 11 }}
-                      />
-                      <YAxis
-                        yAxisId="right"
-                        width={76}
-                        orientation="right"
-                        scale={trendRightScale}
-                        domain={resolveAxisDomain(trendRightScale, trendAxisValues.rightValues)}
-                        tickFormatter={(value) => formatChartAxisByMetrics(trendRightMetrics, Number(value))}
-                        label={{ value: METRIC_META[trendRightMetric].label, angle: 90, position: "insideRight", offset: 4, fontSize: 11 }}
-                      />
-                      <Tooltip
-                        content={(tooltip: ChartTooltipProps) => {
-                          if (!tooltip.active || !tooltip.payload || tooltip.payload.length === 0) return null;
-                          const rows = tooltip.payload
-                            .filter((item) => item.dataKey !== undefined)
-                            .map((item) => {
-                              const metric = String(item.dataKey);
-                              return {
-                                metric,
-                                label: METRIC_META[metric]?.label ?? item.name ?? metric,
-                                value: formatChartMetricValue(metric, Number(item.value ?? 0)),
-                                color: item.color ?? "#334155"
-                              };
-                            });
-                          return (
-                            <div className="min-w-[170px] rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs shadow-lg">
-                              <p className="font-semibold text-slate-800">{tooltip.label ?? ""}</p>
-                              {rows.map((row) => (
-                                <p key={row.metric} style={{ color: row.color }} className="mt-1 flex items-center justify-between gap-2">
-                                  <span>{row.label}</span>
-                                  <strong>{row.value}</strong>
-                                </p>
-                              ))}
-                            </div>
-                          );
-                        }}
-                      />
-                      <Legend />
-                      <Line
-                        yAxisId="left"
-                        type="monotone"
-                        dataKey={trendLeftMetric}
-                        name={METRIC_META[trendLeftMetric].label}
-                        stroke="#1d4ed8"
-                        strokeWidth={2.5}
-                        dot={false}
-                        activeDot={{ r: 4 }}
-                      />
-                      <Line
-                        yAxisId="right"
-                        type="monotone"
-                        dataKey={trendRightMetric}
-                        name={METRIC_META[trendRightMetric].label}
-                        stroke="#e30613"
-                        strokeWidth={2.5}
-                        dot={false}
-                        activeDot={{ r: 4 }}
-                      />
-                    </LineChart>
-                  </ResponsiveContainer>
-                </div>
-              </article>
+              </Card>
+            </Col>
+          </Row>
 
-              <article className="min-w-0 rounded-2xl border border-slate-200 bg-white p-4 shadow-panel xl:col-span-1">
-                <div className="mb-2 flex flex-wrap items-start justify-between gap-2">
-                  <div>
-                    <h3 className="text-base font-semibold text-slate-900">Mix por canal</h3>
-                    <p className="text-xs text-slate-500">{CHART_QUESTION_BY_KEY.mix}</p>
-                  </div>
-                  <div className="flex flex-wrap items-center gap-1">
-                    {mixLeftMetrics.length > 0 ? (
-                      <span className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold ${mixLeftScale === "log" ? "border-amber-300 bg-amber-50 text-amber-700" : "border-slate-200 text-slate-500"}`}>
-                        Izq {mixLeftScale === "log" ? "log (auto)" : "lineal"}
-                      </span>
-                    ) : null}
-                    {mixRightMetrics.length > 0 ? (
-                      <span className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold ${mixRightScale === "log" ? "border-amber-300 bg-amber-50 text-amber-700" : "border-slate-200 text-slate-500"}`}>
-                        Der {mixRightScale === "log" ? "log (auto)" : "lineal"}
-                      </span>
-                    ) : null}
-                  </div>
-                </div>
-                <div className="mb-2 grid grid-cols-2 gap-2">
-                  <label className="text-xs font-semibold text-slate-600">
-                    Barra
-                    <select value={mixBarMetric} onChange={(event) => setMixBarMetric(event.target.value as MixMetric)} className="mt-1 w-full rounded-lg border border-slate-200 px-2 py-1.5 text-xs">
-                      {MIX_METRICS.map((metric) => (
-                        <option key={metric} value={metric}>
-                          {METRIC_META[metric].label}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  <label className="text-xs font-semibold text-slate-600">
-                    Línea
-                    <select value={mixLineMetric} onChange={(event) => setMixLineMetric(event.target.value as MixMetric)} className="mt-1 w-full rounded-lg border border-slate-200 px-2 py-1.5 text-xs">
-                      {MIX_METRICS.map((metric) => (
-                        <option key={metric} value={metric}>
-                          {METRIC_META[metric].label}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  <label className="text-xs font-semibold text-slate-600">
-                    Eje barra
-                    <select value={mixBarAxis} onChange={(event) => setMixBarAxis(event.target.value as AxisSide)} className="mt-1 w-full rounded-lg border border-slate-200 px-2 py-1.5 text-xs">
-                      <option value="left">Izquierdo</option>
-                      <option value="right">Derecho</option>
-                    </select>
-                  </label>
-                  <label className="text-xs font-semibold text-slate-600">
-                    Eje línea
-                    <select value={mixLineAxis} onChange={(event) => setMixLineAxis(event.target.value as AxisSide)} className="mt-1 w-full rounded-lg border border-slate-200 px-2 py-1.5 text-xs">
-                      <option value="left">Izquierdo</option>
-                      <option value="right">Derecho</option>
-                    </select>
-                  </label>
-                </div>
-                <div className="h-[320px] w-full min-w-0">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={channelData} margin={{ top: 8, right: 14, left: 4, bottom: 8 }}>
-                      <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis dataKey="channel" tickFormatter={(value) => toChannelLabel(value as SocialChannel)} minTickGap={16} />
-                      <YAxis
-                        yAxisId="left"
-                        hide={mixLeftMetrics.length === 0}
-                        width={76}
-                        scale={mixLeftScale}
-                        domain={resolveAxisDomain(mixLeftScale, mixAxisValues.leftValues)}
-                        tickFormatter={(value) => formatChartAxisByMetrics(mixLeftMetrics, Number(value))}
-                        label={{ value: mixLeftMetrics.map((metric) => METRIC_META[metric].label).join(" / "), angle: -90, position: "insideLeft", offset: 4, fontSize: 11 }}
-                      />
-                      <YAxis
-                        yAxisId="right"
-                        hide={mixRightMetrics.length === 0}
-                        width={76}
-                        orientation="right"
-                        scale={mixRightScale}
-                        domain={resolveAxisDomain(mixRightScale, mixAxisValues.rightValues)}
-                        tickFormatter={(value) => formatChartAxisByMetrics(mixRightMetrics, Number(value))}
-                        label={{ value: mixRightMetrics.map((metric) => METRIC_META[metric].label).join(" / "), angle: 90, position: "insideRight", offset: 4, fontSize: 11 }}
-                      />
-                      <Tooltip
-                        content={(tooltip: ChartTooltipProps) => {
-                          if (!tooltip.active || !tooltip.payload || tooltip.payload.length === 0) return null;
-                          const rows = tooltip.payload
-                            .filter((item) => item.dataKey !== undefined)
-                            .map((item) => {
-                              const metric = String(item.dataKey);
-                              return {
-                                metric,
-                                label: METRIC_META[metric]?.label ?? item.name ?? metric,
-                                value: formatChartMetricValue(metric, Number(item.value ?? 0)),
-                                color: item.color ?? "#334155"
-                              };
-                            });
-                          return (
-                            <div className="min-w-[160px] rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs shadow-lg">
-                              <p className="font-semibold text-slate-800">{toChannelLabel(String(tooltip.label ?? "facebook") as SocialChannel)}</p>
-                              {rows.map((row) => (
-                                <p key={row.metric} style={{ color: row.color }} className="mt-1 flex items-center justify-between gap-2">
-                                  <span>{row.label}</span>
-                                  <strong>{row.value}</strong>
-                                </p>
-                              ))}
-                            </div>
-                          );
-                        }}
-                      />
-                      <Legend />
-                      <Bar yAxisId={mixBarAxis} dataKey={mixBarMetric} name={METRIC_META[mixBarMetric].label} fill="#2563eb" />
-                      <Line
-                        yAxisId={mixLineAxis}
-                        type="monotone"
-                        dataKey={mixLineMetric}
-                        name={METRIC_META[mixLineMetric].label}
-                        stroke="#0f766e"
-                        strokeWidth={3}
-                        dot={{ r: 3, fill: "#0f766e" }}
-                        activeDot={{ r: 4 }}
-                      />
-                    </BarChart>
-                  </ResponsiveContainer>
-                </div>
-              </article>
-            </div>
+          {/* ── Trend by dimension ── */}
+          <Card size="small" title="Tendencia por dimensión" extra={
+            <Space wrap>
+              <Select size="small" value={trendByDimensionDimension} onChange={(v) => setTrendByDimensionDimension(v)} options={[{label:"Canal",value:"channel"},{label:"Cuenta",value:"account"},{label:"Tipo de post",value:"post_type"},{label:"Campaña",value:"campaign"},{label:"Estrategia",value:"strategy"},{label:"Hashtag",value:"hashtag"}]} style={{ width: 130 }} />
+              <Select size="small" value={trendByDimensionMetric} onChange={(v) => setTrendByDimensionMetric(v as TrendByDimensionMetric)} options={metricSelectOptions(TREND_METRICS)} style={{ width: 150 }} />
+              <AntText type="secondary" style={{ fontSize: 11 }}>Series: {visibleTrendByDimensionSeries.length}/{trendByDimensionSeries.length}</AntText>
+            </Space>
+          }>
+            <AntText type="secondary" style={{ fontSize: 12 }}>{CHART_QUESTION_BY_KEY.trend_by_dimension}</AntText>
+            {trendByDimensionError && <Alert type="warning" title={trendByDimensionError} style={{ marginTop: 8, marginBottom: 8 }} />}
+            {loadingTrendByDimension && <Spin style={{ display: "block", margin: "40px auto" }} />}
+            {!loadingTrendByDimension && trendByDimensionSeries.length === 0 && <Empty description={`Sin datos para ${toScatterDimensionLabel(trendByDimensionDimension)} con los filtros activos.`} />}
+            {!loadingTrendByDimension && trendByDimensionVisibleSeries.length > 0 && (
+              <div style={{ height: 340, marginTop: 8 }}>
+                <VisxMultiLineChart data={trendByDimensionChartData} xKey="bucket_label" series={trendByDimensionVisibleSeries.map((s) => ({ key: s.key, label: s.label, color: s.color }))} metric={trendByDimensionMetric} formatYTick={(v) => formatChartAxisByMetrics([trendByDimensionMetric], v)} formatTooltipValue={(v) => formatChartMetricValue(trendByDimensionMetric, v)} />
+              </div>
+            )}
+          </Card>
 
-            <div className="grid grid-cols-1 gap-3 xl:grid-cols-3">
-              <article className="min-w-0 rounded-2xl border border-slate-200 bg-white p-4 shadow-panel xl:col-span-3">
-                <div className="mb-2 flex flex-wrap items-start justify-between gap-2">
-                  <div className="min-w-0">
-                    <h3 className="text-base font-semibold text-slate-900">Tendencia por dimensión</h3>
-                    <p className="text-xs text-slate-500">{CHART_QUESTION_BY_KEY.trend_by_dimension}</p>
-                  </div>
-                  <div className="flex flex-wrap items-start gap-2">
-                    <label className="text-xs font-semibold text-slate-600">
-                      Dimensión
-                      <select
-                        value={trendByDimensionDimension}
-                        onChange={(event) => setTrendByDimensionDimension(event.target.value as SocialScatterDimension)}
-                        className="ml-2 rounded-md border border-slate-200 px-2 py-1 text-xs"
-                      >
-                        <option value="channel">Canal</option>
-                        <option value="account">Cuenta</option>
-                        <option value="post_type">Tipo de post</option>
-                        <option value="campaign">Campaña</option>
-                        <option value="strategy">Estrategia</option>
-                        <option value="hashtag">Hashtag</option>
-                      </select>
-                    </label>
-                    <label className="text-xs font-semibold text-slate-600">
-                      Métrica
-                      <select
-                        value={trendByDimensionMetric}
-                        onChange={(event) => setTrendByDimensionMetric(event.target.value as TrendByDimensionMetric)}
-                        className="ml-2 rounded-md border border-slate-200 px-2 py-1 text-xs"
-                      >
-                        {TREND_METRICS.map((metric) => (
-                          <option key={metric} value={metric}>
-                            {METRIC_META[metric].label}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                    <label className="text-xs font-semibold text-slate-600">
-                      Escala
-                      <select
-                        value={trendByDimensionScaleMode}
-                        onChange={(event) => setTrendByDimensionScaleMode(event.target.value as ScaleMode)}
-                        className="ml-2 rounded-md border border-slate-200 px-2 py-1 text-xs"
-                      >
-                        <option value="auto">Auto</option>
-                        <option value="linear">Lineal</option>
-                        <option value="log">Log</option>
-                      </select>
-                    </label>
-                    <details className="group relative">
-                      <summary className="list-none cursor-pointer rounded-md border border-slate-200 px-2 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50">
-                        Series: {visibleTrendByDimensionSeries.length}/{trendByDimensionSeries.length}
-                      </summary>
-                      <div className="absolute right-0 z-20 mt-2 w-72 rounded-xl border border-slate-200 bg-white p-3 shadow-2xl">
-                        <input
-                          value={trendByDimensionSeriesSearch}
-                          onChange={(event) => setTrendByDimensionSeriesSearch(event.target.value)}
-                          placeholder="Buscar serie..."
-                          className="w-full rounded-lg border border-slate-200 px-2 py-1.5 text-xs"
-                        />
-                        <div className="mt-2 flex flex-wrap gap-1">
-                          <button
-                            type="button"
-                            className="rounded border border-slate-200 px-2 py-1 text-[11px] font-semibold text-slate-600 hover:bg-slate-50"
-                            onClick={() =>
-                              setVisibleTrendByDimensionSeries(
-                                trendByDimensionDimension === "channel"
-                                  ? trendByDimensionSeries.map((item) => item.label)
-                                  : trendByDimensionSeries.slice(0, 8).map((item) => item.label)
-                              )
-                            }
-                          >
-                            Top 8
-                          </button>
-                          <button
-                            type="button"
-                            className="rounded border border-slate-200 px-2 py-1 text-[11px] font-semibold text-slate-600 hover:bg-slate-50"
-                            onClick={() => setVisibleTrendByDimensionSeries(trendByDimensionSeries.map((item) => item.label))}
-                          >
-                            Todas
-                          </button>
-                          <button
-                            type="button"
-                            className="rounded border border-slate-200 px-2 py-1 text-[11px] font-semibold text-slate-600 hover:bg-slate-50"
-                            onClick={() => setVisibleTrendByDimensionSeries([])}
-                          >
-                            Ninguna
-                          </button>
-                        </div>
-                        <div className="mt-2 max-h-60 overflow-auto rounded-lg border border-slate-100 p-1">
-                          {filteredTrendByDimensionSeries.length === 0 ? <p className="p-2 text-xs text-slate-500">Sin resultados</p> : null}
-                          {filteredTrendByDimensionSeries.map((label) => {
-                            const checked = visibleTrendByDimensionSeries.includes(label);
-                            const series = trendByDimensionSeries.find((item) => item.label === label);
-                            return (
-                              <button
-                                key={label}
-                                type="button"
-                                className={`flex w-full items-center justify-between rounded-md px-2 py-1.5 text-left text-xs ${
-                                  checked ? "bg-red-50 text-red-700" : "text-slate-700 hover:bg-slate-50"
-                                }`}
-                                onClick={() => toggleTrendByDimensionSeries(label)}
-                              >
-                                <span className="inline-flex items-center gap-2">
-                                  <span className="inline-block h-2.5 w-2.5 rounded-full" style={{ background: series?.color ?? "#64748b" }} />
-                                  <span>{label}</span>
-                                </span>
-                                <span>{checked ? "✓" : "+"}</span>
-                              </button>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    </details>
-                    <span
-                      className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold ${
-                        trendByDimensionScale === "log" ? "border-amber-300 bg-amber-50 text-amber-700" : "border-slate-200 text-slate-500"
-                      }`}
-                    >
-                      Escala {trendByDimensionScale === "log" ? "log" : "lineal"}
-                    </span>
-                  </div>
-                </div>
+          {/* ── Topic breakdown ── */}
+          <Card size="small" title="Distribución por tema" extra={
+            <Space wrap>
+              <Select size="small" value={topicBreakdownDimension} onChange={(v) => setTopicBreakdownDimension(v)} options={[{label:"Canal",value:"channel"},{label:"Cuenta",value:"account"},{label:"Tipo de post",value:"post_type"},{label:"Campaña",value:"campaign"},{label:"Estrategia",value:"strategy"},{label:"Hashtag",value:"hashtag"}]} style={{ width: 130 }} />
+              <Select size="small" value={topicBreakdownMetric} onChange={(v) => setTopicBreakdownMetric(v as TrendByDimensionMetric)} options={metricSelectOptions(TREND_METRICS)} style={{ width: 150 }} />
+              <Checkbox checked={topicBreakdownNormalize100} onChange={(e) => setTopicBreakdownNormalize100(e.target.checked)}>Apilar al 100%</Checkbox>
+            </Space>
+          }>
+            <AntText type="secondary" style={{ fontSize: 12 }}>{CHART_QUESTION_BY_KEY.topic_breakdown}</AntText>
+            {topicBreakdownError && <Alert type="warning" title={topicBreakdownError} style={{ marginTop: 8 }} />}
+            {loadingTopicBreakdown && <Spin style={{ display: "block", margin: "40px auto" }} />}
+            {!loadingTopicBreakdown && topicBreakdownChartData.length === 0 && <Empty description="Sin temas clasificados para los filtros activos." />}
+            {!loadingTopicBreakdown && topicBreakdownChartData.length > 0 && (
+              <div style={{ width: "100%", marginTop: 8 }}>
+                <VisxHorizontalStackedBarChart data={topicBreakdownChartData} yKey="topic_label" segments={topicBreakdownSegments} normalize100={topicBreakdownNormalize100} metric={topicBreakdownMetric} formatXTick={(v) => topicBreakdownNormalize100 ? formatAxisPercentNoDecimals(v) : formatChartAxisByMetrics([topicBreakdownMetric], v)} onBarClick={openPostsByTopic} chartHeight={topicBreakdownChartHeight} />
+              </div>
+            )}
+          </Card>
 
-                {trendByDimensionError ? <div className="mb-2 rounded-lg border border-amber-200 bg-amber-50 px-2 py-1 text-xs text-amber-800">{trendByDimensionError}</div> : null}
-                {loadingTrendByDimension ? <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-10 text-center text-sm text-slate-500">Cargando tendencia por dimensión...</div> : null}
-                {!loadingTrendByDimension && trendByDimensionSeries.length === 0 ? (
-                  <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-10 text-center text-sm text-slate-500">
-                    Sin datos para {toScatterDimensionLabel(trendByDimensionDimension)} con los filtros activos.
-                  </div>
-                ) : null}
-                {!loadingTrendByDimension && trendByDimensionSeries.length > 0 && trendByDimensionVisibleSeries.length === 0 ? (
-                  <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-10 text-center text-sm text-slate-500">
-                    Selecciona al menos una serie para visualizar el gráfico.
-                  </div>
-                ) : null}
-                {trendByDimensionLogAdjustedValues ? (
-                  <div className="mb-2 rounded-lg border border-amber-200 bg-amber-50 px-2 py-1 text-xs text-amber-800">
-                    Escala log activa: los valores menores o iguales a 0 se muestran con un piso técnico de {LOG_SCALE_FLOOR}.
-                  </div>
-                ) : null}
-                {!loadingTrendByDimension && trendByDimensionVisibleSeries.length > 0 ? (
-                  <div className="h-[340px] w-full min-w-0">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <LineChart data={trendByDimensionChartData} margin={{ top: 8, right: 14, left: 4, bottom: 8 }}>
-                        <CartesianGrid strokeDasharray="3 3" />
-                        <XAxis dataKey="bucket_label" minTickGap={16} />
-                        <YAxis
-                          yAxisId="left"
-                          width={80}
-                          scale={trendByDimensionScale}
-                          domain={resolveAxisDomain(trendByDimensionScale, trendByDimensionAxisValues)}
-                          tickFormatter={(value) => formatChartAxisByMetrics([trendByDimensionMetric], Number(value))}
-                          label={{ value: METRIC_META[trendByDimensionMetric].label, angle: -90, position: "insideLeft", offset: 4, fontSize: 11 }}
-                        />
-                        <Tooltip
-                          content={(tooltip: ChartTooltipProps) => {
-                            if (!tooltip.active || !tooltip.payload || tooltip.payload.length === 0) return null;
-                            const rows = tooltip.payload
-                              .filter((item) => item.dataKey !== undefined)
-                              .map((item) => {
-                                const key = String(item.dataKey);
-                                const series = trendByDimensionSeriesByKey.get(key);
-                                const rawValue = Number(((item.payload ?? {}) as Record<string, unknown>)[`raw_${key}`] ?? item.value ?? 0);
-                                return {
-                                  key,
-                                  label: series?.label ?? key,
-                                  value: formatChartMetricValue(trendByDimensionMetric, rawValue),
-                                  color: series?.color ?? item.color ?? "#334155"
-                                };
-                              });
+          {/* ── Ranking + Gap ── */}
+          <Row gutter={[12, 12]}>
+            <Col xs={24} xl={16}>
+              <Card size="small" title="Ranking de cuentas"><AntText type="secondary" style={{ fontSize: 12 }}>{CHART_QUESTION_BY_KEY.ranking}</AntText>
+                <Row gutter={8} style={{ marginTop: 8, marginBottom: 8 }}>
+                  <Col span={8}><div style={{ fontSize: 11, fontWeight: 600, color: "#64748b" }}>Métrica barra</div><Select size="small" style={{ width: "100%" }} value={accountBarMetric} onChange={(v) => setAccountBarMetric(v as AccountMetric)} options={metricSelectOptions(ACCOUNT_METRICS)} /></Col>
+                  <Col span={8}><div style={{ fontSize: 11, fontWeight: 600, color: "#64748b" }}>Métrica línea</div><Select size="small" style={{ width: "100%" }} value={accountLineMetric} onChange={(v) => setAccountLineMetric(v as AccountMetric)} options={metricSelectOptions(ACCOUNT_METRICS)} /></Col>
+                </Row>
+                <div style={{ height: 320 }}>
+                  <VisxBarLineChart data={topAccountsDual} xKey="account_name" barKey={accountBarMetric} lineKey={accountLineMetric} barLabel={METRIC_META[accountBarMetric].label} lineLabel={METRIC_META[accountLineMetric].label} barColor="#c90310" lineColor="#1d4ed8" formatXTick={(v) => truncate(v, 14)} formatLeftTick={(v) => formatChartAxisByMetrics([accountBarMetric], v)} formatRightTick={(v) => formatChartAxisByMetrics([accountLineMetric], v)} formatTooltipValue={(m, v) => formatChartMetricValue(m, v)} barAxis={accountBarAxis} lineAxis={accountLineAxis} />
+                </div>
+              </Card>
+            </Col>
+            <Col xs={24} xl={8}>
+              <Card size="small" title="Brecha ER vs Meta"><AntText type="secondary" style={{ fontSize: 12 }}>{CHART_QUESTION_BY_KEY.gap}</AntText>
+                <div style={{ height: 320, marginTop: 8 }}>
+                  <VisxBarLineChart data={erGapByChannel} xKey="channel" barKey="current_er" lineKey="target_2026_er" barLabel="ER actual" lineLabel="Meta ER 2026" barColor="#e30613" lineColor="#0f766e" formatXTick={(v) => toChannelLabel(v as SocialChannel)} formatLeftTick={(v) => formatAxisPercentNoDecimals(v)} formatRightTick={(v) => formatAxisPercentNoDecimals(v)} formatTooltipValue={(_m, v) => formatAxisPercentNoDecimals(v)} barAxis="left" lineAxis="left" />
+                </div>
+                {!hasVisibleTargetByChannel && <Alert type="warning" title="No hay metas ER válidas (0/null) para los filtros activos." style={{ marginTop: 8 }} />}
+              </Card>
+            </Col>
+          </Row>
 
-                            return (
-                              <div className="min-w-[220px] rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs shadow-lg">
-                                <p className="font-semibold text-slate-800">{tooltip.label ?? ""}</p>
-                                {rows.map((row) => (
-                                  <p key={row.key} style={{ color: row.color }} className="mt-1 flex items-center justify-between gap-2">
-                                    <span>{row.label}</span>
-                                    <strong>{row.value}</strong>
-                                  </p>
-                                ))}
-                              </div>
-                            );
-                          }}
-                        />
-                        <Legend />
-                        {trendByDimensionVisibleSeries.map((series) => (
-                          <Line
-                            key={series.key}
-                            yAxisId="left"
-                            type="linear"
-                            dataKey={series.key}
-                            name={series.label}
-                            stroke={series.color}
-                            strokeWidth={2.4}
-                            isAnimationActive={false}
-                            dot={(dotProps: { cx?: number; cy?: number; payload?: Record<string, unknown> }) => {
-                              const raw = Number(dotProps.payload?.[series.key] ?? 0);
-                              const hasValue = Number.isFinite(raw) && Math.abs(raw) >= 1e-9;
-                              const cx = Number.isFinite(dotProps.cx) ? Number(dotProps.cx) : 0;
-                              const cy = Number.isFinite(dotProps.cy) ? Number(dotProps.cy) : 0;
-                              return <circle cx={cx} cy={cy} r={hasValue ? 3 : 0} fill={series.color} stroke="#ffffff" strokeWidth={1} />;
-                            }}
-                            activeDot={{ r: 4 }}
-                          />
-                        ))}
-                      </LineChart>
-                    </ResponsiveContainer>
-                  </div>
-                ) : null}
-              </article>
-            </div>
+          {/* ── Scatter + Heatmap ── */}
+          <Row gutter={[12, 12]}>
+            <Col xs={24} xl={16}>
+              <Card size="small" title="Scatter por métricas" extra={
+                <Space wrap>
+                  <Select size="small" value={scatterDimension} onChange={(v) => setScatterDimension(v)} options={[{label:"Tipo de post",value:"post_type"},{label:"Canal",value:"channel"},{label:"Cuenta",value:"account"},{label:"Campaña",value:"campaign"},{label:"Estrategia",value:"strategy"},{label:"Hashtag",value:"hashtag"}]} style={{ width: 130 }} />
+                  <Select size="small" value={scatterXMetric} onChange={(v) => setScatterXMetric(v as ScatterMetric)} options={metricSelectOptions(SCATTER_METRICS)} style={{ width: 140 }} />
+                  <Select size="small" value={scatterYMetric} onChange={(v) => setScatterYMetric(v as ScatterMetric)} options={metricSelectOptions(SCATTER_METRICS)} style={{ width: 140 }} />
+                </Space>
+              }>
+                <AntText type="secondary" style={{ fontSize: 12 }}>{CHART_QUESTION_BY_KEY.scatter}</AntText>
+                <div style={{ height: 320, marginTop: 8 }}>
+                  <VisxScatterChart data={scatterChartData} xLabel={METRIC_META[scatterXMetric].label} yLabel={METRIC_META[scatterYMetric].label} xMetric={scatterXMetric} yMetric={scatterYMetric} />
+                </div>
+              </Card>
+            </Col>
+            <Col xs={24} xl={8}>
+              <Card size="small" title="Heatmap actividad" extra={<Select size="small" value={heatmapMetric} onChange={(v) => setHeatmapMetric(v)} options={[{label:"ER",value:"er"},{label:"Interacciones",value:"engagement_total"},{label:"Impresiones",value:"impressions"},{label:"Reach",value:"reach"},{label:"Clicks",value:"clicks"},{label:"Likes",value:"likes"},{label:"Comments",value:"comments"},{label:"Shares",value:"shares"},{label:"Views",value:"views"},{label:"CTR",value:"ctr"},{label:"ER impresiones",value:"er_impressions"},{label:"ER reach",value:"er_reach"},{label:"View rate",value:"view_rate"}]} style={{ width: 140 }} />}>
+                <AntText type="secondary" style={{ fontSize: 12 }}>{CHART_QUESTION_BY_KEY.heatmap}</AntText>
+                <div style={{ minHeight: 320, marginTop: 8 }}><Heatmap data={heatmapData} /></div>
+              </Card>
+            </Col>
+          </Row>
 
-            <div className="grid grid-cols-1 gap-3 xl:grid-cols-3">
-              <article className="min-w-0 rounded-2xl border border-slate-200 bg-white p-4 shadow-panel xl:col-span-3">
-                <div className="mb-2 flex flex-wrap items-start justify-between gap-2">
-                  <div className="min-w-0">
-                    <h3 className="text-base font-semibold text-slate-900">Distribución por tema</h3>
-                    <p className="text-xs text-slate-500">{CHART_QUESTION_BY_KEY.topic_breakdown}</p>
-                    <p className="text-[11px] text-slate-500">Haz clic en una barra para ver los posts de ese tema.</p>
-                  </div>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <label className="text-xs font-semibold text-slate-600">
-                      Dimensión secundaria
-                      <select
-                        value={topicBreakdownDimension}
-                        onChange={(event) => setTopicBreakdownDimension(event.target.value as SocialTopicBreakdownDimension)}
-                        className="ml-2 rounded-md border border-slate-200 px-2 py-1 text-xs"
-                      >
-                        <option value="channel">Canal</option>
-                        <option value="account">Cuenta</option>
-                        <option value="post_type">Tipo de post</option>
-                        <option value="campaign">Campaña</option>
-                        <option value="strategy">Estrategia</option>
-                        <option value="hashtag">Hashtag</option>
-                      </select>
-                    </label>
-                    <label className="text-xs font-semibold text-slate-600">
-                      Métrica
-                      <select
-                        value={topicBreakdownMetric}
-                        onChange={(event) => setTopicBreakdownMetric(event.target.value as TrendByDimensionMetric)}
-                        className="ml-2 rounded-md border border-slate-200 px-2 py-1 text-xs"
-                      >
-                        {TREND_METRICS.map((metric) => (
-                          <option key={metric} value={metric}>
-                            {METRIC_META[metric].label}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                    <label className="inline-flex items-center gap-2 rounded-md border border-slate-200 px-2 py-1 text-xs font-semibold text-slate-700">
-                      <input
-                        type="checkbox"
-                        checked={topicBreakdownNormalize100}
-                        onChange={(event) => setTopicBreakdownNormalize100(event.target.checked)}
-                        className="h-3.5 w-3.5 accent-red-700"
-                      />
-                      Apilar al 100%
-                    </label>
-                  </div>
+          {/* ── Breakdown + SOV Pie ── */}
+          <Row gutter={[12, 12]}>
+            <Col xs={24} xl={16}>
+              <Card size="small" title="Métrica por dimensión" extra={
+                <Space wrap>
+                  <Select size="small" value={breakdownDimension} onChange={(v) => setBreakdownDimension(v)} options={[{label:"Hashtag",value:"hashtag"},{label:"Término más usado",value:"word"},{label:"Tipo de post",value:"post_type"},{label:"Frecuencia",value:"publish_frequency"},{label:"Día publicación",value:"weekday"}]} style={{ width: 150 }} />
+                  <Select size="small" value={breakdownMetric} onChange={(v) => setBreakdownMetric(v as BreakdownMetric)} options={metricSelectOptions(BREAKDOWN_METRICS)} style={{ width: 150 }} />
+                </Space>
+              }>
+                <AntText type="secondary" style={{ fontSize: 12 }}>{CHART_QUESTION_BY_KEY.breakdown}</AntText>
+                <div style={{ height: 320, marginTop: 8 }}>
+                  <VisxHorizontalBarChart data={breakdownChartData.map((i) => ({ label: String(i.label), metric_value: Number(i.metric_value), posts: Number(i.posts), exposure_total: Number(i.exposure_total) }))} metricLabel={METRIC_META[breakdownMetric].label} formatTick={(v) => formatChartAxisByMetrics([breakdownMetric], v)} />
                 </div>
+              </Card>
+            </Col>
+            <Col xs={24} xl={8}>
+              <Card size="small" title="Share por cuenta"><AntText type="secondary" style={{ fontSize: 12 }}>{CHART_QUESTION_BY_KEY.share}</AntText>
+                <div style={{ height: 320, marginTop: 8 }}><VisxPieChart data={sovPieData} colors={pieColors} /></div>
+              </Card>
+            </Col>
+          </Row>
+        </div>
+      )}
 
-                {topicBreakdownError ? <div className="mb-2 rounded-lg border border-amber-200 bg-amber-50 px-2 py-1 text-xs text-amber-800">{topicBreakdownError}</div> : null}
-                {loadingTopicBreakdown ? <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-10 text-center text-sm text-slate-500">Cargando distribución por tema...</div> : null}
-                {!loadingTopicBreakdown && topicBreakdownChartData.length === 0 ? (
-                  <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-10 text-center text-sm text-slate-500">
-                    Sin temas clasificados para los filtros activos.
-                  </div>
-                ) : null}
-                {!loadingTopicBreakdown && topicBreakdownChartData.length > 0 ? (
-                  <div className="w-full min-w-0" style={{ height: `${topicBreakdownChartHeight}px` }}>
-                    <ResponsiveContainer width="100%" height="100%">
-                      <BarChart data={topicBreakdownChartData} layout="vertical" margin={{ top: 8, right: 16, left: 20, bottom: 8 }}>
-                        <CartesianGrid strokeDasharray="3 3" />
-                        <XAxis
-                          type="number"
-                          scale={topicBreakdownScale}
-                          domain={topicBreakdownNormalize100 ? [0, 100] : resolveAxisDomain(topicBreakdownScale, topicBreakdownAxisValues)}
-                          tickFormatter={(value) =>
-                            topicBreakdownNormalize100
-                              ? formatAxisPercentNoDecimals(Number(value))
-                              : formatChartAxisByMetrics([topicBreakdownMetric], Number(value))
-                          }
-                          label={{
-                            value: topicBreakdownNormalize100 ? `${METRIC_META[topicBreakdownMetric].label} (%)` : METRIC_META[topicBreakdownMetric].label,
-                            position: "insideBottom",
-                            offset: -6,
-                            fontSize: 11
-                          }}
-                        />
-                        <YAxis type="category" dataKey="topic_label" width={185} tickFormatter={(value) => truncate(String(value), 30)} />
-                        <Tooltip
-                          content={(tooltip: ChartTooltipProps) => {
-                            if (!tooltip.active || !tooltip.payload || tooltip.payload.length === 0) return null;
-                            const payload = (tooltip.payload[0]?.payload ?? {}) as Record<string, unknown>;
-                            const topicLabel = String(payload.topic_label ?? tooltip.label ?? "");
-                            const metricTotal = Number(payload.metric_total ?? 0);
-                            const rows = tooltip.payload
-                              .filter((item) => item.dataKey !== undefined)
-                              .map((item) => {
-                                const key = String(item.dataKey);
-                                const segment = topicBreakdownSegmentByKey.get(key);
-                                const shownValue = Number(item.value ?? 0);
-                                const rawValue = Number(payload[`raw_${key}`] ?? shownValue);
-                                return {
-                                  key,
-                                  label: segment?.label ?? item.name ?? key,
-                                  shownValue,
-                                  rawValue,
-                                  color: segment?.color ?? item.color ?? "#334155"
-                                };
-                              })
-                              .filter((row) => Math.abs(row.shownValue) > 0.000001 || Math.abs(row.rawValue) > 0.000001);
-
-                            return (
-                              <div className="min-w-[220px] rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs shadow-lg">
-                                <p className="font-semibold text-slate-800">{topicLabel}</p>
-                                <p className="mt-1 flex items-center justify-between gap-2 text-slate-600">
-                                  <span>Total</span>
-                                  <strong>{formatChartMetricValue(topicBreakdownMetric, metricTotal)}</strong>
-                                </p>
-                                {rows.map((row) => (
-                                  <p key={row.key} style={{ color: row.color }} className="mt-1 flex items-center justify-between gap-2">
-                                    <span>{row.label}</span>
-                                    <strong>
-                                      {topicBreakdownNormalize100
-                                        ? `${formatAxisPercentNoDecimals(row.shownValue)} (${formatChartMetricValue(topicBreakdownMetric, row.rawValue)})`
-                                        : formatChartMetricValue(topicBreakdownMetric, row.shownValue)}
-                                    </strong>
-                                  </p>
-                                ))}
-                              </div>
-                            );
-                          }}
-                        />
-                        <Legend />
-                        {topicBreakdownSegments.map((segment) => (
-                          <Bar
-                            key={segment.key}
-                            dataKey={segment.key}
-                            name={segment.label}
-                            stackId="topic-stack"
-                            fill={segment.color}
-                            cursor="pointer"
-                            onClick={(entry: unknown) => {
-                              const payload = (entry as { payload?: { topic_key?: string } }).payload;
-                              const topicKey = payload?.topic_key ?? "";
-                              openPostsByTopic(topicKey);
-                            }}
-                          />
-                        ))}
-                        {topicBreakdownNormalize100 ? <ReferenceLine x={100} stroke="#94a3b8" strokeDasharray="4 4" /> : null}
-                      </BarChart>
-                    </ResponsiveContainer>
-                  </div>
-                ) : null}
-              </article>
-            </div>
-
-            <div className="grid grid-cols-1 gap-3 xl:grid-cols-3">
-              <article className="min-w-0 rounded-2xl border border-slate-200 bg-white p-4 shadow-panel xl:col-span-2">
-                <div className="mb-2 flex flex-wrap items-start justify-between gap-2">
-                  <div>
-                    <h3 className="text-base font-semibold text-slate-900">Ranking de cuentas</h3>
-                    <p className="text-xs text-slate-500">{CHART_QUESTION_BY_KEY.ranking}</p>
-                  </div>
-                  <div className="flex flex-wrap items-center gap-1">
-                    {topAccountsLeftMetrics.length > 0 ? (
-                      <span className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold ${topAccountsLeftScale === "log" ? "border-amber-300 bg-amber-50 text-amber-700" : "border-slate-200 text-slate-500"}`}>
-                        Izq {topAccountsLeftScale === "log" ? "log (auto)" : "lineal"}
-                      </span>
-                    ) : null}
-                    {topAccountsRightMetrics.length > 0 ? (
-                      <span className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold ${topAccountsRightScale === "log" ? "border-amber-300 bg-amber-50 text-amber-700" : "border-slate-200 text-slate-500"}`}>
-                        Der {topAccountsRightScale === "log" ? "log (auto)" : "lineal"}
-                      </span>
-                    ) : null}
-                  </div>
-                </div>
-                <div className="mb-2 grid grid-cols-2 gap-2 lg:grid-cols-3">
-                  <label className="text-xs font-semibold text-slate-600">
-                    Métrica barra
-                    <select value={accountBarMetric} onChange={(event) => setAccountBarMetric(event.target.value as AccountMetric)} className="mt-1 w-full rounded-lg border border-slate-200 px-2 py-1.5 text-xs">
-                      {ACCOUNT_METRICS.map((metric) => (
-                        <option key={metric} value={metric}>
-                          {METRIC_META[metric].label}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  <label className="text-xs font-semibold text-slate-600">
-                    Métrica línea
-                    <select value={accountLineMetric} onChange={(event) => setAccountLineMetric(event.target.value as AccountMetric)} className="mt-1 w-full rounded-lg border border-slate-200 px-2 py-1.5 text-xs">
-                      {ACCOUNT_METRICS.map((metric) => (
-                        <option key={metric} value={metric}>
-                          {METRIC_META[metric].label}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  <label className="text-xs font-semibold text-slate-600">
-                    Eje barra
-                    <select value={accountBarAxis} onChange={(event) => setAccountBarAxis(event.target.value as AxisSide)} className="mt-1 w-full rounded-lg border border-slate-200 px-2 py-1.5 text-xs">
-                      <option value="left">Izquierdo</option>
-                      <option value="right">Derecho</option>
-                    </select>
-                  </label>
-                  <label className="text-xs font-semibold text-slate-600">
-                    Eje línea
-                    <select value={accountLineAxis} onChange={(event) => setAccountLineAxis(event.target.value as AxisSide)} className="mt-1 w-full rounded-lg border border-slate-200 px-2 py-1.5 text-xs">
-                      <option value="left">Izquierdo</option>
-                      <option value="right">Derecho</option>
-                    </select>
-                  </label>
-                  <label className="text-xs font-semibold text-slate-600">
-                    Escala eje izq
-                    <select value={topAccountsLeftScaleMode} onChange={(event) => setTopAccountsLeftScaleMode(event.target.value as ScaleMode)} className="mt-1 w-full rounded-lg border border-slate-200 px-2 py-1.5 text-xs">
-                      <option value="auto">Auto</option>
-                      <option value="linear">Lineal</option>
-                      <option value="log">Log</option>
-                    </select>
-                  </label>
-                  <label className="text-xs font-semibold text-slate-600">
-                    Escala eje der
-                    <select value={topAccountsRightScaleMode} onChange={(event) => setTopAccountsRightScaleMode(event.target.value as ScaleMode)} className="mt-1 w-full rounded-lg border border-slate-200 px-2 py-1.5 text-xs">
-                      <option value="auto">Auto</option>
-                      <option value="linear">Lineal</option>
-                      <option value="log">Log</option>
-                    </select>
-                  </label>
-                </div>
-                <div className="h-[320px] w-full min-w-0">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={topAccountsDual} margin={{ top: 8, right: 14, left: 6, bottom: 8 }}>
-                      <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis dataKey="account_name" tickFormatter={(value) => truncate(String(value), 16)} minTickGap={12} />
-                      <YAxis
-                        yAxisId="left"
-                        hide={topAccountsLeftMetrics.length === 0}
-                        width={76}
-                        scale={topAccountsLeftScale}
-                        domain={resolveAxisDomain(topAccountsLeftScale, topAccountsAxisValues.leftValues)}
-                        tickFormatter={(value) => formatChartAxisByMetrics(topAccountsLeftMetrics, Number(value))}
-                        label={{ value: topAccountsLeftMetrics.map((metric) => METRIC_META[metric].label).join(" / "), angle: -90, position: "insideLeft", offset: 4, fontSize: 11 }}
-                      />
-                      <YAxis
-                        yAxisId="right"
-                        hide={topAccountsRightMetrics.length === 0}
-                        width={76}
-                        orientation="right"
-                        scale={topAccountsRightScale}
-                        domain={resolveAxisDomain(topAccountsRightScale, topAccountsAxisValues.rightValues)}
-                        tickFormatter={(value) => formatChartAxisByMetrics(topAccountsRightMetrics, Number(value))}
-                        label={{ value: topAccountsRightMetrics.map((metric) => METRIC_META[metric].label).join(" / "), angle: 90, position: "insideRight", offset: 4, fontSize: 11 }}
-                      />
-                      <Tooltip
-                        content={(tooltip: ChartTooltipProps) => {
-                          if (!tooltip.active || !tooltip.payload || tooltip.payload.length === 0) return null;
-                          const accountName = String(tooltip.label ?? "");
-                          const rows = tooltip.payload
-                            .filter((item) => item.dataKey !== undefined)
-                            .map((item) => {
-                              const metric = String(item.dataKey);
-                              return {
-                                metric,
-                                label: METRIC_META[metric]?.label ?? item.name ?? metric,
-                                value: formatChartMetricValue(metric, Number(item.value ?? 0)),
-                                color: item.color ?? "#334155"
-                              };
-                            });
-                          return (
-                            <div className="min-w-[180px] rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs shadow-lg">
-                              <p className="font-semibold text-slate-800">{accountName}</p>
-                              {rows.map((row) => (
-                                <p key={row.metric} style={{ color: row.color }} className="mt-1 flex items-center justify-between gap-2">
-                                  <span>{row.label}</span>
-                                  <strong>{row.value}</strong>
-                                </p>
-                              ))}
-                            </div>
-                          );
-                        }}
-                      />
-                      <Legend />
-                      <Bar yAxisId={accountBarAxis} dataKey={accountBarMetric} name={METRIC_META[accountBarMetric].label} fill="#c90310" />
-                      <Line
-                        yAxisId={accountLineAxis}
-                        type="monotone"
-                        dataKey={accountLineMetric}
-                        name={METRIC_META[accountLineMetric].label}
-                        stroke="#1d4ed8"
-                        strokeWidth={3}
-                        dot={{ r: 3, fill: "#1d4ed8" }}
-                        activeDot={{ r: 5 }}
-                      />
-                    </BarChart>
-                  </ResponsiveContainer>
-                </div>
-              </article>
-
-              <article className="min-w-0 rounded-2xl border border-slate-200 bg-white p-4 shadow-panel xl:col-span-1">
-                <div className="mb-2 flex flex-wrap items-start justify-between gap-2">
-                  <div>
-                    <h3 className="text-base font-semibold text-slate-900">Brecha ER vs Meta</h3>
-                    <p className="text-xs text-slate-500">{CHART_QUESTION_BY_KEY.gap}</p>
-                  </div>
-                  <span className="text-xs text-slate-500">ER actual vs ER objetivo 2026</span>
-                </div>
-                <div className="h-[320px] w-full min-w-0">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={erGapByChannel} margin={{ top: 8, right: 14, left: 4, bottom: 8 }}>
-                      <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis dataKey="channel" tickFormatter={(value) => toChannelLabel(value as SocialChannel)} />
-                      <YAxis yAxisId="left" width={68} tickFormatter={(value) => formatAxisPercentNoDecimals(Number(value))} label={{ value: "ER (%)", angle: -90, position: "insideLeft", offset: 2, fontSize: 11 }} />
-                      <Tooltip
-                        content={(tooltip: ChartTooltipProps) => {
-                          if (!tooltip.active || !tooltip.payload || tooltip.payload.length === 0) return null;
-                          const first = tooltip.payload[0]?.payload ?? {};
-                          const channel = String((first.channel as string | undefined) ?? tooltip.label ?? "");
-                          const currentEr = Number((first.current_er as number | undefined) ?? 0);
-                          const targetEr = Number((first.target_2026_er as number | undefined) ?? 0);
-                          const gap = Number((first.gap as number | undefined) ?? currentEr - targetEr);
-                          return (
-                            <div className="min-w-[170px] rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs shadow-lg">
-                              <p className="font-semibold text-slate-800">{toChannelLabel(channel as SocialChannel)}</p>
-                              <p className="mt-1 flex items-center justify-between gap-2">
-                                <span>ER actual</span>
-                                <strong>{formatAxisPercentNoDecimals(currentEr)}</strong>
-                              </p>
-                              <p className="mt-1 flex items-center justify-between gap-2">
-                                <span>Meta ER</span>
-                                <strong>{formatAxisPercentNoDecimals(targetEr)}</strong>
-                              </p>
-                              <p className="mt-1 flex items-center justify-between gap-2">
-                                <span>Gap</span>
-                                <strong>{formatAxisPercentNoDecimals(gap)}</strong>
-                              </p>
-                            </div>
-                          );
-                        }}
-                      />
-                      <Legend />
-                      <Bar yAxisId="left" dataKey="current_er" name="ER actual" fill="#e30613" />
-                      <Line
-                        yAxisId="left"
-                        type="monotone"
-                        dataKey="target_2026_er"
-                        name="Meta ER 2026"
-                        stroke="#0f766e"
-                        strokeWidth={2.5}
-                        strokeDasharray="6 4"
-                        dot={{ r: 3, fill: "#0f766e" }}
-                        activeDot={{ r: 4 }}
-                      />
-                    </BarChart>
-                  </ResponsiveContainer>
-                </div>
-                {!hasVisibleTargetByChannel ? (
-                  <p className="mt-2 rounded-lg border border-amber-200 bg-amber-50 px-2 py-1 text-xs text-amber-700">
-                    No hay metas ER válidas (0/null) para los filtros activos.
-                  </p>
-                ) : null}
-              </article>
-            </div>
-
-            <div className="grid grid-cols-1 gap-3 xl:grid-cols-3">
-              <article className="min-w-0 rounded-2xl border border-slate-200 bg-white p-4 shadow-panel xl:col-span-2">
-                <div className="mb-2 flex flex-wrap items-start justify-between gap-2">
-                  <div>
-                    <h3 className="text-base font-semibold text-slate-900">Scatter por métricas</h3>
-                    <p className="text-xs text-slate-500">{CHART_QUESTION_BY_KEY.scatter}</p>
-                  </div>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <label className="text-xs font-semibold text-slate-600">
-                      Dimensión
-                      <select value={scatterDimension} onChange={(event) => setScatterDimension(event.target.value as SocialScatterDimension)} className="ml-2 rounded-md border border-slate-200 px-2 py-1 text-xs">
-                        <option value="post_type">Tipo de post</option>
-                        <option value="channel">Canal</option>
-                        <option value="account">Cuenta</option>
-                        <option value="campaign">Campaña</option>
-                        <option value="strategy">Estrategia</option>
-                        <option value="hashtag">Hashtag</option>
-                      </select>
-                    </label>
-                    <label className="text-xs font-semibold text-slate-600">
-                      Eje X
-                      <select value={scatterXMetric} onChange={(event) => setScatterXMetric(event.target.value as ScatterMetric)} className="ml-2 rounded-md border border-slate-200 px-2 py-1 text-xs">
-                        {SCATTER_METRICS.map((metric) => (
-                          <option key={metric} value={metric}>
-                            {METRIC_META[metric].label}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                    <label className="text-xs font-semibold text-slate-600">
-                      Eje Y
-                      <select value={scatterYMetric} onChange={(event) => setScatterYMetric(event.target.value as ScatterMetric)} className="ml-2 rounded-md border border-slate-200 px-2 py-1 text-xs">
-                        {SCATTER_METRICS.map((metric) => (
-                          <option key={metric} value={metric}>
-                            {METRIC_META[metric].label}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                  </div>
-                </div>
-                <div className="h-[320px] w-full min-w-0">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <ScatterChart margin={{ top: 6, right: 20, bottom: 18, left: 18 }}>
-                      <CartesianGrid />
-                      <XAxis
-                        type="number"
-                        dataKey="x_value"
-                        name={METRIC_META[scatterXMetric].label}
-                        scale={scatterXScale}
-                        domain={resolveAxisDomain(scatterXScale, scatterValues.xValues)}
-                        tickFormatter={(value) => formatChartAxisByMetrics([scatterXMetric], Number(value))}
-                        label={{ value: METRIC_META[scatterXMetric].label, position: "insideBottom", offset: -6, fontSize: 11 }}
-                      />
-                      <YAxis
-                        type="number"
-                        dataKey="y_value"
-                        name={METRIC_META[scatterYMetric].label}
-                        scale={scatterYScale}
-                        domain={resolveAxisDomain(scatterYScale, scatterValues.yValues)}
-                        tickFormatter={(value) => formatChartAxisByMetrics([scatterYMetric], Number(value))}
-                        label={{ value: METRIC_META[scatterYMetric].label, angle: -90, position: "insideLeft", offset: -2, fontSize: 11 }}
-                      />
-                      <ZAxis dataKey="z" name="Posts" range={[110, 680]} />
-                      <Tooltip
-                        content={(tooltip: ChartTooltipProps) => {
-                          if (!tooltip.active || !tooltip.payload || tooltip.payload.length === 0) return null;
-                          const point = tooltip.payload[0]?.payload ?? {};
-                          const label = String((point.label as string | undefined) ?? "n/a");
-                          const xValue = Number((point.x_value as number | undefined) ?? 0);
-                          const yValue = Number((point.y_value as number | undefined) ?? 0);
-                          const postsCount = Number((point.posts as number | undefined) ?? 0);
-                          return (
-                            <div className="min-w-[210px] rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs shadow-lg">
-                              <p className="font-semibold text-slate-800">{label}</p>
-                              <p className="text-slate-600">Dimensión: {toScatterDimensionLabel(scatterDimension)}</p>
-                              <p className="mt-1 flex items-center justify-between gap-2"><span>Posts</span><strong>{formatCompactAxisNumber(postsCount)}</strong></p>
-                              <p className="mt-1 flex items-center justify-between gap-2">
-                                <span>{METRIC_META[scatterXMetric].label}</span>
-                                <strong>{formatChartMetricValue(scatterXMetric, xValue)}</strong>
-                              </p>
-                              <p className="mt-1 flex items-center justify-between gap-2">
-                                <span>{METRIC_META[scatterYMetric].label}</span>
-                                <strong>{formatChartMetricValue(scatterYMetric, yValue)}</strong>
-                              </p>
-                            </div>
-                          );
-                        }}
-                      />
-                      <Scatter name="Grupos" data={scatterChartData} fill="#0f766e" />
-                    </ScatterChart>
-                  </ResponsiveContainer>
-                </div>
-              </article>
-
-              <article className="min-w-0 rounded-2xl border border-slate-200 bg-white p-4 shadow-panel xl:col-span-1">
-                <div className="mb-2 flex flex-wrap items-start justify-between gap-2">
-                  <div>
-                    <h3 className="text-base font-semibold text-slate-900">Heatmap actividad</h3>
-                    <p className="text-xs text-slate-500">{CHART_QUESTION_BY_KEY.heatmap}</p>
-                  </div>
-                  <label className="text-xs font-semibold text-slate-600">
-                    Métrica
-                    <select value={heatmapMetric} onChange={(event) => setHeatmapMetric(event.target.value as SocialHeatmapMetric)} className="ml-2 rounded-md border border-slate-200 px-2 py-1 text-xs">
-                      <option value="er">ER</option>
-                      <option value="engagement_total">Interacciones</option>
-                      <option value="impressions">Impresiones</option>
-                      <option value="reach">Reach</option>
-                      <option value="clicks">Clicks</option>
-                      <option value="likes">Likes</option>
-                      <option value="comments">Comments</option>
-                      <option value="shares">Shares</option>
-                      <option value="views">Views</option>
-                      <option value="ctr">CTR</option>
-                      <option value="er_impressions">ER impresiones</option>
-                      <option value="er_reach">ER reach</option>
-                      <option value="view_rate">View rate</option>
-                    </select>
-                  </label>
-                </div>
-                <div className="min-h-[320px]">
-                  <Heatmap data={heatmapData} />
-                </div>
-              </article>
-            </div>
-
-            <div className="grid grid-cols-1 gap-3 xl:grid-cols-3">
-              <article className="min-w-0 rounded-2xl border border-slate-200 bg-white p-4 shadow-panel xl:col-span-2">
-                <div className="mb-2 flex flex-wrap items-start justify-between gap-2">
-                  <div>
-                    <h3 className="text-base font-semibold text-slate-900">Métrica por dimensión</h3>
-                    <p className="text-xs text-slate-500">{CHART_QUESTION_BY_KEY.breakdown}</p>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <select value={breakdownDimension} onChange={(event) => setBreakdownDimension(event.target.value as SocialErBreakdownDimension)} className="rounded-md border border-slate-200 px-2 py-1 text-xs">
-                      <option value="hashtag">Hashtag</option>
-                      <option value="word">Término más usado</option>
-                      <option value="post_type">Tipo de post</option>
-                      <option value="publish_frequency">Frecuencia (días entre posts)</option>
-                      <option value="weekday">Día publicación</option>
-                    </select>
-                    <select value={breakdownMetric} onChange={(event) => setBreakdownMetric(event.target.value as BreakdownMetric)} className="rounded-md border border-slate-200 px-2 py-1 text-xs">
-                      {BREAKDOWN_METRICS.map((metric) => (
-                        <option key={metric} value={metric}>
-                          {METRIC_META[metric].label}
-                        </option>
-                      ))}
-                    </select>
-                    <span className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold ${breakdownScale === "log" ? "border-amber-300 bg-amber-50 text-amber-700" : "border-slate-200 text-slate-500"}`}>
-                      Escala {breakdownScale === "log" ? "log (auto)" : "lineal"}
-                    </span>
-                    <select value={breakdownScaleMode} onChange={(event) => setBreakdownScaleMode(event.target.value as ScaleMode)} className="rounded-md border border-slate-200 px-2 py-1 text-xs">
-                      <option value="auto">Auto</option>
-                      <option value="linear">Lineal</option>
-                      <option value="log">Log</option>
-                    </select>
-                  </div>
-                </div>
-                <div className="h-[320px] w-full min-w-0">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={breakdownChartData} layout="vertical" margin={{ top: 6, right: 14, bottom: 8, left: 20 }}>
-                      <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis
-                        type="number"
-                        scale={breakdownScale}
-                        domain={resolveAxisDomain(breakdownScale, breakdownChartData.map((item) => Number(item.metric_value)))}
-                        tickFormatter={(value) => formatChartAxisByMetrics([breakdownMetric], Number(value))}
-                        label={{ value: METRIC_META[breakdownMetric].label, position: "insideBottom", offset: -6, fontSize: 11 }}
-                      />
-                      <YAxis type="category" dataKey="label" width={180} tickFormatter={(value) => truncate(String(value), 24)} />
-                      <Tooltip
-                        content={(tooltip: ChartTooltipProps) => {
-                          if (!tooltip.active || !tooltip.payload || tooltip.payload.length === 0) return null;
-                          const row = tooltip.payload[0]?.payload ?? {};
-                          const label = String((row.label as string | undefined) ?? tooltip.label ?? "");
-                          const selectedMetric = Number((row.metric_value as number | undefined) ?? 0);
-                          const postsCount = Number((row.posts as number | undefined) ?? 0);
-                          const exposure = Number((row.exposure_total as number | undefined) ?? 0);
-                          return (
-                            <div className="min-w-[180px] rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs shadow-lg">
-                              <p className="font-semibold text-slate-800">{label}</p>
-                              <p className="mt-1 flex items-center justify-between gap-2">
-                                <span>{METRIC_META[breakdownMetric].label}</span>
-                                <strong>{formatChartMetricValue(breakdownMetric, selectedMetric)}</strong>
-                              </p>
-                              <p className="mt-1 flex items-center justify-between gap-2"><span>Posts</span><strong>{formatCompactAxisNumber(postsCount)}</strong></p>
-                              <p className="mt-1 flex items-center justify-between gap-2"><span>Exposición</span><strong>{formatCompactAxisNumber(exposure)}</strong></p>
-                            </div>
-                          );
-                        }}
-                      />
-                      <Bar dataKey="metric_value" name={METRIC_META[breakdownMetric].label} fill="#7c3aed" />
-                    </BarChart>
-                  </ResponsiveContainer>
-                </div>
-              </article>
-
-              <article className="min-w-0 rounded-2xl border border-slate-200 bg-white p-4 shadow-panel xl:col-span-1">
-                <div className="mb-2 flex flex-wrap items-start justify-between gap-2">
-                  <div>
-                    <h3 className="text-base font-semibold text-slate-900">Share por cuenta</h3>
-                    <p className="text-xs text-slate-500">{CHART_QUESTION_BY_KEY.share}</p>
-                  </div>
-                  <span className="text-xs text-slate-500">SOV interno</span>
-                </div>
-                <div className="h-[320px] w-full min-w-0">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <PieChart>
-                      <Pie data={sovPieData} dataKey="value" nameKey="name" outerRadius={98} label={(entry) => truncate(String(entry.name), 14)}>
-                        {sovPieData.map((_, index) => (
-                          <Cell key={index} fill={pieColors[index % pieColors.length]} />
-                        ))}
-                      </Pie>
-                      <Tooltip formatter={(value) => formatAxisPercentNoDecimals(Number(value))} />
-                    </PieChart>
-                  </ResponsiveContainer>
-                </div>
-              </article>
-            </div>
-          </div>
-        </>
-      ) : null}
-
-      {tab === "accounts" ? (
-        <section className="rounded-2xl border border-slate-200 bg-white/90 p-4 shadow-panel">
-          <div className="mb-3 flex flex-wrap items-start justify-between gap-2">
-            <div>
-              <h3 className="text-base font-semibold text-slate-900">Cuentas</h3>
-              <span className="text-xs text-slate-500">Ranking operativo por cuenta con umbrales y deltas completos.</span>
-            </div>
-            <div className="flex flex-wrap items-end gap-2">
-              <label className="text-xs font-semibold text-slate-600">
-                Orden
-                <select
-                  value={accountsSort}
-                  onChange={(event) => setQueryPatch({ accounts_sort: event.target.value, accounts_cursor: null })}
-                  className="ml-2 rounded-md border border-slate-200 px-2 py-1 text-xs"
-                >
-                  {ACCOUNT_SORT_OPTIONS.map((sort) => (
-                    <option key={sort} value={sort}>
-                      {toAccountsSortLabel(sort)}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="text-xs font-semibold text-slate-600">
-                Límite
-                <select
-                  value={accountsLimit}
-                  onChange={(event) => setQueryPatch({ accounts_limit: event.target.value, accounts_cursor: null })}
-                  className="ml-2 rounded-md border border-slate-200 px-2 py-1 text-xs"
-                >
-                  {[25, 50, 100, 200].map((limitOption) => (
-                    <option key={limitOption} value={limitOption}>
-                      {limitOption}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="text-xs font-semibold text-slate-600">
-                Min posts
-                <input
-                  value={minPostsInput}
-                  onChange={(event) => setMinPostsInput(event.target.value)}
-                  className="ml-2 w-20 rounded-md border border-slate-200 px-2 py-1 text-xs"
-                  inputMode="numeric"
-                />
-              </label>
-              <label className="text-xs font-semibold text-slate-600">
-                Min exposición
-                <input
-                  value={minExposureInput}
-                  onChange={(event) => setMinExposureInput(event.target.value)}
-                  className="ml-2 w-28 rounded-md border border-slate-200 px-2 py-1 text-xs"
-                  inputMode="numeric"
-                />
-              </label>
-              <button
-                type="button"
-                className="rounded-md border border-slate-200 px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"
-                onClick={() =>
-                  setQueryPatch({
-                    min_posts: String(parseIntFromQuery(minPostsInput, minPosts, 1, 2000)),
-                    min_exposure: String(parseIntFromQuery(minExposureInput, minExposure, 0, 10_000_000_000)),
-                    accounts_cursor: null
-                  })
-                }
-              >
-                Aplicar umbrales
-              </button>
-            </div>
-          </div>
-
-          <p className="mb-2 text-xs text-slate-500">
+      {/* ═══════ ACCOUNTS TAB ═══════ */}
+      {tab === "accounts" && (
+        <Card size="small" title="Cuentas" extra={
+          <Space wrap>
+            <span style={{ fontSize: 12, fontWeight: 600, color: "#64748b" }}>Orden:</span>
+            <Select size="small" value={accountsSort} onChange={(v) => setQueryPatch({ accounts_sort: v, accounts_cursor: null })} options={ACCOUNT_SORT_OPTIONS.map((s) => ({ label: toAccountsSortLabel(s), value: s }))} style={{ width: 150 }} />
+            <span style={{ fontSize: 12, fontWeight: 600, color: "#64748b" }}>Límite:</span>
+            <Select size="small" value={accountsLimit} onChange={(v) => setQueryPatch({ accounts_limit: String(v), accounts_cursor: null })} options={[25,50,100,200].map((n) => ({ label: String(n), value: n }))} style={{ width: 80 }} />
+            <span style={{ fontSize: 12, fontWeight: 600, color: "#64748b" }}>Min posts:</span>
+            <Input size="small" value={minPostsInput} onChange={(e) => setMinPostsInput(e.target.value)} style={{ width: 70 }} />
+            <span style={{ fontSize: 12, fontWeight: 600, color: "#64748b" }}>Min exp.:</span>
+            <Input size="small" value={minExposureInput} onChange={(e) => setMinExposureInput(e.target.value)} style={{ width: 100 }} />
+            <Button size="small" onClick={() => setQueryPatch({ min_posts: String(parseIntFromQuery(minPostsInput, minPosts, 1, 2000)), min_exposure: String(parseIntFromQuery(minExposureInput, minExposure, 0, 10_000_000_000)), accounts_cursor: null })}>Aplicar umbrales</Button>
+          </Space>
+        }>
+          <div style={{ fontSize: 12, color: "#64748b", marginBottom: 8 }}>
             Orden aplicado por backend: <strong>{toAccountsSortLabel(accountsData?.sort_applied ?? accountsSort)}</strong> | thresholds: {formatNumber(minPosts)} posts / {formatNumber(minExposure)} exposición
-          </p>
-
-          <div className="overflow-x-auto">
-            <table className="min-w-[1520px] w-full border-collapse text-sm">
-              <thead>
-                <tr className="border-b border-slate-200 text-left text-xs uppercase tracking-wide text-slate-500">
-                  <th className="px-2 py-2">Cuenta</th>
-                  <th className="px-2 py-2">Canales</th>
-                  <th className="px-2 py-2">Followers</th>
-                  <th className="px-2 py-2">Page Reach</th>
-                  <th className="px-2 py-2">Posts</th>
-                  <th className="px-2 py-2">Exposición</th>
-                  <th className="px-2 py-2">Interacciones (L+C+S)</th>
-                  <th className="px-2 py-2">ER pond.</th>
-                  <th className="px-2 py-2">Riesgo</th>
-                  <th className="px-2 py-2">Delta exposición</th>
-                  <th className="px-2 py-2">Delta engagement</th>
-                  <th className="px-2 py-2">Delta ER</th>
-                  <th className="px-2 py-2">SOV interno</th>
-                  <th className="px-2 py-2">Threshold</th>
-                  <th className="px-2 py-2">Acción</th>
-                </tr>
-              </thead>
-              <tbody>
-                {(accountsData?.items ?? []).map((item) => (
-                  <tr key={item.account_name} className="border-b border-slate-100">
-                    <td className="px-2 py-2">{item.account_name}</td>
-                    <td className="px-2 py-2">{item.channel_mix.map((ch) => toChannelLabel(ch)).join(", ")}</td>
-                    <td className="px-2 py-2">
-                      {formatNumber(item.channel_mix.reduce((sum, ch) => sum + (pageMetricsData.get(`${ch}:${item.account_name}`)?.followers ?? 0), 0))}
-                    </td>
-                    <td className="px-2 py-2">
-                      {formatNumber(item.channel_mix.reduce((sum, ch) => sum + (pageMetricsData.get(`${ch}:${item.account_name}`)?.pageReach ?? 0), 0))}
-                    </td>
-                    <td className="px-2 py-2">{formatNumber(item.posts)}</td>
-                    <td className="px-2 py-2">{formatNumber(item.exposure_total)}</td>
-                    <td className="px-2 py-2">{formatNumber(item.engagement_total)}</td>
-                    <td className="px-2 py-2">{formatPercent(item.er_ponderado)}</td>
-                    <td className="px-2 py-2">
-                      <span className={`inline-flex rounded-full px-2 py-0.5 text-[11px] font-semibold ${toRiskTagClass(item.riesgo_activo)}`}>
-                        {formatPercent(item.riesgo_activo)}
-                      </span>
-                    </td>
-                    <td className={`px-2 py-2 ${toDeltaClass(item.delta_exposure)}`}>{formatNumber(item.delta_exposure)}</td>
-                    <td className={`px-2 py-2 ${toDeltaClass(item.delta_engagement)}`}>{formatNumber(item.delta_engagement)}</td>
-                    <td className={`px-2 py-2 ${toDeltaClass(item.delta_er)}`}>{formatPercent(item.delta_er)}</td>
-                    <td className="px-2 py-2">{formatPercent(item.sov_interno)}</td>
-                    <td className="px-2 py-2">{item.meets_threshold ? "OK" : "Bajo"}</td>
-                    <td className="px-2 py-2">
-                      <button
-                        type="button"
-                        className="rounded-md border border-slate-200 px-2 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50"
-                        onClick={() => setQueryPatch({ tab: "posts", account: item.account_name })}
-                      >
-                        Ver posts
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
           </div>
+          <Table dataSource={accountsData?.items ?? []} columns={accountColumns} rowKey="account_name" size="small" scroll={{ x: 1520 }} pagination={false} loading={loadingAccounts} />
+          {!loadingAccounts && (accountsData?.items?.length ?? 0) === 0 && <Empty description="Sin cuentas para estos filtros." style={{ margin: "16px 0" }} />}
+          <Space style={{ marginTop: 12 }}>
+            <Button size="small" onClick={() => setQueryPatch({ accounts_cursor: null })} disabled={!accountsCursor}>Primera página</Button>
+            <Button size="small" onClick={() => setQueryPatch({ accounts_cursor: accountsData?.page_info?.next_cursor ?? null })} disabled={!accountsData?.page_info?.has_next || !accountsData?.page_info?.next_cursor}>Siguiente página</Button>
+            {loadingAccounts && <Spin size="small" />}
+          </Space>
+        </Card>
+      )}
 
-          {!loadingAccounts && (accountsData?.items?.length ?? 0) === 0 ? <p className="mt-3 text-sm text-slate-600">Sin cuentas para estos filtros.</p> : null}
+      {/* ═══════ POSTS TAB ═══════ */}
+      {tab === "posts" && (
+        <PostsTab posts={posts} loadingPosts={loadingPosts} postsHasNext={postsHasNext} loadingMorePosts={loadingMorePosts} postsSort={postsSort} onSortChange={(sort) => setQueryPatch({ posts_sort: sort })} onLoadMore={() => void loadMorePosts()} canOverrideComments={canOverrideComments} client={client} onError={applyRequestError} activeChannels={selectedChannels} onToggleChannel={(ch) => toggleMultiValue("channel", selectedChannels, ch)} />
+      )}
 
-          <div className="mt-3 flex flex-wrap items-center gap-2">
-            <button
-              type="button"
-              className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
-              onClick={() => setQueryPatch({ accounts_cursor: null })}
-              disabled={!accountsCursor}
-            >
-              Primera página
-            </button>
-            <button
-              type="button"
-              className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
-              onClick={() => setQueryPatch({ accounts_cursor: accountsData?.page_info?.next_cursor ?? null })}
-              disabled={!accountsData?.page_info?.has_next || !accountsData?.page_info?.next_cursor}
-            >
-              Siguiente página
-            </button>
-            {loadingAccounts ? <span className="text-xs text-slate-500">Cargando cuentas...</span> : null}
-          </div>
-        </section>
-      ) : null}
-
-      {tab === "posts" ? (
-        <PostsTab
-          posts={posts}
-          loadingPosts={loadingPosts}
-          postsHasNext={postsHasNext}
-          loadingMorePosts={loadingMorePosts}
-          postsSort={postsSort}
-          onSortChange={(sort) => setQueryPatch({ posts_sort: sort })}
-          onLoadMore={() => void loadMorePosts()}
-          canOverrideComments={canOverrideComments}
-          client={client}
-          onError={applyRequestError}
-          activeChannels={selectedChannels}
-          onToggleChannel={(ch) => toggleMultiValue("channel", selectedChannels, ch)}
-        />
-      ) : null}
-
-      {tab === "risk" ? (
-        <section className="rounded-2xl border border-slate-200 bg-white/90 p-4 shadow-panel">
-          <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-            <div>
-              <h3 className="text-base font-semibold text-slate-900">Riesgo</h3>
-              <span className="text-xs text-slate-500">
-                Detección y respuesta con umbrales, hotspots y alertas activas. Serie: {toTimeGranularityLabel(timeGranularity)}.
-              </span>
-            </div>
-            <div className="flex flex-wrap items-center gap-2 text-xs">
-              <span className={`rounded-full px-2 py-0.5 font-semibold ${riskData?.stale_data ? "bg-amber-100 text-amber-700" : "bg-emerald-100 text-emerald-700"}`}>
-                {riskData?.stale_data ? "stale_data" : "fresh_data"}
-              </span>
-              <span className="rounded-full border border-slate-200 px-2 py-0.5 text-slate-600">
-                Umbral riesgo: {formatPercent(riskData?.thresholds?.risk_threshold ?? 0)}
-              </span>
-              {loadingRisk ? <span className="text-slate-500">Actualizando...</span> : null}
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 gap-3 xl:grid-cols-3">
-            <article className="rounded-xl border border-slate-200 p-3 xl:col-span-2">
-              <h4 className="mb-2 text-sm font-semibold text-slate-800">Tendencia de riesgo vs sentimiento</h4>
-              <div className="h-[280px] w-full">
-                <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={riskSentimentTrendData}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="date" />
-                    <YAxis yAxisId="left" />
-                    <YAxis yAxisId="right" orientation="right" tickFormatter={(value) => formatAxisPercentNoDecimals(Number(value))} />
-                    <Tooltip
-                      content={(tooltip: ChartTooltipProps) => {
-                        if (!tooltip.active || !tooltip.payload || tooltip.payload.length === 0) return null;
-                        const row = (tooltip.payload[0]?.payload ?? {}) as {
-                          date?: string;
-                          negativos?: number;
-                          riesgo_activo?: number;
-                          sentimiento_neto?: number;
-                        };
-                        return (
-                          <div className="min-w-[190px] rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs shadow-lg">
-                            <p className="font-semibold text-slate-800">{String(row.date ?? tooltip.label ?? "")}</p>
-                            <p className="mt-1 flex items-center justify-between gap-2">
-                              <span>Negativos</span>
-                              <strong>{formatCompactAxisNumber(Number(row.negativos ?? 0))}</strong>
-                            </p>
-                            <p className="mt-1 flex items-center justify-between gap-2">
-                              <span>Riesgo activo</span>
-                              <strong>{formatAxisPercentNoDecimals(Number(row.riesgo_activo ?? 0))}</strong>
-                            </p>
-                            <p className="mt-1 flex items-center justify-between gap-2">
-                              <span>Sentimiento neto</span>
-                              <strong>{formatAxisPercentNoDecimals(Number(row.sentimiento_neto ?? 0))}</strong>
-                            </p>
-                          </div>
-                        );
-                      }}
-                    />
-                    <Legend />
-                    <ReferenceLine
-                      yAxisId="right"
-                      y={riskData?.thresholds?.risk_threshold ?? 0}
-                      stroke="#dc2626"
-                      strokeDasharray="5 4"
-                      label={{ value: "Umbral", fill: "#dc2626", fontSize: 11 }}
-                    />
-                    <Line yAxisId="left" type="monotone" dataKey="negativos" stroke="#b91c1c" strokeWidth={2} dot={false} />
-                    <Line yAxisId="right" type="monotone" dataKey="riesgo_activo" stroke="#f59f00" strokeWidth={2} dot={false} />
-                    <Line yAxisId="right" type="monotone" dataKey="sentimiento_neto" stroke="#0f766e" strokeWidth={2} dot={false} />
-                  </LineChart>
-                </ResponsiveContainer>
-              </div>
-            </article>
-
-            <article className="rounded-xl border border-slate-200 p-3">
-              <h4 className="mb-2 text-sm font-semibold text-slate-800">Hotspots por canal</h4>
-              <ul className="space-y-2 text-xs">
+      {/* ═══════ RISK TAB ═══════ */}
+      {tab === "risk" && (
+        <Card size="small" title="Riesgo" extra={
+          <Space>
+            <Tag color={riskData?.stale_data ? "orange" : "green"}>{riskData?.stale_data ? "stale_data" : "fresh_data"}</Tag>
+            <AntText type="secondary" style={{ fontSize: 12 }}>Umbral riesgo: {formatPercent(riskData?.thresholds?.risk_threshold ?? 0)}</AntText>
+            {loadingRisk && <Spin size="small" />}
+          </Space>
+        }>
+          <AntText type="secondary" style={{ fontSize: 12 }}>Detección y respuesta con umbrales, hotspots y alertas activas. Serie: {toTimeGranularityLabel(timeGranularity)}.</AntText>
+          <Row gutter={[12, 12]} style={{ marginTop: 12 }}>
+            <Col xs={24} xl={16}>
+              <Card size="small" title="Tendencia de riesgo vs sentimiento">
+                <div style={{ height: 280 }}>
+                  <VisxRiskTrendChart data={riskSentimentTrendData} thresholdY={riskData?.thresholds?.risk_threshold ?? 0} />
+                </div>
+              </Card>
+            </Col>
+            <Col xs={24} xl={8}>
+              <Card size="small" title="Hotspots por canal">
                 {riskTopChannels.map((item) => (
-                  <li key={item.channel} className="rounded-lg border border-slate-200 px-2 py-1">
-                    <div className="flex items-center justify-between gap-2">
-                      <strong>{toChannelLabel(item.channel)}</strong>
-                      <span className={`rounded-full px-2 py-0.5 font-semibold ${toRiskTagClass(item.riesgo_activo)}`}>{formatPercent(item.riesgo_activo)}</span>
-                    </div>
-                    <p className="mt-1 text-slate-600">Negativos: {formatNumber(item.negativos)} · Clasificados: {formatNumber(item.clasificados)}</p>
-                  </li>
+                  <div key={item.channel} style={{ border: "1px solid #f0f0f0", borderRadius: 8, padding: "6px 10px", marginBottom: 8 }}>
+                    <Flex justify="space-between" align="center"><strong>{toChannelLabel(item.channel)}</strong><Tag color={toRiskTagColor(item.riesgo_activo)}>{formatPercent(item.riesgo_activo)}</Tag></Flex>
+                    <div style={{ fontSize: 12, color: "#475569", marginTop: 4 }}>Negativos: {formatNumber(item.negativos)} | Clasificados: {formatNumber(item.clasificados)}</div>
+                  </div>
                 ))}
-                {riskTopChannels.length === 0 ? <li className="text-slate-500">Sin datos por canal.</li> : null}
-              </ul>
-            </article>
-          </div>
-
-          <div className="mt-3 grid grid-cols-1 gap-3 xl:grid-cols-2">
-            <article className="rounded-xl border border-slate-200 p-3">
-              <h4 className="mb-2 text-sm font-semibold text-slate-800">Hotspots por cuenta</h4>
-              <ul className="space-y-2 text-xs">
+                {riskTopChannels.length === 0 && <AntText type="secondary">Sin datos por canal.</AntText>}
+              </Card>
+            </Col>
+          </Row>
+          <Row gutter={[12, 12]} style={{ marginTop: 12 }}>
+            <Col xs={24} xl={12}>
+              <Card size="small" title="Hotspots por cuenta">
                 {riskTopAccounts.map((item) => (
-                  <li key={item.account_name} className="rounded-lg border border-slate-200 px-2 py-1">
-                    <div className="flex items-center justify-between gap-2">
-                      <strong>{item.account_name}</strong>
-                      <span className={`rounded-full px-2 py-0.5 font-semibold ${toRiskTagClass(item.riesgo_activo)}`}>{formatPercent(item.riesgo_activo)}</span>
-                    </div>
-                    <p className="mt-1 text-slate-600">Negativos: {formatNumber(item.negativos)} · Clasificados: {formatNumber(item.clasificados)}</p>
-                  </li>
+                  <div key={item.account_name} style={{ border: "1px solid #f0f0f0", borderRadius: 8, padding: "6px 10px", marginBottom: 8 }}>
+                    <Flex justify="space-between" align="center"><strong>{item.account_name}</strong><Tag color={toRiskTagColor(item.riesgo_activo)}>{formatPercent(item.riesgo_activo)}</Tag></Flex>
+                    <div style={{ fontSize: 12, color: "#475569", marginTop: 4 }}>Negativos: {formatNumber(item.negativos)} | Clasificados: {formatNumber(item.clasificados)}</div>
+                  </div>
                 ))}
-                {riskTopAccounts.length === 0 ? <li className="text-slate-500">Sin datos por cuenta.</li> : null}
-              </ul>
-            </article>
-
-            <article className="rounded-xl border border-slate-200 p-3">
-              <div className="mb-2 flex items-center justify-between gap-2">
-                <h4 className="text-sm font-semibold text-slate-800">Alertas activas</h4>
-                <a href="/app/monitor/incidents" className="rounded-md border border-slate-200 px-2 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50">
-                  Ir a Incidentes
-                </a>
-              </div>
-              <ul className="space-y-2">
+                {riskTopAccounts.length === 0 && <AntText type="secondary">Sin datos por cuenta.</AntText>}
+              </Card>
+            </Col>
+            <Col xs={24} xl={12}>
+              <Card size="small" title="Alertas activas" extra={<Button size="small" href="/app/monitor/incidents">Ir a Incidentes</Button>}>
                 {(riskData?.alerts ?? []).map((alert) => (
-                  <li key={alert.id} className="rounded-lg border border-slate-200 px-2 py-1 text-xs text-slate-700">
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <strong>{alert.severity}</strong>
-                      <span>{alert.status}</span>
-                      <span>risk {formatScore(alert.risk_score)}</span>
-                      <span>{formatDateTime(alert.updated_at)}</span>
-                    </div>
-                    <p className="mt-1 text-slate-600">{toSlaBySeverity(alert.severity)} · cooldown: {alert.cooldown_until ? formatDateTime(alert.cooldown_until) : "sin cooldown"}</p>
-                  </li>
+                  <div key={alert.id} style={{ border: "1px solid #f0f0f0", borderRadius: 8, padding: "6px 10px", marginBottom: 8, fontSize: 12 }}>
+                    <Flex justify="space-between" wrap="wrap" gap={8}><SeverityTag severity={alert.severity} /><StatusTag status={alert.status} /><span>risk {formatScore(alert.risk_score)}</span><span>{formatDateTime(alert.updated_at)}</span></Flex>
+                    <div style={{ color: "#475569", marginTop: 4 }}>{toSlaBySeverity(alert.severity)} | cooldown: {alert.cooldown_until ? formatDateTime(alert.cooldown_until) : "sin cooldown"}</div>
+                  </div>
                 ))}
-                {(riskData?.alerts?.length ?? 0) === 0 ? <li className="text-xs text-slate-500">Sin alertas activas.</li> : null}
-              </ul>
-            </article>
-          </div>
-        </section>
-      ) : null}
+                {(riskData?.alerts?.length ?? 0) === 0 && <AntText type="secondary">Sin alertas activas.</AntText>}
+              </Card>
+            </Col>
+          </Row>
+        </Card>
+      )}
 
-      {tab === "etl" ? (
-        <section className="grid grid-cols-1 gap-3 lg:grid-cols-2">
-          <article className="rounded-2xl border border-slate-200 bg-white/90 p-4 shadow-panel">
-            <div className="mb-2 flex items-center justify-between">
-              <h3 className="text-base font-semibold text-slate-900">Cobertura y reconciliación</h3>
-              <span className="text-xs text-slate-500">¿Se está cargando todo lo que existe en S3?</span>
-            </div>
-            <ul className="space-y-1 text-sm">
-              <li className="flex items-center justify-between"><span>Estado reconciliación</span><strong>{normalizedOverview.reconciliation_status ?? etlData?.reconciliation_status ?? "unknown"}</strong></li>
-              <li className="flex items-center justify-between"><span>DB min fecha</span><strong>{formatDate(etlData?.coverage.db_min_date ?? null)}</strong></li>
-              <li className="flex items-center justify-between"><span>DB max fecha</span><strong>{formatDate(etlData?.coverage.db_max_date ?? null)}</strong></li>
-              <li className="flex items-center justify-between"><span>S3 min fecha</span><strong>{formatDate(etlData?.coverage.s3_min_date ?? null)}</strong></li>
-              <li className="flex items-center justify-between"><span>S3 max fecha</span><strong>{formatDate(etlData?.coverage.s3_max_date ?? null)}</strong></li>
-            </ul>
-          </article>
-
-          <article className="rounded-2xl border border-slate-200 bg-white/90 p-4 shadow-panel">
-            <div className="mb-2 flex items-center justify-between">
-              <h3 className="text-base font-semibold text-slate-900">Corridas ETL</h3>
-              <span className="text-xs text-slate-500">¿Qué faltó y por qué?</span>
-            </div>
-            <ul className="space-y-2 text-xs">
+      {/* ═══════ ETL TAB ═══════ */}
+      {tab === "etl" && (
+        <Row gutter={[12, 12]}>
+          <Col xs={24} lg={12}>
+            <Card size="small" title="Cobertura y reconciliación" extra={<AntText type="secondary" style={{ fontSize: 11 }}>Se está cargando todo lo que existe en S3?</AntText>}>
+              <Descriptions column={1} size="small" bordered>
+                <Descriptions.Item label="Estado reconciliación">{normalizedOverview.reconciliation_status ?? etlData?.reconciliation_status ?? "unknown"}</Descriptions.Item>
+                <Descriptions.Item label="DB min fecha">{formatDate(etlData?.coverage.db_min_date ?? null)}</Descriptions.Item>
+                <Descriptions.Item label="DB max fecha">{formatDate(etlData?.coverage.db_max_date ?? null)}</Descriptions.Item>
+                <Descriptions.Item label="S3 min fecha">{formatDate(etlData?.coverage.s3_min_date ?? null)}</Descriptions.Item>
+                <Descriptions.Item label="S3 max fecha">{formatDate(etlData?.coverage.s3_max_date ?? null)}</Descriptions.Item>
+              </Descriptions>
+            </Card>
+          </Col>
+          <Col xs={24} lg={12}>
+            <Card size="small" title="Corridas ETL" extra={<AntText type="secondary" style={{ fontSize: 11 }}>Qué faltó y por qué?</AntText>}>
               {(runs ?? []).slice(0, 10).map((run) => (
-                <li key={run.id} className="rounded-lg border border-slate-200 px-2 py-1">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <strong>{run.status}</strong>
+                <div key={run.id} style={{ border: "1px solid #f0f0f0", borderRadius: 8, padding: "6px 10px", marginBottom: 8, fontSize: 12 }}>
+                  <Flex justify="space-between" wrap="wrap" gap={8}>
+                    <StatusTag status={run.status} />
                     <span>{run.current_phase ?? "-"}</span>
                     <span>parsed {formatNumber(run.counters.rows_parsed)}</span>
                     <span>persisted {formatNumber(run.counters.rows_persisted)}</span>
                     <span>pending cls {formatNumber(run.counters.rows_pending_classification)}</span>
                     <span>{formatDateTime(run.finished_at ?? run.queued_at)}</span>
-                  </div>
-                </li>
+                  </Flex>
+                </div>
               ))}
-              {runs.length === 0 ? <li className="text-slate-500">Sin corridas.</li> : null}
-            </ul>
-            <p className="mt-2 text-xs text-slate-500">Última ETL: {formatDateTime(normalizedOverview.last_etl_at ?? null)}</p>
-          </article>
-        </section>
-      ) : null}
+              {runs.length === 0 && <AntText type="secondary">Sin corridas.</AntText>}
+              <div style={{ fontSize: 12, color: "#64748b", marginTop: 8 }}>Última ETL: {formatDateTime(normalizedOverview.last_etl_at ?? null)}</div>
+            </Card>
+          </Col>
+        </Row>
+      )}
 
-      {tab === "glossary" ? (
-        <section className="space-y-3">
-          <article className="rounded-2xl border border-slate-200 bg-white/90 p-4 shadow-panel">
-            <h3 className="text-base font-semibold text-slate-900">Glosario operativo</h3>
-            <p className="mt-1 text-xs text-slate-600">Definiciones usadas en Social Overview para lectura ejecutiva y operación diaria.</p>
-            <div className="mt-3 grid grid-cols-1 gap-3 lg:grid-cols-2">
-              <div className="rounded-xl border border-slate-200 p-3">
-                <h4 className="text-sm font-semibold text-slate-800">Términos clave</h4>
-                <dl className="mt-2 space-y-2 text-xs text-slate-700">
-                  <div>
-                    <dt className="font-semibold text-slate-900">Exposición</dt>
-                    <dd>Volumen visible estimado. Equivale a reach o views según canal, con fallback por disponibilidad de dato.</dd>
-                  </div>
-                  <div>
-                    <dt className="font-semibold text-slate-900">Reach</dt>
-                    <dd>Usuarios únicos potencialmente impactados. Puede venir vacío o en cero según API/plataforma.</dd>
-                  </div>
-                  <div>
-                    <dt className="font-semibold text-slate-900">ER (Engagement Rate)</dt>
-                    <dd>Interacciones frente a una base de exposición (exposición, impresiones o reach).</dd>
-                  </div>
-                  <div>
-                    <dt className="font-semibold text-slate-900">Sentimiento neto</dt>
-                    <dd>Diferencia entre positivos y negativos sobre el total clasificado.</dd>
-                  </div>
-                  <div>
-                    <dt className="font-semibold text-slate-900">Riesgo activo</dt>
-                    <dd>Participación de menciones negativas sobre las menciones clasificadas.</dd>
-                  </div>
-                  <div>
-                    <dt className="font-semibold text-slate-900">SOV interno</dt>
-                    <dd>Participación relativa de cada cuenta dentro del universo social filtrado.</dd>
-                  </div>
-                </dl>
-              </div>
-
-              <div className="rounded-xl border border-slate-200 p-3">
-                <h4 className="text-sm font-semibold text-slate-800">Exposición vs Reach por canal</h4>
-                <ul className="mt-2 space-y-2 text-xs text-slate-700">
-                  <li>
-                    <strong className="text-slate-900">Facebook:</strong> exposición prioriza <code>reach</code>; fallback <code>impressions</code>.
-                  </li>
-                  <li>
-                    <strong className="text-slate-900">Instagram:</strong> exposición prioriza <code>reach</code>; fallback <code>views</code>.
-                  </li>
-                  <li>
-                    <strong className="text-slate-900">LinkedIn:</strong> exposición basada en <code>impressions</code> (reach puede ser 0).
-                  </li>
-                  <li>
-                    <strong className="text-slate-900">TikTok:</strong> exposición basada en <code>views</code> (reach puede ser 0).
-                  </li>
-                </ul>
-              </div>
-            </div>
-          </article>
-
-          <article className="rounded-2xl border border-slate-200 bg-white/90 p-4 shadow-panel">
-            <h3 className="text-base font-semibold text-slate-900">Fórmulas</h3>
-            <div className="mt-3 grid grid-cols-1 gap-3 lg:grid-cols-2">
-              <div className="rounded-xl border border-slate-200 p-3 text-xs text-slate-700">
-                <p><strong className="text-slate-900">ER:</strong> <code>(likes + comments + shares) / exposición * 100</code></p>
-                <p className="mt-2"><strong className="text-slate-900">CTR:</strong> <code>clicks / impressions * 100</code></p>
-                <p className="mt-2"><strong className="text-slate-900">ER reach:</strong> <code>(likes + comments + shares) / reach * 100</code></p>
-                <p className="mt-2"><strong className="text-slate-900">Sentimiento neto:</strong> <code>(positivos - negativos) / clasificados * 100</code></p>
-              </div>
-              <div className="rounded-xl border border-slate-200 p-3 text-xs text-slate-700">
-                <p><strong className="text-slate-900">Riesgo activo:</strong> <code>negativos / clasificados * 100</code></p>
-                <p className="mt-2"><strong className="text-slate-900">SHS:</strong> <code>(reputación * 0.50) + (alcance * 0.25) + (riesgo * 0.25)</code></p>
-                <p className="mt-2"><strong className="text-slate-900">SOV interno:</strong> <code>contribución de la cuenta / total universo filtrado * 100</code></p>
-              </div>
-            </div>
-          </article>
-        </section>
-      ) : null}
-
-      {/* Comments modal moved to PostDetailModal inside PostsTab */}
-    </section>
+      {/* ═══════ GLOSSARY TAB ═══════ */}
+      {tab === "glossary" && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+          <Card size="small" title="Glosario operativo">
+            <AntText type="secondary" style={{ fontSize: 12 }}>Definiciones usadas en Social Overview para lectura ejecutiva y operación diaria.</AntText>
+            <Row gutter={[12, 12]} style={{ marginTop: 12 }}>
+              <Col xs={24} lg={12}>
+                <Card size="small" title="Términos clave">
+                  <Descriptions column={1} size="small">
+                    <Descriptions.Item label="Exposición">Volumen visible estimado. Equivale a reach o views según canal, con fallback por disponibilidad de dato.</Descriptions.Item>
+                    <Descriptions.Item label="Reach">Usuarios únicos potencialmente impactados. Puede venir vacío o en cero según API/plataforma.</Descriptions.Item>
+                    <Descriptions.Item label="ER (Engagement Rate)">Interacciones frente a una base de exposición (exposición, impresiones o reach).</Descriptions.Item>
+                    <Descriptions.Item label="Sentimiento neto">Diferencia entre positivos y negativos sobre el total clasificado.</Descriptions.Item>
+                    <Descriptions.Item label="Riesgo activo">Participación de menciones negativas sobre las menciones clasificadas.</Descriptions.Item>
+                    <Descriptions.Item label="SOV interno">Participación relativa de cada cuenta dentro del universo social filtrado.</Descriptions.Item>
+                  </Descriptions>
+                </Card>
+              </Col>
+              <Col xs={24} lg={12}>
+                <Card size="small" title="Exposición vs Reach por canal">
+                  <Descriptions column={1} size="small">
+                    <Descriptions.Item label="Facebook">exposición prioriza reach; fallback impressions.</Descriptions.Item>
+                    <Descriptions.Item label="Instagram">exposición prioriza reach; fallback views.</Descriptions.Item>
+                    <Descriptions.Item label="LinkedIn">exposición basada en impressions (reach puede ser 0).</Descriptions.Item>
+                    <Descriptions.Item label="TikTok">exposición basada en views (reach puede ser 0).</Descriptions.Item>
+                  </Descriptions>
+                </Card>
+              </Col>
+            </Row>
+          </Card>
+          <Card size="small" title="Fórmulas">
+            <Row gutter={[12, 12]}>
+              <Col xs={24} lg={12}>
+                <Descriptions column={1} size="small">
+                  <Descriptions.Item label="ER">(likes + comments + shares) / exposición * 100</Descriptions.Item>
+                  <Descriptions.Item label="CTR">clicks / impressions * 100</Descriptions.Item>
+                  <Descriptions.Item label="ER reach">(likes + comments + shares) / reach * 100</Descriptions.Item>
+                  <Descriptions.Item label="Sentimiento neto">(positivos - negativos) / clasificados * 100</Descriptions.Item>
+                </Descriptions>
+              </Col>
+              <Col xs={24} lg={12}>
+                <Descriptions column={1} size="small">
+                  <Descriptions.Item label="Riesgo activo">negativos / clasificados * 100</Descriptions.Item>
+                  <Descriptions.Item label="SHS">(reputación * 0.50) + (alcance * 0.25) + (riesgo * 0.25)</Descriptions.Item>
+                  <Descriptions.Item label="SOV interno">contribución de la cuenta / total universo filtrado * 100</Descriptions.Item>
+                </Descriptions>
+              </Col>
+            </Row>
+          </Card>
+        </div>
+      )}
+    </div>
   );
 };

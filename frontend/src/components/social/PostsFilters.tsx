@@ -1,4 +1,5 @@
 import React from "react";
+import { Tag, Input, Flex } from "antd";
 import type { SocialChannel } from "./postsTypes";
 import { channelIcon, toChannelLabel } from "./postsUtils";
 
@@ -12,40 +13,32 @@ type Props = {
 };
 
 const PostsFilters: React.FC<Props> = ({ textSearch, onTextSearchChange, activeChannels, onToggleChannel }) => (
-  <div className="posts-filter-bar">
+  <Flex align="center" wrap="wrap" gap={8}>
     {ALL_CHANNELS.map((ch) => {
       const isActive = activeChannels.length === 0 || activeChannels.includes(ch);
       return (
-        <button
+        <Tag.CheckableTag
           key={ch}
-          type="button"
-          className={`posts-filter-chip ${isActive ? "active" : ""}`}
-          onClick={() => onToggleChannel(ch)}
+          checked={isActive}
+          onChange={() => onToggleChannel(ch)}
         >
-          <span>{channelIcon[ch]}</span>
+          <span>{channelIcon[ch]}</span>{" "}
           <span>{toChannelLabel(ch)}</span>
-        </button>
+        </Tag.CheckableTag>
       );
     })}
-    <div className="ml-auto relative">
-      <input
-        type="text"
+    <div style={{ marginLeft: "auto" }}>
+      <Input.Search
         placeholder="Buscar por t\u00edtulo o texto..."
         value={textSearch}
         onChange={(e) => onTextSearchChange(e.target.value)}
-        className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm text-slate-700 placeholder:text-slate-400 focus:border-slate-400 focus:outline-none w-56"
+        onSearch={onTextSearchChange}
+        allowClear
+        style={{ width: 224 }}
+        size="small"
       />
-      {textSearch && (
-        <button
-          type="button"
-          className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-xs"
-          onClick={() => onTextSearchChange("")}
-        >
-          &#x2715;
-        </button>
-      )}
     </div>
-  </div>
+  </Flex>
 );
 
 export default PostsFilters;

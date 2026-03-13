@@ -1,7 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
+import { Card, Alert, Button, Form, Input, Row, Col, Spin, Flex, Typography } from "antd";
+import { ReloadOutlined, SaveOutlined } from "@ant-design/icons";
 import type { MonitorSocialSettings, PatchMonitorSocialSettingsRequest } from "../api/client";
 import { useApiClient } from "../api/useApiClient";
 import { useAuth } from "../auth/AuthContext";
+import { PageHeader } from "../components/shared/PageHeader";
+
+const { Text } = Typography;
 
 type SettingsDraft = {
   focus_account: string;
@@ -115,105 +120,116 @@ export const SocialSettingsPage = () => {
 
   return (
     <section>
-      <header className="page-header">
-        <h2>Configuracion Social</h2>
-        <p>Metas y umbrales de alertas sociales (SHS/SOV interno no oficiales) con auditoria por cambios.</p>
-      </header>
+      <PageHeader
+        title="Configuracion Social"
+        subtitle="Metas y umbrales de alertas sociales (SHS/SOV interno no oficiales) con auditoria por cambios."
+      />
 
-      {loading ? <div className="alert info">loading: consultando configuracion social...</div> : null}
-      {error ? <div className="alert error">{error}</div> : null}
-      {!canManage ? <div className="alert info">Tu rol tiene acceso de lectura. Solo Admin puede editar.</div> : null}
+      {loading ? <Spin tip="Consultando configuracion social..." style={{ display: "block", marginBottom: 16 }} /> : null}
+      {error ? <Alert type="error" showIcon title={error} style={{ marginBottom: 16 }} /> : null}
+      {!canManage ? (
+        <Alert type="info" showIcon title="Tu rol tiene acceso de lectura. Solo Admin puede editar." style={{ marginBottom: 16 }} />
+      ) : null}
 
-      <section className="panel">
-        <div className="section-title-row">
-          <h3>Metas y alertas</h3>
-          <div style={{ display: "flex", gap: 8 }}>
-            <button className="btn btn-outline" type="button" onClick={() => void load()} disabled={loading || saving}>
+      <Card
+        title="Metas y alertas"
+        extra={
+          <Flex gap={8}>
+            <Button icon={<ReloadOutlined />} onClick={() => void load()} disabled={loading || saving}>
               Refrescar
-            </button>
+            </Button>
             {canManage ? (
-              <button className="btn btn-primary" type="button" onClick={() => void save()} disabled={saving || !draft}>
+              <Button type="primary" icon={<SaveOutlined />} onClick={() => void save()} disabled={saving || !draft} loading={saving}>
                 {saving ? "Guardando..." : "Guardar cambios"}
-              </button>
+              </Button>
             ) : null}
-          </div>
-        </div>
-
+          </Flex>
+        }
+      >
         {draft ? (
-          <div className="form-grid">
-            <label>
-              Cuenta foco SOV interno
-              <input
-                value={draft.focus_account}
-                onChange={(event) => setDraft((current) => (current ? { ...current, focus_account: event.target.value } : current))}
-                disabled={!canManage}
-              />
-            </label>
-            <label>
-              Meta SOV trimestral (pp)
-              <input
-                value={draft.target_quarterly_sov_pp}
-                onChange={(event) =>
-                  setDraft((current) => (current ? { ...current, target_quarterly_sov_pp: event.target.value } : current))
-                }
-                disabled={!canManage}
-              />
-            </label>
-            <label>
-              Meta SHS
-              <input
-                value={draft.target_shs}
-                onChange={(event) => setDraft((current) => (current ? { ...current, target_shs: event.target.value } : current))}
-                disabled={!canManage}
-              />
-            </label>
-            <label>
-              Umbral riesgo activo
-              <input
-                value={draft.risk_threshold}
-                onChange={(event) => setDraft((current) => (current ? { ...current, risk_threshold: event.target.value } : current))}
-                disabled={!canManage}
-              />
-            </label>
-            <label>
-              Umbral caida sentimiento neto
-              <input
-                value={draft.sentiment_drop_threshold}
-                onChange={(event) =>
-                  setDraft((current) => (current ? { ...current, sentiment_drop_threshold: event.target.value } : current))
-                }
-                disabled={!canManage}
-              />
-            </label>
-            <label>
-              Umbral caida ER
-              <input
-                value={draft.er_drop_threshold}
-                onChange={(event) => setDraft((current) => (current ? { ...current, er_drop_threshold: event.target.value } : current))}
-                disabled={!canManage}
-              />
-            </label>
-            <label>
-              Cooldown alertas (min)
-              <input
-                value={draft.alert_cooldown_minutes}
-                onChange={(event) =>
-                  setDraft((current) => (current ? { ...current, alert_cooldown_minutes: event.target.value } : current))
-                }
-                disabled={!canManage}
-              />
-            </label>
-          </div>
+          <Form layout="vertical">
+            <Row gutter={16}>
+              <Col xs={24} sm={12} md={8}>
+                <Form.Item label="Cuenta foco SOV interno">
+                  <Input
+                    value={draft.focus_account}
+                    onChange={(event) => setDraft((current) => (current ? { ...current, focus_account: event.target.value } : current))}
+                    disabled={!canManage}
+                  />
+                </Form.Item>
+              </Col>
+              <Col xs={24} sm={12} md={8}>
+                <Form.Item label="Meta SOV trimestral (pp)">
+                  <Input
+                    value={draft.target_quarterly_sov_pp}
+                    onChange={(event) =>
+                      setDraft((current) => (current ? { ...current, target_quarterly_sov_pp: event.target.value } : current))
+                    }
+                    disabled={!canManage}
+                  />
+                </Form.Item>
+              </Col>
+              <Col xs={24} sm={12} md={8}>
+                <Form.Item label="Meta SHS">
+                  <Input
+                    value={draft.target_shs}
+                    onChange={(event) => setDraft((current) => (current ? { ...current, target_shs: event.target.value } : current))}
+                    disabled={!canManage}
+                  />
+                </Form.Item>
+              </Col>
+              <Col xs={24} sm={12} md={8}>
+                <Form.Item label="Umbral riesgo activo">
+                  <Input
+                    value={draft.risk_threshold}
+                    onChange={(event) => setDraft((current) => (current ? { ...current, risk_threshold: event.target.value } : current))}
+                    disabled={!canManage}
+                  />
+                </Form.Item>
+              </Col>
+              <Col xs={24} sm={12} md={8}>
+                <Form.Item label="Umbral caida sentimiento neto">
+                  <Input
+                    value={draft.sentiment_drop_threshold}
+                    onChange={(event) =>
+                      setDraft((current) => (current ? { ...current, sentiment_drop_threshold: event.target.value } : current))
+                    }
+                    disabled={!canManage}
+                  />
+                </Form.Item>
+              </Col>
+              <Col xs={24} sm={12} md={8}>
+                <Form.Item label="Umbral caida ER">
+                  <Input
+                    value={draft.er_drop_threshold}
+                    onChange={(event) => setDraft((current) => (current ? { ...current, er_drop_threshold: event.target.value } : current))}
+                    disabled={!canManage}
+                  />
+                </Form.Item>
+              </Col>
+              <Col xs={24} sm={12} md={8}>
+                <Form.Item label="Cooldown alertas (min)">
+                  <Input
+                    value={draft.alert_cooldown_minutes}
+                    onChange={(event) =>
+                      setDraft((current) => (current ? { ...current, alert_cooldown_minutes: event.target.value } : current))
+                    }
+                    disabled={!canManage}
+                  />
+                </Form.Item>
+              </Col>
+            </Row>
+          </Form>
         ) : (
-          <p className="kpi-caption">Sin configuracion cargada.</p>
+          <Text type="secondary">Sin configuracion cargada.</Text>
         )}
 
         {settings ? (
-          <p className="kpi-caption" style={{ marginTop: 10 }}>
+          <Text type="secondary" style={{ display: "block", marginTop: 10 }}>
             Ultima actualizacion: {settings.updated_at}
-          </p>
+          </Text>
         ) : null}
-      </section>
+      </Card>
     </section>
   );
 };

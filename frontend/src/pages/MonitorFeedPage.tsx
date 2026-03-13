@@ -1,7 +1,30 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
+import {
+  Alert,
+  Button,
+  Card,
+  Col,
+  Empty,
+  Flex,
+  Form,
+  Input,
+  Row,
+  Segmented,
+  Select,
+  Skeleton,
+  Space,
+  Table,
+  Tag,
+  Typography,
+} from "antd";
+import { LinkOutlined, ReloadOutlined, ClearOutlined } from "@ant-design/icons";
 import { ApiError, type ConfigQuery, type NewsFeedResponse, type OriginType, type TermScope } from "../api/client";
 import { useApiClient } from "../api/useApiClient";
+import { PageHeader } from "../components/shared/PageHeader";
+import { SentimentTag } from "../components/shared/SentimentTag";
+
+const { Text, Paragraph } = Typography;
 
 type MonitorFeedPageProps = {
   scope: TermScope;
@@ -27,15 +50,6 @@ const readStoredViewMode = (scope: TermScope): FeedViewMode => {
   return stored === "cards" ? "cards" : "table";
 };
 
-const sentimentConfig = (value: string | undefined): { label: string; className: string } => {
-  switch (value) {
-    case "positivo": return { label: "Positivo", className: "sentiment-pill sentiment-positive" };
-    case "negativo": return { label: "Negativo", className: "sentiment-pill sentiment-negative" };
-    case "neutro": return { label: "Neutro", className: "sentiment-pill sentiment-neutral" };
-    default: return { label: "—", className: "sentiment-pill sentiment-unknown" };
-  }
-};
-
 const relativeDate = (iso: string | null | undefined): string | null => {
   if (!iso) return null;
   const d = new Date(iso);
@@ -56,12 +70,12 @@ const extractDomain = (rawUrl: string): string => {
   }
 };
 
-const formatFeedDate = (item: NewsFeedResponse["items"][number]): { label: "Publicación" | "Detectado"; value: string } => {
+const formatFeedDate = (item: NewsFeedResponse["items"][number]): { label: "Publicacion" | "Detectado"; value: string } => {
   const rawValue = item.published_at ?? item.created_at;
   const parsed = new Date(rawValue);
   const fallback = rawValue ?? "n/a";
   return {
-    label: item.published_at ? "Publicación" : "Detectado",
+    label: item.published_at ? "Publicacion" : "Detectado",
     value: Number.isNaN(parsed.getTime()) ? fallback : DATE_FORMATTER.format(parsed)
   };
 };
@@ -70,7 +84,7 @@ const truncate = (value: string | null | undefined, max = 220): string => {
   const normalized = value?.trim();
   if (!normalized) return "";
   if (normalized.length <= max) return normalized;
-  return `${normalized.slice(0, max - 1)}…`;
+  return `${normalized.slice(0, max - 1)}...`;
 };
 
 const normalizeToken = (value: string | null | undefined): string => (value ?? "").trim().toLowerCase();
@@ -82,6 +96,14 @@ const shouldShowMediumChip = (item: NewsFeedResponse["items"][number]): boolean 
   const provider = normalizeToken(item.provider);
   const origin = normalizeToken(item.origin);
   return medium !== provider && medium !== origin;
+};
+
+const originColor = (origin: string): string => {
+  switch (origin) {
+    case "news": return "blue";
+    case "awario": return "purple";
+    default: return "default";
+  }
 };
 
 export const MonitorFeedPage = ({ scope, title, subtitle }: MonitorFeedPageProps) => {
@@ -168,7 +190,7 @@ export const MonitorFeedPage = ({ scope, title, subtitle }: MonitorFeedPageProps
       }
     } catch (feedError) {
       if (feedError instanceof ApiError && feedError.status === 409) {
-        setError("La query seleccionada está bloqueada: falta vínculo Awario activo.");
+        setError("La query seleccionada esta bloqueada: falta vinculo Awario activo.");
       } else {
         setError((feedError as Error).message);
       }
@@ -230,281 +252,333 @@ export const MonitorFeedPage = ({ scope, title, subtitle }: MonitorFeedPageProps
     setCategoriaFilter("");
   };
 
+  const tableColumns = [
+    {
+      title: "Fecha",
+      dataIndex: "id",
+      key: "date",
+      width: 160,
+      render: (_: unknown, item: NewsFeedResponse["items"][number]) => {
+        const date = formatFeedDate(item);
+        const rel = relativeDate(item.published_at ?? item.created_at);
+        return (
+          <div>
+            <Text strong>{rel ?? date.value}</Text>
+            <br />
+            <Text type="secondary" style={{ fontSize: 12 }}>{rel ? date.value : date.label}</Text>
+          </div>
+        );
+      },
+    },
+    {
+      title: "Titular",
+      dataIndex: "title",
+      key: "title",
+      render: (_: unknown, item: NewsFeedResponse["items"][number]) => {
+        const domain = extractDomain(item.canonical_url);
+        return (
+          <div>
+            <Text strong>{item.title}</Text>
+            <br />
+            <Text type="secondary" style={{ fontSize: 12 }}>{domain}</Text>
+            {item.categoria ? (
+              <>
+                <br />
+                <Text type="secondary" style={{ fontSize: 12 }}>{item.categoria}</Text>
+              </>
+            ) : null}
+          </div>
+        );
+      },
+    },
+    {
+      title: "Origen",
+      dataIndex: "origin",
+      key: "origin",
+      width: 100,
+      render: (origin: string) => <Tag color={originColor(origin)}>{origin}</Tag>,
+    },
+    {
+      title: "Medio",
+      dataIndex: "medium",
+      key: "medium",
+      width: 120,
+      render: (medium: string | null) => medium ?? "-",
+    },
+    {
+      title: "Fuente",
+      dataIndex: "provider",
+      key: "provider",
+      width: 120,
+    },
+    {
+      title: "Sentimiento",
+      dataIndex: "sentimiento",
+      key: "sentimiento",
+      width: 110,
+      render: (sentimiento: string | undefined) =>
+        sentimiento ? <SentimentTag sentiment={sentimiento} /> : <Text type="secondary">--</Text>,
+    },
+    {
+      title: "Accion",
+      key: "action",
+      width: 160,
+      render: (_: unknown, item: NewsFeedResponse["items"][number]) => {
+        const isExpanded = Boolean(expandedRows[item.id]);
+        return (
+          <Space>
+            <a href={item.canonical_url} target="_blank" rel="noreferrer">
+              Abrir
+            </a>
+            <Button size="small" onClick={() => onToggleRow(item.id)}>
+              {isExpanded ? "Ocultar" : "Detalle"}
+            </Button>
+          </Space>
+        );
+      },
+    },
+  ];
+
+  const expandedRowRender = (item: NewsFeedResponse["items"][number]) => {
+    if (!expandedRows[item.id]) return null;
+    return (
+      <div style={{ padding: "8px 0" }}>
+        <Space wrap style={{ marginBottom: 8 }}>
+          {item.sentimiento ? <SentimentTag sentiment={item.sentimiento} /> : null}
+          {item.categoria ? <Tag color="cyan">{item.categoria}</Tag> : null}
+          {item.confianza != null ? <Tag>confianza: {Math.round(item.confianza * 100)}%</Tag> : null}
+        </Space>
+        <Paragraph style={{ margin: "8px 0" }}>
+          {truncate(item.classification_resumen ?? item.summary ?? item.content, 600) || "Sin resumen disponible."}
+        </Paragraph>
+        <Space wrap>
+          {(item.etiquetas ?? []).map((etiqueta) => (
+            <Tag color="cyan" key={`${item.id}-etq-${etiqueta}`}>{etiqueta}</Tag>
+          ))}
+          {item.tags.map((tag) => (
+            <Tag key={`${item.id}-${tag}`}>{tag}</Tag>
+          ))}
+        </Space>
+      </div>
+    );
+  };
+
   return (
     <section>
-      <header className="page-header">
-        <h2>{title}</h2>
-        <p>{subtitle}</p>
-      </header>
+      <PageHeader title={title} subtitle={subtitle} />
 
       {error ? (
-        <div className="alert error monitor-feed-alert-row">
-          <span>{error}</span>
-          <button className="btn btn-outline" type="button" onClick={() => void loadFeed({ append: false })} disabled={!selectedQueryId || loadingFeed}>
-            Reintentar
-          </button>
-        </div>
+        <Alert
+          type="error"
+          showIcon
+          title={error}
+          style={{ marginBottom: 16 }}
+          action={
+            <Button size="small" onClick={() => void loadFeed({ append: false })} disabled={!selectedQueryId || loadingFeed}>
+              Reintentar
+            </Button>
+          }
+        />
       ) : null}
 
-      <section className="panel monitor-feed-toolbar">
-        <div className="monitor-feed-toolbar-grid">
-          <label>
-            Query activa ({scope})
-            <select
-              value={selectedQueryId}
-              onChange={(event) => setSelectedQueryId(event.target.value)}
-              disabled={loadingQueries || queries.length === 0}
-            >
-              {queries.length === 0 ? <option value="">No hay queries activas para este scope</option> : null}
-              {queries.map((query) => (
-                <option key={query.id} value={query.id}>
-                  {query.name} {query.awario_link_status === "linked" ? "" : "(bloqueada: falta Awario)"}
-                </option>
-              ))}
-            </select>
-          </label>
+      <Card style={{ marginBottom: 16 }}>
+        <Form layout="vertical">
+          <Row gutter={[16, 0]}>
+            <Col xs={24} sm={12} md={8}>
+              <Form.Item label={`Query activa (${scope})`}>
+                <Select
+                  value={selectedQueryId || undefined}
+                  onChange={(value) => setSelectedQueryId(value)}
+                  disabled={loadingQueries || queries.length === 0}
+                  placeholder="No hay queries activas para este scope"
+                  style={{ width: "100%" }}
+                >
+                  {queries.map((query) => (
+                    <Select.Option key={query.id} value={query.id}>
+                      {query.name} {query.awario_link_status === "linked" ? "" : "(bloqueada: falta Awario)"}
+                    </Select.Option>
+                  ))}
+                </Select>
+              </Form.Item>
+            </Col>
+            <Col xs={24} sm={12} md={4}>
+              <Form.Item label="Origen">
+                <Select value={originFilter} onChange={(value) => setOriginFilter(value)} style={{ width: "100%" }}>
+                  <Select.Option value="all">all</Select.Option>
+                  <Select.Option value="news">news</Select.Option>
+                  <Select.Option value="awario">awario</Select.Option>
+                </Select>
+              </Form.Item>
+            </Col>
+            <Col xs={24} sm={12} md={4}>
+              <Form.Item label="Medio">
+                <Input
+                  value={mediumFilter}
+                  onChange={(event) => setMediumFilter(event.target.value)}
+                  placeholder="facebook, web, instagram, x"
+                />
+              </Form.Item>
+            </Col>
+            <Col xs={24} sm={12} md={4}>
+              <Form.Item label="Tag">
+                <Input
+                  value={tagFilter}
+                  onChange={(event) => setTagFilter(event.target.value)}
+                  placeholder="origin:awario, medium:web"
+                />
+              </Form.Item>
+            </Col>
+            <Col xs={24} sm={12} md={4}>
+              <Form.Item label="Sentimiento">
+                <Select value={sentimientoFilter} onChange={(value) => setSentimientoFilter(value)} style={{ width: "100%" }}>
+                  <Select.Option value="">Todos</Select.Option>
+                  <Select.Option value="positivo">Positivo</Select.Option>
+                  <Select.Option value="neutro">Neutro</Select.Option>
+                  <Select.Option value="negativo">Negativo</Select.Option>
+                </Select>
+              </Form.Item>
+            </Col>
+          </Row>
+          <Row gutter={[16, 0]}>
+            <Col xs={24} sm={12} md={4}>
+              <Form.Item label="Categoria">
+                <Input
+                  value={categoriaFilter}
+                  onChange={(event) => setCategoriaFilter(event.target.value)}
+                  placeholder="regulacion, competencia"
+                />
+              </Form.Item>
+            </Col>
+          </Row>
+        </Form>
 
-          <label>
-            Origen
-            <select value={originFilter} onChange={(event) => setOriginFilter(event.target.value as OriginType | "all")}> 
-              <option value="all">all</option>
-              <option value="news">news</option>
-              <option value="awario">awario</option>
-            </select>
-          </label>
+        <Flex justify="space-between" align="center" style={{ marginTop: 8 }}>
+          <Segmented
+            options={[
+              { label: "Tabla", value: "table" },
+              { label: "Cards", value: "cards" },
+            ]}
+            value={viewMode}
+            onChange={(value) => setViewMode(value as FeedViewMode)}
+          />
+          <Space>
+            <Button icon={<ClearOutlined />} onClick={resetFilters} disabled={!hasActiveFilters}>
+              Limpiar filtros
+            </Button>
+            <Button icon={<ReloadOutlined />} onClick={() => void loadFeed({ append: false })} disabled={!selectedQueryId || loadingFeed}>
+              Refrescar
+            </Button>
+          </Space>
+        </Flex>
+      </Card>
 
-          <label>
-            Medio
-            <input
-              value={mediumFilter}
-              onChange={(event) => setMediumFilter(event.target.value)}
-              placeholder="facebook, web, instagram, x"
-            />
-          </label>
-
-          <label>
-            Tag
-            <input
-              value={tagFilter}
-              onChange={(event) => setTagFilter(event.target.value)}
-              placeholder="origin:awario, medium:web"
-            />
-          </label>
-
-          <label>
-            Sentimiento
-            <select value={sentimientoFilter} onChange={(event) => setSentimientoFilter(event.target.value)}>
-              <option value="">Todos</option>
-              <option value="positivo">Positivo</option>
-              <option value="neutro">Neutro</option>
-              <option value="negativo">Negativo</option>
-            </select>
-          </label>
-
-          <label>
-            Categoría
-            <input
-              value={categoriaFilter}
-              onChange={(event) => setCategoriaFilter(event.target.value)}
-              placeholder="regulacion, competencia"
-            />
-          </label>
-        </div>
-
-        <div className="monitor-feed-toolbar-actions">
-          <div className="monitor-feed-view-toggle" role="tablist" aria-label="Modo de visualización del feed">
-            <button
-              className={`btn btn-outline ${viewMode === "table" ? "is-active" : ""}`}
-              type="button"
-              onClick={() => setViewMode("table")}
-              aria-pressed={viewMode === "table"}
-            >
-              Tabla
-            </button>
-            <button
-              className={`btn btn-outline ${viewMode === "cards" ? "is-active" : ""}`}
-              type="button"
-              onClick={() => setViewMode("cards")}
-              aria-pressed={viewMode === "cards"}
-            >
-              Cards
-            </button>
-          </div>
-
-          <button className="btn btn-outline" type="button" onClick={resetFilters} disabled={!hasActiveFilters}>
-            Limpiar filtros
-          </button>
-
-          <button className="btn btn-outline" type="button" onClick={() => void loadFeed({ append: false })} disabled={!selectedQueryId || loadingFeed}>
-            Refrescar
-          </button>
-        </div>
-      </section>
-
-      <section className="panel monitor-feed-meta">
-        <span>
-          Estado vínculo: {selectedQuery ? (isSelectedQueryBlocked ? "missing_awario" : `linked (${selectedQuery.awario_sync_state ?? "-"})`) : "-"}
-        </span>
-        <span>Resultados cargados: {items.length}</span>
-        <span>Cursor: {nextCursor ? "sí" : "no"}</span>
-      </section>
+      <Card size="small" style={{ marginBottom: 16 }}>
+        <Space split={<span style={{ color: "#d9d9d9" }}>|</span>}>
+          <Text type="secondary">
+            Estado vinculo: {selectedQuery ? (isSelectedQueryBlocked ? "missing_awario" : `linked (${selectedQuery.awario_sync_state ?? "-"})`) : "-"}
+          </Text>
+          <Text type="secondary">Resultados cargados: {items.length}</Text>
+          <Text type="secondary">Cursor: {nextCursor ? "si" : "no"}</Text>
+        </Space>
+      </Card>
 
       {isSelectedQueryBlocked ? (
-        <div className="alert warning monitor-feed-alert-row">
-          <span>La query seleccionada está bloqueada hasta vincular una alerta Awario.</span>
-          <Link className="btn btn-outline" to="/app/config/queries">
-            Ir a Configuración de Queries
-          </Link>
-        </div>
+        <Alert
+          type="warning"
+          showIcon
+          title="La query seleccionada esta bloqueada hasta vincular una alerta Awario."
+          style={{ marginBottom: 16 }}
+          action={
+            <Link to="/app/config/queries">
+              <Button size="small">Ir a Configuracion de Queries</Button>
+            </Link>
+          }
+        />
       ) : null}
 
       {loadingFeed ? (
-        <section className="panel monitor-feed-loading" aria-live="polite">
-          {Array.from({ length: 5 }).map((_, index) => (
-            <div className="monitor-feed-skeleton-row" key={`skeleton-${index}`} />
-          ))}
-        </section>
+        <Card style={{ marginBottom: 16 }}>
+          <Skeleton active paragraph={{ rows: 5 }} />
+        </Card>
       ) : null}
 
       {!loadingFeed && !isSelectedQueryBlocked && selectedQuery && items.length === 0 ? (
-        <div className="panel monitor-feed-empty">
-          <p>{hasActiveFilters ? "No hay resultados con los filtros actuales." : "No hay resultados para la query seleccionada."}</p>
-        </div>
+        <Card style={{ marginBottom: 16 }}>
+          <Empty description={hasActiveFilters ? "No hay resultados con los filtros actuales." : "No hay resultados para la query seleccionada."} />
+        </Card>
       ) : null}
 
       {!loadingFeed && !isSelectedQueryBlocked && items.length > 0 && viewMode === "table" ? (
-        <div className="panel monitor-feed-table-wrapper">
-          <div className="monitor-feed-table-scroll">
-            <table className="monitor-feed-table">
-              <thead>
-                <tr>
-                  <th>Fecha</th>
-                  <th>Titular</th>
-                  <th>Origen</th>
-                  <th>Medio</th>
-                  <th>Fuente</th>
-                  <th>Sentimiento</th>
-                  <th>Acción</th>
-                </tr>
-              </thead>
-              <tbody>
-                {items.map((item) => {
-                  const date = formatFeedDate(item);
-                  const domain = extractDomain(item.canonical_url);
-                  const isExpanded = Boolean(expandedRows[item.id]);
-                  const rel = relativeDate(item.published_at ?? item.created_at);
-                  const sent = sentimentConfig(item.sentimiento);
-
-                  return [
-                    <tr key={`${item.id}-main`}>
-                      <td>
-                        <strong>{rel ?? date.value}</strong>
-                        <small>{rel ? date.value : date.label}</small>
-                      </td>
-                      <td>
-                        <strong>{item.title}</strong>
-                        <small>{domain}</small>
-                        {item.categoria ? <small className="monitor-feed-categoria-label">{item.categoria}</small> : null}
-                      </td>
-                      <td>
-                        <span className={`origin-chip origin-chip-${item.origin}`}>{item.origin}</span>
-                      </td>
-                      <td>{item.medium ?? "-"}</td>
-                      <td>{item.provider}</td>
-                      <td>
-                        <span className={sent.className}>{sent.label}</span>
-                      </td>
-                      <td>
-                        <div className="monitor-feed-table-actions">
-                          <a href={item.canonical_url} target="_blank" rel="noreferrer">
-                            Abrir
-                          </a>
-                          <button className="btn btn-outline" type="button" onClick={() => onToggleRow(item.id)}>
-                            {isExpanded ? "Ocultar" : "Detalle"}
-                          </button>
-                        </div>
-                      </td>
-                    </tr>,
-                    isExpanded ? (
-                      <tr key={`${item.id}-detail`} className="monitor-feed-detail-row">
-                        <td colSpan={7}>
-                          <div className="monitor-feed-detail-grid">
-                            <div className="monitor-feed-detail-classification">
-                              <span className={sent.className}>{sent.label}</span>
-                              {item.categoria ? <span className="origin-chip origin-chip-categoria">{item.categoria}</span> : null}
-                              {item.confianza != null ? <span className="origin-chip">confianza: {Math.round(item.confianza * 100)}%</span> : null}
-                            </div>
-                            <p>{truncate(item.classification_resumen ?? item.summary ?? item.content, 600) || "Sin resumen disponible."}</p>
-                            <div className="origin-chip-row">
-                              {(item.etiquetas ?? []).map((etiqueta) => (
-                                <span className="origin-chip origin-chip-categoria" key={`${item.id}-etq-${etiqueta}`}>
-                                  {etiqueta}
-                                </span>
-                              ))}
-                              {item.tags.map((tag) => (
-                                <span className="origin-chip" key={`${item.id}-${tag}`}>
-                                  {tag}
-                                </span>
-                              ))}
-                            </div>
-                          </div>
-                        </td>
-                      </tr>
-                    ) : null
-                  ];
-                })}
-              </tbody>
-            </table>
-          </div>
-        </div>
+        <Card style={{ marginBottom: 16 }}>
+          <Table
+            dataSource={items}
+            columns={tableColumns}
+            rowKey="id"
+            pagination={false}
+            size="small"
+            scroll={{ x: 900 }}
+            expandable={{
+              expandedRowKeys: Object.entries(expandedRows)
+                .filter(([, v]) => v)
+                .map(([k]) => k),
+              expandedRowRender,
+              showExpandColumn: false,
+            }}
+          />
+        </Card>
       ) : null}
 
       {!loadingFeed && !isSelectedQueryBlocked && items.length > 0 && viewMode === "cards" ? (
-        <div className="feed-grid monitor-feed-card-grid">
+        <Row gutter={[16, 16]}>
           {items.map((item) => {
             const date = formatFeedDate(item);
             const summaryText = truncate(item.classification_resumen ?? item.summary ?? item.content, 220) || "Sin resumen disponible.";
             const rel = relativeDate(item.published_at ?? item.created_at);
-            const sent = sentimentConfig(item.sentimiento);
 
             return (
-              <article className="feed-card monitor-feed-card" key={item.id}>
-                {item.image_url ? (
-                  <img className="monitor-feed-card-thumb" src={item.image_url} alt="" loading="lazy" />
-                ) : null}
-
-                <div className="monitor-feed-card-meta-row">
-                  <span className={`origin-chip origin-chip-${item.origin}`}>{item.origin}</span>
-                  <span className={sent.className}>{sent.label}</span>
-                  {item.categoria ? <span className="origin-chip origin-chip-categoria">{item.categoria}</span> : null}
-                  {shouldShowMediumChip(item) ? <span className="origin-chip">medio:{item.medium}</span> : null}
-                </div>
-
-                <h3 className="monitor-feed-card-title">{item.title}</h3>
-                <p className="feed-date">
-                  {rel ?? `${date.label}: ${date.value}`}
-                  {rel ? <small style={{ marginLeft: 6, opacity: 0.7 }}>{date.value}</small> : null}
-                </p>
-                <p className="monitor-feed-card-summary">{summaryText}</p>
-
-                <div className="monitor-feed-card-footer">
-                  <span className="feed-provider">{item.provider}</span>
-                  <a href={item.canonical_url} target="_blank" rel="noreferrer">
-                    Abrir fuente
-                  </a>
-                </div>
-              </article>
+              <Col xs={24} sm={12} lg={8} key={item.id}>
+                <Card
+                  cover={item.image_url ? <img src={item.image_url} alt="" loading="lazy" style={{ maxHeight: 180, objectFit: "cover" }} /> : undefined}
+                  actions={[
+                    <a href={item.canonical_url} target="_blank" rel="noreferrer" key="open">
+                      <LinkOutlined /> Abrir fuente
+                    </a>,
+                  ]}
+                >
+                  <Space wrap style={{ marginBottom: 8 }}>
+                    <Tag color={originColor(item.origin)}>{item.origin}</Tag>
+                    {item.sentimiento ? <SentimentTag sentiment={item.sentimiento} /> : null}
+                    {item.categoria ? <Tag color="cyan">{item.categoria}</Tag> : null}
+                    {shouldShowMediumChip(item) ? <Tag>medio:{item.medium}</Tag> : null}
+                  </Space>
+                  <Card.Meta
+                    title={item.title}
+                    description={
+                      <>
+                        <Text type="secondary" style={{ fontSize: 12 }}>
+                          {rel ?? `${date.label}: ${date.value}`}
+                          {rel ? <span style={{ marginLeft: 6, opacity: 0.7 }}>{date.value}</span> : null}
+                        </Text>
+                        <Paragraph style={{ marginTop: 8, marginBottom: 0 }} ellipsis={{ rows: 4 }}>
+                          {summaryText}
+                        </Paragraph>
+                        <Text type="secondary" style={{ fontSize: 12, marginTop: 4, display: "block" }}>{item.provider}</Text>
+                      </>
+                    }
+                  />
+                </Card>
+              </Col>
             );
           })}
-        </div>
+        </Row>
       ) : null}
 
       {!isSelectedQueryBlocked && hasNext ? (
-        <div className="button-row" style={{ marginTop: 16 }}>
-          <button className="btn btn-outline" type="button" onClick={() => void loadFeed({ append: true })} disabled={loadingMore}>
-            {loadingMore ? "Cargando..." : "Cargar más"}
-          </button>
-        </div>
+        <Flex justify="center" style={{ marginTop: 16 }}>
+          <Button onClick={() => void loadFeed({ append: true })} loading={loadingMore}>
+            {loadingMore ? "Cargando..." : "Cargar mas"}
+          </Button>
+        </Flex>
       ) : null}
     </section>
   );

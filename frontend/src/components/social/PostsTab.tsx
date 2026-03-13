@@ -1,4 +1,5 @@
 import React, { useMemo, useState } from "react";
+import { Card, Empty, Button, Typography, Flex, Spin } from "antd";
 import type { PostRow, PostsViewMode, SocialChannel, SocialPostSort } from "./postsTypes";
 import PostsFilters from "./PostsFilters";
 import PostsToolbar from "./PostsToolbar";
@@ -6,6 +7,8 @@ import PostsTableView from "./PostsTableView";
 import PostsCardGrid from "./PostsCardGrid";
 import PostDetailModal from "./PostDetailModal";
 import type { ApiClient } from "../../api/client";
+
+const { Title, Text } = Typography;
 
 type Props = {
   posts: PostRow[];
@@ -59,12 +62,12 @@ const PostsTab: React.FC<Props> = ({
   const handleCloseModal = () => setSelectedPost(null);
 
   return (
-    <section className="rounded-2xl border border-slate-200 bg-white/90 p-4 shadow-panel">
-      <div className="mb-3">
-        <h3 className="text-base font-semibold text-slate-900">Posts</h3>
-        <span className="text-xs text-slate-500">
-          Navegador de posts con m\u00e9tricas, sentimiento y comentarios.
-        </span>
+    <Card>
+      <div style={{ marginBottom: 12 }}>
+        <Title level={5} style={{ margin: 0 }}>Posts</Title>
+        <Text type="secondary" style={{ fontSize: 12 }}>
+          Navegador de posts con m&eacute;tricas, sentimiento y comentarios.
+        </Text>
       </div>
 
       {/* Filters */}
@@ -76,7 +79,7 @@ const PostsTab: React.FC<Props> = ({
       />
 
       {/* Toolbar */}
-      <div className="mt-2 mb-3">
+      <div style={{ marginTop: 8, marginBottom: 12 }}>
         <PostsToolbar
           totalVisible={filteredPosts.length}
           viewMode={viewMode}
@@ -87,11 +90,19 @@ const PostsTab: React.FC<Props> = ({
         />
       </div>
 
+      {/* Loading state */}
+      {loadingPosts && filteredPosts.length === 0 && (
+        <Flex justify="center" style={{ padding: 48 }}>
+          <Spin size="large" />
+        </Flex>
+      )}
+
       {/* Empty state */}
       {!loadingPosts && filteredPosts.length === 0 && (
-        <p className="text-sm text-slate-600 py-6 text-center">
-          {textSearch ? "Ning\u00fan post coincide con la b\u00fasqueda." : "Sin posts para estos filtros."}
-        </p>
+        <Empty
+          description={textSearch ? "Ning\u00fan post coincide con la b\u00fasqueda." : "Sin posts para estos filtros."}
+          style={{ padding: "24px 0" }}
+        />
       )}
 
       {/* Views */}
@@ -105,16 +116,14 @@ const PostsTab: React.FC<Props> = ({
 
       {/* Load more */}
       {postsHasNext && (
-        <div className="mt-3 text-center">
-          <button
-            className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
-            type="button"
+        <Flex justify="center" style={{ marginTop: 12 }}>
+          <Button
             onClick={onLoadMore}
-            disabled={loadingMorePosts}
+            loading={loadingMorePosts}
           >
             {loadingMorePosts ? "Cargando..." : "Cargar m\u00e1s posts"}
-          </button>
-        </div>
+          </Button>
+        </Flex>
       )}
 
       {/* Detail modal */}
@@ -127,7 +136,7 @@ const PostsTab: React.FC<Props> = ({
           onError={onError}
         />
       )}
-    </section>
+    </Card>
   );
 };
 

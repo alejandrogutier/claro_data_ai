@@ -1,7 +1,11 @@
 import React, { useState } from "react";
+import { Card, Tag, Typography, Flex, Image, Space, Statistic } from "antd";
 import type { PostRow } from "./postsTypes";
-import { channelColors, channelIcon, toChannelLabel, truncate, formatShortDate, formatCompact, formatPercent, computeER, erLabel, sentimentPillClass } from "./postsUtils";
+import { channelColorStyles, channelIcon, toChannelLabel, truncate, formatShortDate, formatCompact, formatPercent, computeER, erLabel } from "./postsUtils";
+import { SentimentTag } from "../shared/SentimentTag";
 import SentimentBalanceBar from "./SentimentBalanceBar";
+
+const { Text, Paragraph, Link } = Typography;
 
 type Props = {
   post: PostRow;
@@ -11,126 +15,147 @@ type Props = {
 
 const PostCard: React.FC<Props> = ({ post, onSelect, sentimentCounts }) => {
   const [imgError, setImgError] = useState(false);
-  const colors = channelColors[post.channel] ?? channelColors.facebook;
+  const colors = channelColorStyles[post.channel] ?? channelColorStyles.facebook;
   const er = computeER(post);
   const erLbl = erLabel(post);
 
   return (
-    <div
-      className={`social-post-card border-l-4 ${colors.accent}`}
+    <Card
+      hoverable
       onClick={() => onSelect(post)}
-      role="button"
-      tabIndex={0}
-      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") onSelect(post); }}
+      style={{ borderLeft: `4px solid ${colors.accent}`, height: "100%" }}
+      styles={{ body: { padding: 16 } }}
     >
       {/* Header */}
-      <div className="mb-2 flex items-center justify-between text-xs">
-        <div className={`flex items-center gap-1.5 font-semibold ${colors.text}`}>
-          <span className="text-base">{channelIcon[post.channel] ?? ""}</span>
-          <span>{toChannelLabel(post.channel)}</span>
-          <span className="text-slate-400">&middot;</span>
-          <span className="text-slate-600 font-normal">{post.account_name}</span>
+      <Flex align="center" justify="space-between" style={{ marginBottom: 8, fontSize: 12 }}>
+        <Flex align="center" gap={6}>
+          <span style={{ fontSize: 16 }}>{channelIcon[post.channel] ?? ""}</span>
+          <Text strong style={{ color: colors.text, fontSize: 12 }}>{toChannelLabel(post.channel)}</Text>
+          <Text type="secondary" style={{ fontSize: 12 }}>&middot;</Text>
+          <Text type="secondary" style={{ fontSize: 12 }}>{post.account_name}</Text>
           {post.post_type && (
-            <span className="post-type-badge ml-1">{post.post_type}</span>
+            <Tag style={{ fontSize: 10, lineHeight: "16px", margin: 0 }}>{post.post_type}</Tag>
           )}
-        </div>
-        <span className="text-slate-400">{formatShortDate(post.published_at)}</span>
-      </div>
+        </Flex>
+        <Text type="secondary" style={{ fontSize: 12 }}>{formatShortDate(post.published_at)}</Text>
+      </Flex>
 
       {/* Image or Placeholder */}
       {post.image_url && !imgError ? (
-        <img
+        <Image
           src={post.image_url}
           alt=""
-          className="mb-3 w-full rounded-lg object-cover"
-          style={{ aspectRatio: "16/9", maxHeight: "176px" }}
+          preview={false}
+          style={{ width: "100%", aspectRatio: "16/9", maxHeight: 176, objectFit: "cover", borderRadius: 8, marginBottom: 12 }}
           loading="lazy"
           onError={() => setImgError(true)}
         />
       ) : (
-        <div
-          className={`mb-3 w-full rounded-lg flex items-center justify-center ${colors.bg}`}
-          style={{ aspectRatio: "16/9", maxHeight: "176px" }}
+        <Flex
+          align="center"
+          justify="center"
+          style={{
+            width: "100%",
+            aspectRatio: "16/9",
+            maxHeight: 176,
+            borderRadius: 8,
+            marginBottom: 12,
+            backgroundColor: colors.bg,
+          }}
         >
-          <span className="text-5xl opacity-30">{channelIcon[post.channel] ?? "?"}</span>
-        </div>
+          <span style={{ fontSize: 48, opacity: 0.3 }}>{channelIcon[post.channel] ?? "?"}</span>
+        </Flex>
       )}
 
       {/* Title */}
-      <h4
-        className="mb-1 font-semibold text-slate-900 leading-snug"
-        style={{ fontFamily: "'Barlow Condensed', sans-serif", fontSize: "1.05rem", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}
+      <Paragraph
+        strong
+        ellipsis={{ rows: 2 }}
+        style={{
+          marginBottom: 4,
+          fontFamily: "'Barlow Condensed', sans-serif",
+          fontSize: "1.05rem",
+          lineHeight: 1.4,
+        }}
       >
         {post.title}
-      </h4>
+      </Paragraph>
 
       {/* Text preview */}
       {post.text && (
-        <p
-          className="mb-2 text-sm text-slate-500 leading-relaxed"
-          style={{ display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}
+        <Paragraph
+          type="secondary"
+          ellipsis={{ rows: 2 }}
+          style={{ marginBottom: 8, fontSize: 14, lineHeight: 1.6 }}
         >
           {post.text}
-        </p>
+        </Paragraph>
       )}
 
       {/* Hashtags */}
       {post.hashtags && post.hashtags.length > 0 && (
-        <div className={`mb-2 text-xs ${colors.text} font-medium`}>
+        <div style={{ marginBottom: 8, fontSize: 12, fontWeight: 500, color: colors.text }}>
           {post.hashtags.slice(0, 5).map((h) => `#${h}`).join(" ")}
-          {post.hashtags.length > 5 && <span className="text-slate-400"> +{post.hashtags.length - 5}</span>}
+          {post.hashtags.length > 5 && <Text type="secondary"> +{post.hashtags.length - 5}</Text>}
         </div>
       )}
 
       {/* Sentiment + Balance Bar */}
-      <div className="mb-3 flex items-center gap-2">
-        <span className={sentimentPillClass(post.sentiment)}>{post.sentiment}</span>
+      <Flex align="center" gap={8} style={{ marginBottom: 12 }}>
+        <SentimentTag sentiment={post.sentiment} />
         {sentimentCounts && (sentimentCounts.positive + sentimentCounts.neutral + sentimentCounts.negative + sentimentCounts.unknown) > 0 ? (
-          <div className="flex-1">
+          <div style={{ flex: 1 }}>
             <SentimentBalanceBar {...sentimentCounts} compact />
           </div>
         ) : post.awario_comments_count > 0 ? (
-          <span className="text-[10px] text-slate-400 italic">Balance al abrir detalle</span>
+          <Text type="secondary" italic style={{ fontSize: 10 }}>Balance al abrir detalle</Text>
         ) : null}
-      </div>
+      </Flex>
 
       {/* Mini-KPIs */}
-      <div className="post-card-kpi-grid mb-2">
-        <div>
-          <div className="post-card-kpi-value">{formatCompact(post.reach > 0 ? post.reach : post.impressions)}</div>
-          <div className="post-card-kpi-label">{post.reach > 0 ? "Reach" : "Impr"}</div>
-        </div>
-        <div>
-          <div className="post-card-kpi-value">{formatCompact(post.engagement_total)}</div>
-          <div className="post-card-kpi-label">Eng</div>
-        </div>
-        <div>
-          <div className="post-card-kpi-value">{formatPercent(er)}</div>
-          <div className="post-card-kpi-label">{erLbl}</div>
-        </div>
-        <div>
-          <div className="post-card-kpi-value">{formatCompact(post.comments)}</div>
-          <div className="post-card-kpi-label">Comms</div>
-        </div>
-      </div>
+      <Flex justify="space-between" style={{ marginBottom: 8 }}>
+        <Statistic
+          title={post.reach > 0 ? "Reach" : "Impr"}
+          value={formatCompact(post.reach > 0 ? post.reach : post.impressions)}
+          valueStyle={{ fontSize: 14, fontWeight: 700, fontFamily: "'Barlow Condensed', sans-serif" }}
+          style={{ textAlign: "center", flex: 1 }}
+        />
+        <Statistic
+          title="Eng"
+          value={formatCompact(post.engagement_total)}
+          valueStyle={{ fontSize: 14, fontWeight: 700, fontFamily: "'Barlow Condensed', sans-serif" }}
+          style={{ textAlign: "center", flex: 1 }}
+        />
+        <Statistic
+          title={erLbl}
+          value={formatPercent(er)}
+          valueStyle={{ fontSize: 14, fontWeight: 700, fontFamily: "'Barlow Condensed', sans-serif" }}
+          style={{ textAlign: "center", flex: 1 }}
+        />
+        <Statistic
+          title="Comms"
+          value={formatCompact(post.comments)}
+          valueStyle={{ fontSize: 14, fontWeight: 700, fontFamily: "'Barlow Condensed', sans-serif" }}
+          style={{ textAlign: "center", flex: 1 }}
+        />
+      </Flex>
 
       {/* Footer */}
-      <div className="flex items-center justify-between text-xs text-slate-500">
-        <span>
+      <Flex align="center" justify="space-between" style={{ fontSize: 12 }}>
+        <Text type="secondary" style={{ fontSize: 12 }}>
           {post.campaign ? `${truncate(post.campaign, 20)}` : ""}
           {post.topics && post.topics.length > 0 ? `${post.campaign ? " \u00b7 " : ""}${post.topics.length} topic${post.topics.length > 1 ? "s" : ""}` : ""}
-        </span>
-        <a
+        </Text>
+        <Link
           href={post.post_url}
           target="_blank"
-          rel="noreferrer"
-          className="text-red-700 font-semibold hover:underline"
+          style={{ color: "#b91c1c", fontWeight: 600, fontSize: 12 }}
           onClick={(e) => e.stopPropagation()}
         >
-          Ver post \u2197
-        </a>
-      </div>
-    </div>
+          Ver post &#x2197;
+        </Link>
+      </Flex>
+    </Card>
   );
 };
 

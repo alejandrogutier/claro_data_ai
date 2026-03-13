@@ -1,4 +1,5 @@
 import React from "react";
+import { Row, Col } from "antd";
 import type { PostRow } from "./postsTypes";
 import PostCard from "./PostCard";
 
@@ -8,11 +9,13 @@ type Props = {
 };
 
 const PostsCardGrid: React.FC<Props> = ({ posts, onSelectPost }) => (
-  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+  <Row gutter={[16, 16]}>
     {posts.map((post) => (
-      <PostCard key={post.id} post={post} onSelect={onSelectPost} />
+      <Col key={post.id} xs={24} sm={12} lg={8} xl={6}>
+        <PostCard post={post} onSelect={onSelectPost} />
+      </Col>
     ))}
-  </div>
+  </Row>
 );
 
 export default PostsCardGrid;

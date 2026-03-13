@@ -1,4 +1,5 @@
 import { Navigate, useLocation } from "react-router-dom";
+import { Spin, Result, Flex } from "antd";
 import { useAuth } from "./AuthContext";
 import type { UserRole } from "./token";
 
@@ -12,7 +13,13 @@ export const RequireAuth = ({ children, allowedRoles }: RequireAuthProps) => {
   const location = useLocation();
 
   if (loading) {
-    return <div className="screen-state">Validando sesion...</div>;
+    return (
+      <Flex justify="center" align="center" style={{ minHeight: "100vh" }}>
+        <Spin size="large" tip="Validando sesion...">
+          <div style={{ padding: 60 }} />
+        </Spin>
+      </Flex>
+    );
   }
 
   if (!session) {
@@ -21,10 +28,13 @@ export const RequireAuth = ({ children, allowedRoles }: RequireAuthProps) => {
 
   if (allowedRoles && !allowedRoles.includes(session.role)) {
     return (
-      <div className="screen-state">
-        <h2>Acceso restringido</h2>
-        <p>Tu rol no tiene permisos para esta vista.</p>
-      </div>
+      <Flex justify="center" align="center" style={{ minHeight: "100vh" }}>
+        <Result
+          status="403"
+          title="Acceso restringido"
+          subTitle="Tu rol no tiene permisos para esta vista."
+        />
+      </Flex>
     );
   }
 

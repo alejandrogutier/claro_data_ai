@@ -72,12 +72,13 @@ export const channelIcon: Record<string, string> = {
   tiktok: "\ud83c\udfb5",
 };
 
-export const channelColors: Record<string, { bg: string; accent: string; text: string; border: string }> = {
-  facebook:  { bg: "bg-blue-50",    accent: "border-l-blue-500",    text: "text-blue-700",    border: "border-blue-300" },
-  instagram: { bg: "bg-fuchsia-50", accent: "border-l-fuchsia-500", text: "text-fuchsia-700", border: "border-fuchsia-300" },
-  x:         { bg: "bg-slate-100",  accent: "border-l-slate-800",   text: "text-slate-800",   border: "border-slate-400" },
-  linkedin:  { bg: "bg-sky-50",     accent: "border-l-sky-600",     text: "text-sky-700",     border: "border-sky-300" },
-  tiktok:    { bg: "bg-pink-50",    accent: "border-l-pink-500",    text: "text-pink-700",    border: "border-pink-300" },
+/** Inline style objects for channel theming (replaces Tailwind classes) */
+export const channelColorStyles: Record<string, { accent: string; text: string; bg: string; border: string }> = {
+  facebook:  { accent: "#3b82f6", text: "#1d4ed8", bg: "#eff6ff",  border: "#93c5fd" },
+  instagram: { accent: "#d946ef", text: "#a21caf", bg: "#fdf4ff",  border: "#d8b4fe" },
+  x:         { accent: "#1e293b", text: "#1e293b", bg: "#f1f5f9",  border: "#94a3b8" },
+  linkedin:  { accent: "#0284c7", text: "#0369a1", bg: "#f0f9ff",  border: "#7dd3fc" },
+  tiktok:    { accent: "#ec4899", text: "#be185d", bg: "#fdf2f8",  border: "#f9a8d4" },
 };
 
 export const toChannelLabel = (channel: SocialChannel): string => {
@@ -86,15 +87,6 @@ export const toChannelLabel = (channel: SocialChannel): string => {
   if (channel === "linkedin") return "LinkedIn";
   if (channel === "x") return "X";
   return "TikTok";
-};
-
-// ── Sentiment ───────────────────────────────────────────────
-
-export const sentimentPillClass = (sentiment: string): string => {
-  if (sentiment === "positive") return "inline-flex rounded-full px-2 py-0.5 text-[11px] font-semibold bg-emerald-100 text-emerald-700";
-  if (sentiment === "negative") return "inline-flex rounded-full px-2 py-0.5 text-[11px] font-semibold bg-rose-100 text-rose-700";
-  if (sentiment === "neutral") return "inline-flex rounded-full px-2 py-0.5 text-[11px] font-semibold bg-sky-100 text-sky-700";
-  return "inline-flex rounded-full px-2 py-0.5 text-[11px] font-semibold bg-slate-100 text-slate-700";
 };
 
 // ── Sort ────────────────────────────────────────────────────

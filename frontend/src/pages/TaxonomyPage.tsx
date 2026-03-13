@@ -1,7 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
+import { Alert, Button, Card, Col, Descriptions, Flex, Form, Input, InputNumber, Row, Space, Spin, Switch, Typography } from "antd";
+import { ReloadOutlined } from "@ant-design/icons";
 import { type TaxonomyEntry, type TaxonomyKind } from "../api/client";
 import { useApiClient } from "../api/useApiClient";
 import { useAuth } from "../auth/AuthContext";
+import { PageHeader } from "../components/shared/PageHeader";
+import { StatusTag } from "../components/shared/StatusTag";
+
+const { Text } = Typography;
 
 type TaxonomyForm = {
   key: string;
@@ -99,140 +105,148 @@ export const TaxonomyPage = () => {
 
   return (
     <section>
-      <header className="page-header">
-        <h2>Taxonomias</h2>
-        <p>Operacion CLARO-038: catalogos de clasificacion para filtros operativos y reportes.</p>
-      </header>
+      <PageHeader
+        title="Taxonomias"
+        subtitle="Operacion CLARO-038: catalogos de clasificacion para filtros operativos y reportes."
+      />
 
-      {error ? <div className="alert error">{error}</div> : null}
+      {error ? <Alert type="error" showIcon title={error} style={{ marginBottom: 16 }} /> : null}
 
-      <section className="panel">
-        <div className="section-title-row">
-          <h3>Tipo de taxonomia</h3>
-          <label className="inline-form">
-            <input
-              type="checkbox"
+      <Card style={{ marginBottom: 16 }}>
+        <Flex justify="space-between" align="center" style={{ marginBottom: 12 }}>
+          <Text strong>Tipo de taxonomia</Text>
+          <Space>
+            <Switch
               checked={includeInactive}
-              onChange={(event) => setIncludeInactive(event.target.checked)}
+              onChange={(checked) => setIncludeInactive(checked)}
+              size="small"
             />
-            <span>Incluir inactivos</span>
-          </label>
-        </div>
+            <Text>Incluir inactivos</Text>
+          </Space>
+        </Flex>
 
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+        <Space wrap>
           {kinds.map((entry) => (
-            <button
+            <Button
               key={entry.kind}
-              type="button"
-              className={entry.kind === kind ? "btn btn-primary" : "btn btn-outline"}
+              type={entry.kind === kind ? "primary" : "default"}
               onClick={() => setKind(entry.kind)}
             >
               {entry.label}
-            </button>
+            </Button>
           ))}
-        </div>
-      </section>
+        </Space>
+      </Card>
 
       {canMutate ? (
-        <form className="panel form-grid" onSubmit={onCreate}>
-          <label>
-            Key
-            <input
-              type="text"
-              value={form.key}
-              onChange={(event) => setForm((current) => ({ ...current, key: event.target.value }))}
-              required
-            />
-          </label>
+        <Card style={{ marginBottom: 16 }}>
+          <form onSubmit={onCreate}>
+            <Form layout="vertical" component="div">
+              <Row gutter={16}>
+                <Col xs={24} sm={12} md={6}>
+                  <Form.Item label="Key" required>
+                    <Input
+                      value={form.key}
+                      onChange={(event) => setForm((current) => ({ ...current, key: event.target.value }))}
+                    />
+                  </Form.Item>
+                </Col>
 
-          <label>
-            Label
-            <input
-              type="text"
-              value={form.label}
-              onChange={(event) => setForm((current) => ({ ...current, label: event.target.value }))}
-              required
-            />
-          </label>
+                <Col xs={24} sm={12} md={6}>
+                  <Form.Item label="Label" required>
+                    <Input
+                      value={form.label}
+                      onChange={(event) => setForm((current) => ({ ...current, label: event.target.value }))}
+                    />
+                  </Form.Item>
+                </Col>
 
-          <label>
-            Description
-            <input
-              type="text"
-              value={form.description}
-              onChange={(event) => setForm((current) => ({ ...current, description: event.target.value }))}
-            />
-          </label>
+                <Col xs={24} sm={12} md={6}>
+                  <Form.Item label="Description">
+                    <Input
+                      value={form.description}
+                      onChange={(event) => setForm((current) => ({ ...current, description: event.target.value }))}
+                    />
+                  </Form.Item>
+                </Col>
 
-          <label>
-            Sort order
-            <input
-              type="number"
-              value={form.sortOrder}
-              onChange={(event) =>
-                setForm((current) => ({
-                  ...current,
-                  sortOrder: Number.parseInt(event.target.value || "100", 10)
-                }))
-              }
-            />
-          </label>
+                <Col xs={24} sm={12} md={3}>
+                  <Form.Item label="Sort order">
+                    <InputNumber
+                      value={form.sortOrder}
+                      onChange={(value) =>
+                        setForm((current) => ({
+                          ...current,
+                          sortOrder: value ?? 100
+                        }))
+                      }
+                      style={{ width: "100%" }}
+                    />
+                  </Form.Item>
+                </Col>
 
-          <label className="inline-form">
-            <input
-              type="checkbox"
-              checked={form.isActive}
-              onChange={(event) => setForm((current) => ({ ...current, isActive: event.target.checked }))}
-            />
-            <span>Activo</span>
-          </label>
+                <Col xs={24} sm={12} md={3}>
+                  <Form.Item label="Activo">
+                    <Switch
+                      checked={form.isActive}
+                      onChange={(checked) => setForm((current) => ({ ...current, isActive: checked }))}
+                    />
+                  </Form.Item>
+                </Col>
+              </Row>
 
-          <button className="btn btn-primary" type="submit" disabled={submitting}>
-            {submitting ? "Guardando..." : "Crear entrada"}
-          </button>
-        </form>
+              <Form.Item>
+                <Button type="primary" htmlType="submit" loading={submitting} onClick={(e) => { e.preventDefault(); void onCreate(e as unknown as React.FormEvent); }}>
+                  Crear entrada
+                </Button>
+              </Form.Item>
+            </Form>
+          </form>
+        </Card>
       ) : (
-        <div className="alert info">Solo Admin puede crear o editar taxonomias.</div>
+        <Alert type="info" showIcon title="Solo Admin puede crear o editar taxonomias." style={{ marginBottom: 16 }} />
       )}
 
-      <section className="panel">
-        <div className="section-title-row">
-          <h3>Entradas ({kind})</h3>
-          <button className="btn btn-outline" type="button" onClick={() => void load(kind, includeInactive)} disabled={loading}>
+      <Card
+        title={`Entradas (${kind})`}
+        extra={
+          <Button icon={<ReloadOutlined />} onClick={() => void load(kind, includeInactive)} loading={loading}>
             Recargar
-          </button>
-        </div>
-
-        {loading ? <p>Cargando...</p> : null}
-        {!loading && items.length === 0 ? <p>No hay entradas para este tipo.</p> : null}
-
-        {!loading ? (
-          <ul className="simple-list simple-list--stacked">
-            {items.map((item) => (
-              <li key={item.id}>
-                <div style={{ width: "100%", display: "grid", gap: 8 }}>
-                  <div className="section-title-row">
-                    <strong>
-                      {item.label} ({item.key})
-                    </strong>
-                    <span>{item.is_active ? "active" : "inactive"}</span>
-                  </div>
-                  <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-                    <span>sort: {item.sort_order}</span>
-                    <span>{item.description ?? "sin descripcion"}</span>
-                  </div>
-
-                  {canMutate ? (
-                    <button className="btn btn-outline" type="button" onClick={() => void toggleActive(item)}>
-                      {item.is_active ? "Desactivar" : "Activar"}
-                    </button>
-                  ) : null}
-                </div>
-              </li>
-            ))}
-          </ul>
+          </Button>
+        }
+      >
+        {loading ? (
+          <Flex justify="center" style={{ padding: 24 }}>
+            <Spin />
+          </Flex>
         ) : null}
-      </section>
+
+        {!loading && items.length === 0 ? <Text type="secondary">No hay entradas para este tipo.</Text> : null}
+
+        {!loading
+          ? items.map((item) => (
+              <Card key={item.id} size="small" style={{ marginBottom: 12 }}>
+                <Flex justify="space-between" align="center" style={{ marginBottom: 8 }}>
+                  <Text strong>
+                    {item.label} ({item.key})
+                  </Text>
+                  <StatusTag status={item.is_active ? "active" : "inactive"} />
+                </Flex>
+
+                <Descriptions size="small" column={{ xs: 1, sm: 2 }}>
+                  <Descriptions.Item label="Sort">{item.sort_order}</Descriptions.Item>
+                  <Descriptions.Item label="Descripcion">{item.description ?? "sin descripcion"}</Descriptions.Item>
+                </Descriptions>
+
+                {canMutate ? (
+                  <Button size="small" onClick={() => void toggleActive(item)} style={{ marginTop: 8 }}>
+                    {item.is_active ? "Desactivar" : "Activar"}
+                  </Button>
+                ) : null}
+              </Card>
+            ))
+          : null}
+      </Card>
     </section>
   );
 };
