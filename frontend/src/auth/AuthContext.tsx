@@ -1,5 +1,5 @@
-import { createContext, useContext, useEffect, useMemo, useState } from "react";
-import { buildStoredTokens, clearStoredTokens, loadStoredSession, storeTokens, type UserSession } from "./token";
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import { buildStoredTokens, clearStoredTokens, loadStoredSession, storeTokens, toUserSession, type UserSession } from "./token";
 import { buildLogoutUrl, exchangeCodeForTokens, redirectToLogin, setReturnPath } from "./cognito";
 
 type AuthContextValue = {
@@ -21,6 +21,13 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     setLoading(false);
   }, []);
 
+  const handleCallback = useCallback(async (code: string, state: string) => {
+    const tokens = await exchangeCodeForTokens(code, state);
+    const stored = buildStoredTokens(tokens);
+    storeTokens(stored);
+    setSession(toUserSession(stored));
+  }, []);
+
   const value = useMemo<AuthContextValue>(
     () => ({
       loading,
@@ -35,14 +42,9 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         setSession(null);
         window.location.assign(buildLogoutUrl(idToken));
       },
-      handleCallback: async (code: string, state: string) => {
-        const tokens = await exchangeCodeForTokens(code, state);
-        const stored = buildStoredTokens(tokens);
-        storeTokens(stored);
-        setSession(loadStoredSession());
-      }
+      handleCallback
     }),
-    [loading, session]
+    [loading, session, handleCallback]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

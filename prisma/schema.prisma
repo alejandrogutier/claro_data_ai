@@ -301,6 +301,9 @@ model SocialPostMetric {
   avgWatchTimeMs   Int?
   totalWatchTimeMs BigInt?
   diagnostics      Json?
+  isCarouselSlide  Boolean    @default(false)
+  lastSeenInS3     DateTime?
+  isStale          Boolean    @default(false)
   createdAt        DateTime   @default(now())
   updatedAt        DateTime   @updatedAt
   contentItem      ContentItem @relation(fields: [contentItemId], references: [id], onDelete: Cascade)
@@ -314,6 +317,8 @@ model SocialPostMetric {
   @@index([channel, publishedAt])
   @@index([accountName, publishedAt])
   @@index([campaignTaxonomyId, publishedAt])
+  @@index([isCarouselSlide])
+  @@index([isStale, lastSeenInS3])
 }
 
 model SocialPostComment {

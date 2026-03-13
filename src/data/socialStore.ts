@@ -2710,7 +2710,9 @@ class SocialStore {
       `COALESCE(spm."publishedAt", ci."publishedAt", ci."createdAt") < :window_end`,
       `ci."sourceType" = CAST('social' AS "public"."SourceType")`,
       `ci."state" = CAST('active' AS "public"."ContentState")`,
-      `spm."isReply" = FALSE`
+      `spm."isReply" = FALSE`,
+      `spm."isCarouselSlide" = FALSE`,
+      `(spm."isStale" = FALSE OR spm."isStale" IS NULL)`
     ];
     const params: SqlParameter[] = [sqlTimestamp("window_start", windowStart), sqlTimestamp("window_end", windowEnd)];
 
@@ -3797,9 +3799,9 @@ class SocialStore {
         ),
         spm AS (
           INSERT INTO "public"."SocialPostMetric"
-            ("id", "contentItemId", "channel", "accountName", "externalPostId", "postUrl", "postType", "isReply", "campaignTaxonomyId", "publishedAt", "exposure", "engagementTotal", "impressions", "reach", "clicks", "likes", "comments", "shares", "views", "saves", "avgWatchTimeMs", "totalWatchTimeMs", "diagnostics", "createdAt", "updatedAt")
+            ("id", "contentItemId", "channel", "accountName", "externalPostId", "postUrl", "postType", "isReply", "campaignTaxonomyId", "publishedAt", "exposure", "engagementTotal", "impressions", "reach", "clicks", "likes", "comments", "shares", "views", "saves", "avgWatchTimeMs", "totalWatchTimeMs", "diagnostics", "lastSeenInS3", "createdAt", "updatedAt")
           SELECT
-            CAST(:spm_id AS UUID), ci."id", :channel, :account_name, :external_post_id, :post_url, :post_type, CAST(:is_reply AS BOOLEAN), CAST(:campaign_taxonomy_id AS UUID), :spm_published_at::timestamp, CAST(:exposure AS DECIMAL(18,2)), CAST(:engagement_total AS DECIMAL(18,2)), CAST(:impressions AS DECIMAL(18,2)), CAST(:reach AS DECIMAL(18,2)), CAST(:clicks AS DECIMAL(18,2)), CAST(:likes AS DECIMAL(18,2)), CAST(:comments AS DECIMAL(18,2)), CAST(:shares AS DECIMAL(18,2)), CAST(:views AS DECIMAL(18,2)), CAST(:saves AS DECIMAL(18,2)), CAST(:avg_watch_time_ms AS INTEGER), CAST(:total_watch_time_ms AS BIGINT), CAST(:diagnostics AS JSONB), NOW(), NOW()
+            CAST(:spm_id AS UUID), ci."id", :channel, :account_name, :external_post_id, :post_url, :post_type, CAST(:is_reply AS BOOLEAN), CAST(:campaign_taxonomy_id AS UUID), :spm_published_at::timestamp, CAST(:exposure AS DECIMAL(18,2)), CAST(:engagement_total AS DECIMAL(18,2)), CAST(:impressions AS DECIMAL(18,2)), CAST(:reach AS DECIMAL(18,2)), CAST(:clicks AS DECIMAL(18,2)), CAST(:likes AS DECIMAL(18,2)), CAST(:comments AS DECIMAL(18,2)), CAST(:shares AS DECIMAL(18,2)), CAST(:views AS DECIMAL(18,2)), CAST(:saves AS DECIMAL(18,2)), CAST(:avg_watch_time_ms AS INTEGER), CAST(:total_watch_time_ms AS BIGINT), CAST(:diagnostics AS JSONB), NOW(), NOW(), NOW()
           FROM ci
           ON CONFLICT ("channel", "externalPostId") DO UPDATE SET
             "contentItemId" = (SELECT "id" FROM ci),
@@ -3870,6 +3872,7 @@ class SocialStore {
             "avgWatchTimeMs" = COALESCE(EXCLUDED."avgWatchTimeMs", "SocialPostMetric"."avgWatchTimeMs"),
             "totalWatchTimeMs" = COALESCE(EXCLUDED."totalWatchTimeMs", "SocialPostMetric"."totalWatchTimeMs"),
             "diagnostics" = EXCLUDED."diagnostics",
+            "lastSeenInS3" = NOW(),
             "updatedAt" = NOW()
           RETURNING "id"
         )
@@ -4048,6 +4051,199 @@ class SocialStore {
     }
 
     return merged;
+  }
+
+  /**
+   * Merge TikTok carousel slides into their parent post.
+   *
+   * TikTok's API returns each carousel slide as a separate Video ID.
+   * Slides are detected using Snowflake ID timestamp analysis: TikTok
+   * Video IDs encode a creation timestamp in the upper 32 bits (seconds
+   * since epoch).  Posts from the same account whose Snowflake timestamps
+   * are within 8 hours (28 800 s) of each other are clustered as a
+   * single carousel.  The post with the highest views in each cluster
+   * is treated as the parent; every other member is a "slide".
+   *
+   * Slide metrics are merged into the parent with GREATEST(), comments
+   * are moved, and the slide record is marked isCarouselSlide = TRUE
+   * (soft-delete approach so data is preserved).
+   *
+   * Returns the number of slides marked.
+   */
+  async mergeTikTokCarouselSlides(): Promise<number> {
+    // Step 1: Fetch all TikTok posts that could be carousel candidates.
+    const findSql = `
+      SELECT
+        spm."id"::text            AS id,
+        spm."externalPostId"      AS ext_id,
+        spm."accountName"         AS account,
+        spm."views"::text         AS views_str,
+        spm."contentItemId"::text AS ci_id
+      FROM "public"."SocialPostMetric" spm
+      WHERE spm."channel" = 'tiktok'
+        AND spm."isReply" = FALSE
+        AND spm."isCarouselSlide" = FALSE
+        AND spm."publishedAt" IS NOT NULL
+        AND spm."externalPostId" ~ '^[0-9]+$'
+      ORDER BY spm."accountName", CAST(spm."externalPostId" AS BIGINT)
+    `;
+
+    const result = await this.rds.execute(findSql, []);
+    const rows = result.records ?? [];
+    if (rows.length === 0) return 0;
+
+    // Parse rows into a typed array
+    type TkRow = { id: string; extId: string; account: string; views: number; ciId: string; snowflakeSec: bigint };
+    const parsed: TkRow[] = rows
+      .map((r) => {
+        const extId = fieldString(r, 1) ?? "";
+        return {
+          id: fieldString(r, 0) ?? "",
+          extId,
+          account: fieldString(r, 2) ?? "",
+          views: parseFloat(fieldString(r, 3) ?? "0"),
+          ciId: fieldString(r, 4) ?? "",
+          // Extract Snowflake timestamp: upper 32 bits = seconds since epoch
+          snowflakeSec: extId ? BigInt(extId) >> 32n : 0n
+        };
+      })
+      .filter((r) => r.id && r.extId && r.account && r.snowflakeSec > 0n);
+
+    // Step 2: Group by account, then cluster by Snowflake time proximity.
+    // Posts within 8 hours (28 800 seconds) of each other form a carousel.
+    const CAROUSEL_GAP_SEC = 28_800n; // 8 hours in seconds
+
+    const byAccount = new Map<string, TkRow[]>();
+    for (const row of parsed) {
+      const arr = byAccount.get(row.account) ?? [];
+      arr.push(row);
+      byAccount.set(row.account, arr);
+    }
+
+    let markedCount = 0;
+
+    for (const [, members] of byAccount) {
+      // Already sorted by externalPostId (= Snowflake time order)
+      if (members.length < 2) continue;
+
+      // Build clusters: start a new cluster when the Snowflake time
+      // gap between consecutive posts exceeds the threshold.
+      const clusters: TkRow[][] = [];
+      let current: TkRow[] = [members[0]!];
+
+      for (let i = 1; i < members.length; i++) {
+        const prev = members[i - 1]!;
+        const curr = members[i]!;
+        const gapSec = curr.snowflakeSec - prev.snowflakeSec;
+        if (gapSec <= CAROUSEL_GAP_SEC) {
+          current.push(curr);
+        } else {
+          if (current.length >= 2) clusters.push(current);
+          current = [curr];
+        }
+      }
+      if (current.length >= 2) clusters.push(current);
+
+      // Process each cluster: parent = max views, others = slides
+      for (const cluster of clusters) {
+        const parent = cluster.reduce((best, r) => (r.views > best.views ? r : best), cluster[0]!);
+        const slides = cluster.filter((r) => r.id !== parent.id);
+
+        for (const slide of slides) {
+          const tx = await this.rds.beginTransaction();
+          try {
+            // Move comments from slide to parent
+            await this.rds.execute(
+              `
+                UPDATE "public"."SocialPostComment"
+                SET "socialPostMetricId" = CAST(:parent_id AS UUID),
+                    "updatedAt" = NOW()
+                WHERE "socialPostMetricId" = CAST(:slide_id AS UUID)
+              `,
+              [
+                sqlUuid("parent_id", parent.id),
+                sqlUuid("slide_id", slide.id)
+              ],
+              { transactionId: tx }
+            );
+
+            // Merge metrics: take the max of each field from both records
+            await this.rds.execute(
+              `
+                UPDATE "public"."SocialPostMetric" parent_rec
+                SET
+                  "exposure"        = GREATEST(parent_rec."exposure", slide_rec."exposure"),
+                  "engagementTotal" = GREATEST(parent_rec."engagementTotal", slide_rec."engagementTotal"),
+                  "impressions"     = GREATEST(parent_rec."impressions", slide_rec."impressions"),
+                  "reach"           = GREATEST(parent_rec."reach", slide_rec."reach"),
+                  "likes"           = GREATEST(parent_rec."likes", slide_rec."likes"),
+                  "comments"        = GREATEST(parent_rec."comments", slide_rec."comments"),
+                  "shares"          = GREATEST(parent_rec."shares", slide_rec."shares"),
+                  "views"           = GREATEST(parent_rec."views", slide_rec."views"),
+                  "clicks"          = GREATEST(parent_rec."clicks", slide_rec."clicks"),
+                  "saves"           = GREATEST(parent_rec."saves", slide_rec."saves"),
+                  "updatedAt"       = NOW()
+                FROM "public"."SocialPostMetric" slide_rec
+                WHERE parent_rec."id" = CAST(:parent_id AS UUID)
+                  AND slide_rec."id" = CAST(:slide_id AS UUID)
+              `,
+              [
+                sqlUuid("parent_id", parent.id),
+                sqlUuid("slide_id", slide.id)
+              ],
+              { transactionId: tx }
+            );
+
+            // Mark the slide as carousel slide (soft-delete)
+            await this.rds.execute(
+              `
+                UPDATE "public"."SocialPostMetric"
+                SET "isCarouselSlide" = TRUE,
+                    "exposure" = 0, "engagementTotal" = 0, "impressions" = 0,
+                    "reach" = 0, "likes" = 0, "comments" = 0, "shares" = 0,
+                    "views" = 0, "clicks" = 0, "saves" = 0,
+                    "updatedAt" = NOW()
+                WHERE "id" = CAST(:slide_id AS UUID)
+              `,
+              [sqlUuid("slide_id", slide.id)],
+              { transactionId: tx }
+            );
+
+            await this.rds.commitTransaction(tx);
+            markedCount += 1;
+          } catch (err) {
+            await this.rds.rollbackTransaction(tx).catch(() => undefined);
+            console.log(JSON.stringify({
+              level: "warn",
+              message: "merge_tiktok_carousel_failed",
+              slide_id: slide.id,
+              parent_id: parent.id,
+              error: String(err)
+            }));
+          }
+        }
+      }
+    }
+
+    return markedCount;
+  }
+
+  /**
+   * Mark posts as stale when they haven't been seen in S3 for `staleDays` days.
+   * This handles Dataslayer CSV rotation where old posts drop out of extraction windows.
+   * Returns the number of posts newly marked as stale.
+   */
+  async markStalePosts(staleDays = 30): Promise<number> {
+    const sql = `
+      UPDATE "public"."SocialPostMetric"
+      SET "isStale" = TRUE, "updatedAt" = NOW()
+      WHERE "lastSeenInS3" IS NOT NULL
+        AND "lastSeenInS3" < NOW() - MAKE_INTERVAL(days => :stale_days)
+        AND "isStale" = FALSE
+      RETURNING "id"
+    `;
+    const result = await this.rds.execute(sql, [sqlLong("stale_days", staleDays)]);
+    return (result.records ?? []).length;
   }
 
   async batchLoadPostMetricsByChannel(
@@ -6828,7 +7024,9 @@ class SocialStore {
   > {
     const conditions = [
       `ci."sourceType" = CAST('social' AS "public"."SourceType")`,
-      `spm."isReply" = FALSE`
+      `spm."isReply" = FALSE`,
+      `spm."isCarouselSlide" = FALSE`,
+      `(spm."isStale" = FALSE OR spm."isStale" IS NULL)`
     ];
     const params: SqlParameter[] = [];
 
@@ -6971,6 +7169,8 @@ class SocialStore {
         WHERE
           ci."sourceType" = CAST('social' AS "public"."SourceType")
           AND spm."isReply" = FALSE
+          AND spm."isCarouselSlide" = FALSE
+          AND (spm."isStale" = FALSE OR spm."isStale" IS NULL)
           AND COALESCE(spm."publishedAt", ci."publishedAt", ci."createdAt") >= :from_date
           AND COALESCE(spm."publishedAt", ci."publishedAt", ci."createdAt") < :to_date
           ${channelFilter}

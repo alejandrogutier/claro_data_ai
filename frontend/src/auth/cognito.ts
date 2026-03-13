@@ -75,7 +75,7 @@ export const exchangeCodeForTokens = async (code: string, state: string): Promis
   const verifier = sessionStorage.getItem(PKCE_VERIFIER_KEY);
 
   if (!expectedState || !verifier || expectedState !== state) {
-    throw new Error("Invalid OAuth state");
+    throw new Error("Sesion de login expirada. Intenta de nuevo.");
   }
 
   sessionStorage.removeItem(PKCE_STATE_KEY);

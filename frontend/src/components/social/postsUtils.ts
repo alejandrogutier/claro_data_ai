@@ -52,15 +52,24 @@ export const truncate = (value: string, max = 28): string =>
 
 // ── Engagement Rate ─────────────────────────────────────────
 
-export const computeER = (post: { engagement_total: number; reach: number; impressions: number; channel: string }): number => {
-  if (post.channel === "x" || post.reach === 0) {
+export const computeER = (post: { engagement_total: number; reach: number; impressions: number; views?: number; exposure?: number; channel: string }): number => {
+  // TikTok: use views (= exposure) since reach and impressions are always 0
+  if (post.channel === "tiktok") {
+    const denom = post.views ?? post.exposure ?? 0;
+    return denom > 0 ? (post.engagement_total / denom) * 100 : 0;
+  }
+  // X/LinkedIn: use impressions
+  if (post.channel === "x" || post.channel === "linkedin" || post.reach === 0) {
     return post.impressions > 0 ? (post.engagement_total / post.impressions) * 100 : 0;
   }
+  // FB/IG: use reach
   return post.reach > 0 ? (post.engagement_total / post.reach) * 100 : 0;
 };
 
-export const erLabel = (post: { reach: number; channel: string }): string =>
-  (post.channel === "x" || post.reach === 0) ? "ER (imp)" : "ER (reach)";
+export const erLabel = (post: { reach: number; channel: string }): string => {
+  if (post.channel === "tiktok") return "ER (views)";
+  return (post.channel === "x" || post.channel === "linkedin" || post.reach === 0) ? "ER (imp)" : "ER (reach)";
+};
 
 // ── Channel identity ────────────────────────────────────────
 

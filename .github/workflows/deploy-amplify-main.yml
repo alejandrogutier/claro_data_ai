@@ -39,6 +39,13 @@ jobs:
 
       - name: Build frontend
         run: npm --prefix frontend run build
+        env:
+          VITE_API_BASE_URL: https://4swes886v6.execute-api.us-east-1.amazonaws.com/prod
+          VITE_COGNITO_DOMAIN: https://claro-data-prod-741448945431.auth.us-east-1.amazoncognito.com
+          VITE_COGNITO_CLIENT_ID: 7fk2cb6sv210prgibsvqml081e
+          VITE_COGNITO_REDIRECT_URI: https://main.d34ae2z3oew4p.amplifyapp.com/auth/callback
+          VITE_COGNITO_LOGOUT_URI: https://main.d34ae2z3oew4p.amplifyapp.com
+          VITE_COGNITO_SCOPE: openid email profile
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4

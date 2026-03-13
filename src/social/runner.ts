@@ -479,7 +479,7 @@ const detectChannelFromKey = (key: string): SocialChannel | null => {
   return null;
 };
 
-type DataslayerFileType = "post" | "post_legacy" | "comments" | "page" | "reels" | "storie" | "text";
+type DataslayerFileType = "post" | "post_legacy" | "comments" | "page" | "reels" | "storie" | "text" | "video";
 
 const detectFileType = (key: string): DataslayerFileType => {
   if (key.includes("/comments/")) return "comments";
@@ -487,12 +487,13 @@ const detectFileType = (key: string): DataslayerFileType => {
   if (key.includes("/reels/")) return "reels";
   if (key.includes("/storie/")) return "storie";
   if (key.includes("/text/")) return "text";
+  if (key.includes("/video/")) return "video";
   if (key.includes("/post/")) return "post";
   return "post_legacy";
 };
 
 const isPostFile = (fileType: DataslayerFileType): boolean =>
-  fileType === "post" || fileType === "post_legacy" || fileType === "reels";
+  fileType === "post" || fileType === "post_legacy" || fileType === "reels" || fileType === "video";
 
 const X_ACCOUNT_NORMALIZATION: Record<string, string> = {
   ClaroColombiaOficial: "Claro Colombia",
@@ -1176,6 +1177,42 @@ export const runSocialSync = async (input: SocialSyncInput): Promise<SocialSyncO
         level: "warn",
         message: "merge_reel_duplicates_error",
         error: String(mergeErr)
+      }));
+    }
+
+    // --- Merge TikTok carousel slides (sequential Video IDs on same date) ---
+    try {
+      const carouselsMerged = await store.mergeTikTokCarouselSlides();
+      if (carouselsMerged > 0) {
+        console.log(JSON.stringify({
+          level: "info",
+          message: "tiktok_carousel_slides_merged",
+          count: carouselsMerged
+        }));
+      }
+    } catch (carouselErr) {
+      console.log(JSON.stringify({
+        level: "warn",
+        message: "merge_tiktok_carousels_error",
+        error: String(carouselErr)
+      }));
+    }
+
+    // --- Mark stale posts (not seen in S3 for 30+ days) ---
+    try {
+      const staleMarked = await store.markStalePosts(30);
+      if (staleMarked > 0) {
+        console.log(JSON.stringify({
+          level: "info",
+          message: "stale_posts_marked",
+          count: staleMarked
+        }));
+      }
+    } catch (staleErr) {
+      console.log(JSON.stringify({
+        level: "warn",
+        message: "mark_stale_posts_error",
+        error: String(staleErr)
       }));
     }
 
