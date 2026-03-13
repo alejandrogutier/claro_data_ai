@@ -387,6 +387,89 @@ const parseSemicolonCsv = (content: string): CsvRecord[] => {
   return records;
 };
 
+/**
+ * Stream-parse a large CSV using S3 GetObject and process rows via callback.
+ * This avoids loading the entire file into memory.
+ * The callback is called for each parsed row (as CsvRecord).
+ */
+const streamParseCsvFromS3 = async (
+  bucket: string,
+  key: string,
+  onRow: (row: CsvRecord) => void
+): Promise<number> => {
+  const response = await s3.getObject({ Bucket: bucket, Key: key }).promise();
+  const body = response.Body;
+  let content = "";
+  if (typeof body === "string") content = body;
+  else if (Buffer.isBuffer(body)) content = body.toString("utf8");
+  else if (body instanceof Uint8Array) content = Buffer.from(body).toString("utf8");
+  else return 0;
+
+  // Parse CSV iteratively: extract header first, then yield one row at a time
+  let header: string[] | null = null;
+  let currentRow: string[] = [];
+  let field = "";
+  let inQuotes = false;
+  let rowCount = 0;
+
+  const emitRow = () => {
+    if (!header) {
+      header = currentRow.map((item) => item.trim());
+    } else {
+      if (!currentRow.every((item) => !item || !item.trim())) {
+        const record: CsvRecord = {};
+        for (let i = 0; i < header.length; i += 1) {
+          const k = header[i] ?? `column_${i}`;
+          record[k] = currentRow[i] ?? "";
+        }
+        onRow(record);
+        rowCount += 1;
+      }
+    }
+    currentRow = [];
+    field = "";
+  };
+
+  for (let i = 0; i < content.length; i += 1) {
+    const char = content[i] ?? "";
+    const next = content[i + 1] ?? "";
+
+    if (char === '"') {
+      if (inQuotes && next === '"') {
+        field += '"';
+        i += 1;
+      } else {
+        inQuotes = !inQuotes;
+      }
+      continue;
+    }
+
+    if (char === "," && !inQuotes) {
+      currentRow.push(field);
+      field = "";
+      continue;
+    }
+
+    if (char === "\n" && !inQuotes) {
+      currentRow.push(field);
+      emitRow();
+      continue;
+    }
+
+    if (char === "\r") continue;
+
+    field += char;
+  }
+
+  // Last row
+  currentRow.push(field);
+  emitRow();
+
+  // Release the large string ASAP
+  content = "";
+  return rowCount;
+};
+
 const detectChannelFromKey = (key: string): SocialChannel | null => {
   if (key.includes("/fb/")) return "facebook";
   if (key.includes("/ig/")) return "instagram";
@@ -1078,6 +1161,24 @@ export const runSocialSync = async (input: SocialSyncInput): Promise<SocialSyncO
       metrics: phaseMetrics()
     });
 
+    // --- Merge FB reel duplicates (suffix vs full externalPostId) ---
+    try {
+      const reelsMerged = await store.mergeReelDuplicates();
+      if (reelsMerged > 0) {
+        console.log(JSON.stringify({
+          level: "info",
+          message: "fb_reel_duplicates_merged",
+          count: reelsMerged
+        }));
+      }
+    } catch (mergeErr) {
+      console.log(JSON.stringify({
+        level: "warn",
+        message: "merge_reel_duplicates_error",
+        error: String(mergeErr)
+      }));
+    }
+
     // --- Ingest Dataslayer comments ---
     await store.updateSyncRunPhase({
       runId: run.id,
@@ -1259,6 +1360,223 @@ export const runSocialSync = async (input: SocialSyncInput): Promise<SocialSyncO
         comments_ingested: commentsIngested,
         comments_deduped: commentsDeduped,
         comments_orphaned: commentsOrphaned
+      },
+      metrics: phaseMetrics()
+    });
+
+    // --- Ingest Hootsuite comments ---
+    // Hootsuite CSV at raw/hootsuite/messages/ contains messages from FB, IG, X.
+    // We parse inbound public comments and insert with cross-source dedup
+    // (NOT EXISTS on same post + text) to avoid duplicating Dataslayer comments.
+    await store.updateSyncRunPhase({
+      runId: run.id,
+      phase: "ingest_hootsuite_comments",
+      state: "running",
+      metrics: phaseMetrics()
+    });
+
+    let hootsuiteIngested = 0;
+    let hootsuiteDeduped = 0;
+    let hootsuiteOrphaned = 0;
+    let hootsuiteSkipped = 0;
+
+    const HOOTSUITE_PREFIX = "raw/hootsuite/messages/";
+    try {
+      const hootsuiteObjects = await listAllObjects(bucket, HOOTSUITE_PREFIX);
+
+      // Ensure postMetricCaches are loaded for channels we'll encounter
+      for (const ch of ["facebook", "x"] as SocialChannel[]) {
+        if (!postMetricCaches.has(ch)) {
+          postMetricCaches.set(ch, await store.batchLoadPostMetricsByChannel(ch));
+        }
+      }
+
+      // Build suffix map for FB reels (same as Dataslayer path)
+      const fbMap = postMetricCaches.get("facebook");
+      const hsSuffixMap = new Map<string, { socialPostMetricId: string; contentItemId: string }>();
+      if (fbMap) {
+        for (const [extId, val] of fbMap) {
+          if (!extId.includes("_")) {
+            hsSuffixMap.set(extId, val);
+          }
+        }
+      }
+
+      for (const hsObj of hootsuiteObjects) {
+        if (!hsObj.key.endsWith(".csv") || hsObj.size <= 0) continue;
+
+        const alreadyProcessedHs =
+          !input.force &&
+          (await store.isObjectProcessed({
+            bucket,
+            objectKey: hsObj.key,
+            eTag: hsObj.eTag,
+            lastModified: hsObj.lastModified
+          }));
+        if (alreadyProcessedHs) continue;
+
+        // Process Hootsuite CSV using streaming parser to avoid OOM on large files.
+        // Accumulate valid comments in batches of 200 and flush to DB.
+        const HS_BATCH_SIZE = 200;
+        const seenHsHashes = new Set<string>();
+        let hsBatch: Array<{
+          socialPostMetricId: string;
+          channel: string;
+          parentExternalPostId: string;
+          dataslayerHash: string;
+          hootsuiteMessageId: string;
+          authorName: string | null;
+          publishedAt: Date | null;
+          text: string;
+          contentItemId: string;
+        }> = [];
+
+        const flushHsBatch = async () => {
+          if (hsBatch.length === 0) return;
+          const result = await store.batchInsertHootsuiteComments(hsBatch);
+          hootsuiteIngested += result.inserted;
+          hootsuiteDeduped += result.deduped;
+          if (queueClassification && env.classificationQueueUrl) {
+            for (const c of hsBatch) {
+              classificationContentIds.add(c.contentItemId);
+            }
+          }
+          hsBatch = [];
+        };
+
+        await streamParseCsvFromS3(bucket, hsObj.key, (hrow) => {
+          // Filter: only inbound public comments
+          const direction = hrow["Direction"]?.trim().toLowerCase();
+          if (direction !== "inbound") {
+            hootsuiteSkipped += 1;
+            return;
+          }
+
+          const messageType = (hrow["Message Type"] ?? "").trim().toLowerCase();
+          if (messageType.includes("private") || messageType.includes("dm")) {
+            hootsuiteSkipped += 1;
+            return;
+          }
+
+          const postUrl = (hrow["Post URL"] ?? "").trim();
+          if (!postUrl) {
+            hootsuiteSkipped += 1;
+            return;
+          }
+
+          const messageId = (hrow["Message ID"] ?? "").trim();
+          if (!messageId) return;
+
+          const commentText = normalizeText(hrow["Content"]);
+          if (!commentText) return;
+
+          const commentDate = toDate(hrow["Created at"]);
+
+          // Determine channel and parentPostId from Post URL
+          let hsChannel: SocialChannel | null = null;
+          let parentPostId: string | null = null;
+
+          try {
+            const parsedUrl = new URL(postUrl);
+            const hostname = parsedUrl.hostname.toLowerCase();
+            const pathParts = parsedUrl.pathname.split("/").filter(Boolean);
+
+            if (hostname.includes("facebook.com")) {
+              hsChannel = "facebook";
+              // FB Post URL: https://www.facebook.com/139919649476834_1247925557496182
+              parentPostId = pathParts[pathParts.length - 1] ?? null;
+            } else if (hostname.includes("x.com") || hostname.includes("twitter.com")) {
+              hsChannel = "x";
+              // X URL: https://x.com/ClaroColombia/status/2019525319007564010
+              const statusIdx = pathParts.indexOf("status");
+              parentPostId = statusIdx >= 0 ? (pathParts[statusIdx + 1] ?? null) : null;
+            } else {
+              hootsuiteSkipped += 1;
+              return;
+            }
+          } catch {
+            hootsuiteSkipped += 1;
+            return;
+          }
+
+          if (!hsChannel || !parentPostId) {
+            hootsuiteSkipped += 1;
+            return;
+          }
+
+          const chMap = postMetricCaches.get(hsChannel);
+          if (!chMap) {
+            hootsuiteOrphaned += 1;
+            return;
+          }
+
+          let postMetric = chMap.get(parentPostId);
+          if (!postMetric && hsChannel === "facebook" && parentPostId.includes("_")) {
+            const suffix = parentPostId.split("_").pop()!;
+            postMetric = hsSuffixMap.get(suffix) ?? chMap.get(suffix);
+          }
+          if (!postMetric) {
+            hootsuiteOrphaned += 1;
+            return;
+          }
+
+          const dataslayerHash = createHash("sha256")
+            .update(`hootsuite:${messageId}`)
+            .digest("hex");
+
+          // In-memory dedup
+          if (seenHsHashes.has(dataslayerHash)) {
+            hootsuiteDeduped += 1;
+            return;
+          }
+          seenHsHashes.add(dataslayerHash);
+
+          const authorName = normalizeText(
+            hrow["Contact Primary Identifier"] ?? hrow["Contact Secondary Identifier"],
+            200
+          );
+
+          hsBatch.push({
+            socialPostMetricId: postMetric.socialPostMetricId,
+            channel: hsChannel,
+            parentExternalPostId: parentPostId,
+            dataslayerHash,
+            hootsuiteMessageId: messageId,
+            authorName,
+            publishedAt: commentDate,
+            text: commentText,
+            contentItemId: postMetric.contentItemId
+          });
+        });
+
+        // Flush any remaining batch
+        await flushHsBatch();
+
+        await store.markObjectProcessed({
+          runId: run.id,
+          bucket,
+          objectKey: hsObj.key,
+          eTag: hsObj.eTag,
+          lastModified: hsObj.lastModified
+        });
+      }
+    } catch (hootsuiteError) {
+      console.log(JSON.stringify({
+        level: "warn",
+        message: "hootsuite_comment_ingestion_error",
+        error: String(hootsuiteError)
+      }));
+    }
+
+    await store.updateSyncRunPhase({
+      runId: run.id,
+      phase: "ingest_hootsuite_comments",
+      state: "completed",
+      details: {
+        hootsuite_ingested: hootsuiteIngested,
+        hootsuite_deduped: hootsuiteDeduped,
+        hootsuite_orphaned: hootsuiteOrphaned,
+        hootsuite_skipped: hootsuiteSkipped
       },
       metrics: phaseMetrics()
     });

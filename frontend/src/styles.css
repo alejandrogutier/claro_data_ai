@@ -1134,3 +1134,118 @@ textarea {
     width: 100%;
   }
 }
+
+/* ── Social Posts Tab ─────────────────────────────────────── */
+
+/* Card de post social con diseño visual rico */
+.social-post-card {
+  border-radius: 12px;
+  border: 1px solid #e2e8f0;
+  background: #fff;
+  padding: 16px;
+  cursor: pointer;
+  transition: box-shadow 0.2s ease, border-color 0.2s ease, transform 0.15s ease;
+}
+.social-post-card:hover {
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+  transform: translateY(-1px);
+}
+
+/* Mini-KPI grid dentro de la card */
+.post-card-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 4px;
+  text-align: center;
+}
+.post-card-kpi-value {
+  font-family: "Barlow Condensed", sans-serif;
+  font-weight: 600;
+  font-size: 1.1rem;
+  color: var(--claro-ink);
+}
+.post-card-kpi-label {
+  font-size: 0.65rem;
+  color: var(--claro-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+/* Barra de balance de sentimiento */
+.sentiment-balance-bar {
+  height: 10px;
+  border-radius: 999px;
+  overflow: hidden;
+  display: flex;
+  background: #f1f5f9;
+}
+.sentiment-balance-bar.compact {
+  height: 6px;
+}
+.sentiment-balance-segment {
+  height: 100%;
+  transition: width 0.3s ease;
+}
+
+/* Badge de tipo de post */
+.post-type-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-size: 0.65rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  background: #f1f5f9;
+  color: #475569;
+}
+
+/* Grid de métricas en modal (5 columnas) */
+.post-detail-metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 12px;
+}
+@media (max-width: 768px) {
+  .post-detail-metrics-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+@media (max-width: 480px) {
+  .post-detail-metrics-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+/* Filtros del tab de posts */
+.posts-filter-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 0;
+}
+.posts-filter-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 12px;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  border: 1px solid #e2e8f0;
+  background: #fff;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.posts-filter-chip.active {
+  background: var(--claro-red);
+  color: white;
+  border-color: var(--claro-red);
+}
+.posts-filter-chip:hover:not(.active) {
+  border-color: #cbd5e1;
+  background: #f8fafc;
+}

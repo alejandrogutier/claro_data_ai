@@ -40,7 +40,7 @@ type SocialScatterDimension = "post_type" | "channel" | "account" | "campaign" |
 type SocialTopicBreakdownDimension = "post_type" | "channel" | "account" | "campaign" | "strategy" | "hashtag";
 type SocialErBreakdownDimension = "hashtag" | "word" | "post_type" | "publish_frequency" | "weekday";
 type ReconciliationStatus = "ok" | "warning" | "error" | "unknown";
-type SocialPhase = "ingest" | "ingest_comments" | "ingest_pages" | "ingest_stories" | "classify" | "aggregate" | "reconcile" | "alerts";
+type SocialPhase = "ingest" | "ingest_comments" | "ingest_hootsuite_comments" | "ingest_pages" | "ingest_stories" | "classify" | "aggregate" | "reconcile" | "alerts";
 type SocialPhaseState = "pending" | "running" | "completed" | "failed" | "skipped";
 type IncidentSeverity = "SEV1" | "SEV2" | "SEV3" | "SEV4";
 type IncidentStatus = "open" | "acknowledged" | "in_progress" | "resolved" | "dismissed";
@@ -177,6 +177,7 @@ type SocialPostRecord = {
   }>;
   topicsVersion: string | null;
   topicsNeedsReview: boolean;
+  imageUrl: string | null;
   createdAt: Date;
   updatedAt: Date;
 };
@@ -1263,11 +1264,12 @@ const clamp = (value: number, min: number, max: number): number => {
 
 const roundMetric = (value: number): number => Math.round(value * 100) / 100;
 
-const SOCIAL_PHASES: SocialPhase[] = ["ingest", "ingest_comments", "ingest_pages", "ingest_stories", "classify", "aggregate", "reconcile", "alerts"];
+const SOCIAL_PHASES: SocialPhase[] = ["ingest", "ingest_comments", "ingest_hootsuite_comments", "ingest_pages", "ingest_stories", "classify", "aggregate", "reconcile", "alerts"];
 
 const buildDefaultPhaseStatus = (): SocialPhaseStatusRecord => ({
   ingest: { status: "pending" },
   ingest_comments: { status: "pending" },
+  ingest_hootsuite_comments: { status: "pending" },
   ingest_pages: { status: "pending" },
   ingest_stories: { status: "pending" },
   classify: { status: "pending" },
@@ -1697,6 +1699,7 @@ const parsePostRow = (row: SqlRow | undefined): SocialPostRecord | null => {
   const topicsNeedsReview = fieldBoolean(row, 28) ?? false;
   const createdAt = fieldDate(row, 29);
   const updatedAt = fieldDate(row, 30);
+  const imageUrl = fieldString(row, 31);
 
   if (!id || !contentItemId || !channel || !accountName || !externalPostId || !postUrl || !title || !createdAt || !updatedAt) {
     return null;
@@ -1733,6 +1736,7 @@ const parsePostRow = (row: SqlRow | undefined): SocialPostRecord | null => {
     topics,
     topicsVersion,
     topicsNeedsReview,
+    imageUrl,
     createdAt,
     updatedAt
   };
@@ -2957,7 +2961,8 @@ class SocialStore {
         stc_topics."taxonomyVersion",
         COALESCE(stc_topics."needsReview", FALSE),
         spm."createdAt",
-        spm."updatedAt"
+        spm."updatedAt",
+        ci."imageUrl"
       FROM "public"."SocialPostMetric" spm
       JOIN "public"."ContentItem" ci ON ci."id" = spm."contentItemId"
       LEFT JOIN "public"."TaxonomyEntry" te_campaign ON te_campaign."id" = spm."campaignTaxonomyId"
@@ -3066,7 +3071,8 @@ class SocialStore {
           NULL::text AS topics_version,
           FALSE AS topics_needs_review,
           spm."createdAt",
-          spm."updatedAt"
+          spm."updatedAt",
+          ci."imageUrl"
         FROM "public"."SocialPostMetric" spm
         JOIN "public"."ContentItem" ci ON ci."id" = spm."contentItemId"
         LEFT JOIN LATERAL (
@@ -3887,6 +3893,115 @@ class SocialStore {
     return { contentItemId, metricId };
   }
 
+  /**
+   * Merge duplicate FB reel records where the same reel appears as both:
+   * - suffix-only externalPostId (e.g. "1247925557496182", postType=reel)
+   * - full PageID_PostID (e.g. "139919649476834_1247925557496182", postType=video_inline)
+   *
+   * Strategy: Move comments from the suffix record to the full record,
+   * take the max of each metric, then delete the suffix record.
+   * Returns the number of duplicates merged.
+   */
+  async mergeReelDuplicates(): Promise<number> {
+    // Step 1: Find duplicate pairs
+    const findSql = `
+      SELECT
+        suffix."id"::text          AS suffix_id,
+        suffix."externalPostId"    AS suffix_ext_id,
+        suffix."contentItemId"::text AS suffix_ci,
+        full_rec."id"::text        AS full_id,
+        full_rec."externalPostId"  AS full_ext_id,
+        full_rec."contentItemId"::text AS full_ci
+      FROM "public"."SocialPostMetric" suffix
+      JOIN "public"."SocialPostMetric" full_rec
+        ON full_rec."channel" = 'facebook'
+       AND full_rec."externalPostId" LIKE '%\\_' || suffix."externalPostId"
+       AND full_rec."externalPostId" != suffix."externalPostId"
+       AND full_rec."externalPostId" ~ ('^[0-9]+_' || suffix."externalPostId" || '$')
+      WHERE suffix."channel" = 'facebook'
+        AND suffix."externalPostId" !~ '_'
+      LIMIT 200
+    `;
+    const result = await this.rds.execute(findSql, []);
+    const pairs = result.records ?? [];
+    if (pairs.length === 0) return 0;
+
+    let merged = 0;
+
+    for (const pair of pairs) {
+      const suffixId = fieldString(pair, 0);     // suffix.id
+      const fullIdActual = fieldString(pair, 3);  // full_rec.id
+      if (!suffixId || !fullIdActual) continue;
+
+      const tx = await this.rds.beginTransaction();
+      try {
+        // Move comments from suffix record to full record
+        await this.rds.execute(
+          `
+            UPDATE "public"."SocialPostComment"
+            SET "socialPostMetricId" = CAST(:full_id AS UUID),
+                "updatedAt" = NOW()
+            WHERE "socialPostMetricId" = CAST(:suffix_id AS UUID)
+          `,
+          [
+            sqlUuid("full_id", fullIdActual),
+            sqlUuid("suffix_id", suffixId)
+          ],
+          { transactionId: tx }
+        );
+
+        // Merge metrics: take the max of each field from both records
+        await this.rds.execute(
+          `
+            UPDATE "public"."SocialPostMetric" full_rec
+            SET
+              "impressions" = GREATEST(full_rec."impressions", suffix."impressions"),
+              "reach"       = GREATEST(full_rec."reach", suffix."reach"),
+              "exposure"    = GREATEST(full_rec."exposure", suffix."exposure"),
+              "likes"       = GREATEST(full_rec."likes", suffix."likes"),
+              "comments"    = GREATEST(full_rec."comments", suffix."comments"),
+              "shares"      = GREATEST(full_rec."shares", suffix."shares"),
+              "views"       = GREATEST(full_rec."views", suffix."views"),
+              "clicks"      = GREATEST(full_rec."clicks", suffix."clicks"),
+              "saves"       = GREATEST(full_rec."saves", suffix."saves"),
+              "engagementTotal" = GREATEST(full_rec."engagementTotal", suffix."engagementTotal"),
+              "postType"    = COALESCE(suffix."postType", full_rec."postType"),
+              "updatedAt"   = NOW()
+            FROM "public"."SocialPostMetric" suffix
+            WHERE full_rec."id" = CAST(:full_id AS UUID)
+              AND suffix."id" = CAST(:suffix_id AS UUID)
+          `,
+          [
+            sqlUuid("full_id", fullIdActual),
+            sqlUuid("suffix_id", suffixId)
+          ],
+          { transactionId: tx }
+        );
+
+        // Delete the suffix record (cascade deletes its ContentItem relationship if needed)
+        await this.rds.execute(
+          `DELETE FROM "public"."SocialPostMetric" WHERE "id" = CAST(:suffix_id AS UUID)`,
+          [sqlUuid("suffix_id", suffixId)],
+          { transactionId: tx }
+        );
+
+        await this.rds.commitTransaction(tx);
+        merged += 1;
+      } catch (err) {
+        await this.rds.rollbackTransaction(tx).catch(() => undefined);
+        console.log(JSON.stringify({
+          level: "warn",
+          message: "merge_reel_duplicate_failed",
+          suffix_id: suffixId,
+          full_id: fullIdActual,
+          error: String(err)
+        }));
+      }
+    }
+
+    return merged;
+  }
+
   async batchLoadPostMetricsByChannel(
     channel: SocialChannel
   ): Promise<Map<string, { socialPostMetricId: string; contentItemId: string }>> {
@@ -3968,6 +4083,62 @@ class SocialStore {
     return { inserted: comments.length, deduped: 0 };
   }
 
+  /**
+   * Insert Hootsuite comments with cross-source dedup.
+   * Uses a NOT EXISTS check on (socialPostMetricId, text) to avoid
+   * inserting comments that already exist from Dataslayer.
+   * Uses ON CONFLICT ("dataslayerHash") DO NOTHING for Hootsuite re-run dedup.
+   */
+  async batchInsertHootsuiteComments(
+    comments: Array<{
+      socialPostMetricId: string;
+      channel: string;
+      parentExternalPostId: string;
+      dataslayerHash: string;
+      hootsuiteMessageId: string;
+      authorName: string | null;
+      publishedAt: Date | null;
+      text: string;
+    }>
+  ): Promise<{ inserted: number; deduped: number }> {
+    if (comments.length === 0) return { inserted: 0, deduped: 0 };
+
+    const sql = `
+      INSERT INTO "public"."SocialPostComment"
+        ("id", "socialPostMetricId", "dataslayerHash", "externalCommentId",
+         "channel", "parentExternalPostId", "authorName", "publishedAt", "text",
+         "sentiment", "sentimentSource", "isSpam", "relatedToPostText", "needsReview",
+         "createdAt", "updatedAt")
+      SELECT
+        CAST(:id AS UUID), CAST(:social_post_metric_id AS UUID), :dataslayer_hash,
+        :hootsuite_message_id,
+        :channel, :parent_external_post_id, :author_name, :published_at, :text,
+        'unknown', 'hootsuite', false, false, false, NOW(), NOW()
+      WHERE NOT EXISTS (
+        SELECT 1 FROM "public"."SocialPostComment" existing
+        WHERE existing."socialPostMetricId" = CAST(:social_post_metric_id AS UUID)
+          AND existing."text" = :text
+      )
+      ON CONFLICT ("dataslayerHash") DO NOTHING
+    `;
+
+    const parameterSets = comments.map((c) => [
+      sqlUuid("id", randomUUID()),
+      sqlUuid("social_post_metric_id", c.socialPostMetricId),
+      sqlString("dataslayer_hash", c.dataslayerHash),
+      sqlString("hootsuite_message_id", c.hootsuiteMessageId),
+      sqlString("channel", c.channel),
+      sqlString("parent_external_post_id", c.parentExternalPostId),
+      sqlString("author_name", c.authorName),
+      sqlTimestamp("published_at", c.publishedAt),
+      sqlString("text", c.text)
+    ]);
+
+    await this.rds.batchExecute(sql, parameterSets, 50);
+
+    return { inserted: comments.length, deduped: 0 };
+  }
+
   async listUnclassifiedCommentIds(limit = 5000): Promise<string[]> {
     const safeLimit = Math.min(5000, Math.max(1, limit));
     const response = await this.rds.execute(
@@ -3975,7 +4146,7 @@ class SocialStore {
         SELECT "id"::text
         FROM "public"."SocialPostComment"
         WHERE "sentiment" = 'unknown'
-          AND "sentimentSource" = 'dataslayer'
+          AND "sentimentSource" IN ('dataslayer', 'hootsuite')
         ORDER BY "createdAt" DESC
         LIMIT :limit
       `,

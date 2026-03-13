@@ -27,7 +27,6 @@ import type {
   MonitorSocialFacetsResponse,
   MonitorSocialHeatmapResponse,
   MonitorSocialOverviewResponse,
-  MonitorSocialPostCommentsResponse,
   MonitorSocialPostsResponse,
   MonitorSocialRiskResponse,
   MonitorSocialRunItem,
@@ -48,6 +47,9 @@ import type {
 import { ApiError } from "../api/client";
 import { useApiClient } from "../api/useApiClient";
 import { useAuth } from "../auth/AuthContext";
+import PostsTab from "../components/social/PostsTab";
+import { computeER } from "../components/social/postsUtils";
+import type { PostRow } from "../components/social/postsTypes";
 
 const CHANNEL_OPTIONS: SocialChannel[] = ["facebook", "instagram", "linkedin", "tiktok", "x"];
 const PRESET_OPTIONS: SocialDatePreset[] = ["ytd", "90d", "30d", "y2024", "y2025", "last_quarter", "custom", "all"];
@@ -99,31 +101,7 @@ type KpiCard = {
   info: string;
 };
 
-type PostRow = {
-  id: string;
-  published_at: string | null;
-  channel: SocialChannel;
-  account_name: string;
-  post_type: string | null;
-  title: string;
-  post_url: string;
-  exposure: number;
-  engagement_total: number;
-  likes: number;
-  comments: number;
-  awario_comments_count: number;
-  shares: number;
-  views: number;
-  sentiment: string;
-  sentiment_confidence: number | null;
-  source_score: number;
-  text?: string | null;
-  campaign?: string | null;
-  strategies?: string[];
-  hashtags?: string[];
-};
-
-type AwarioCommentRow = MonitorSocialPostCommentsResponse["items"][number];
+// PostRow imported from ../components/social/postsTypes
 
 type ChartTooltipEntry = {
   dataKey?: string | number;
@@ -765,11 +743,7 @@ const toDeltaClass = (value: number): string => {
   return "text-slate-500";
 };
 
-const toPostSortLabel = (value: SocialPostSort): string => {
-  if (value === "exposure_desc") return "Exposición desc";
-  if (value === "engagement_desc") return "Interacciones desc";
-  return "Fecha desc";
-};
+// toPostSortLabel moved to ../components/social/postsUtils.ts
 
 const toAccountsSortLabel = (value: SocialAccountsSort): string => {
   if (value === "er_desc") return "ER desc";
@@ -1071,18 +1045,8 @@ export const MonitorSocialOverviewPage = () => {
   const [etlData, setEtlData] = useState<MonitorSocialEtlQualityResponse | null>(null);
   const [runs, setRuns] = useState<MonitorSocialRunItem[]>([]);
   const [posts, setPosts] = useState<PostRow[]>([]);
-  const [selectedPostDetail, setSelectedPostDetail] = useState<PostRow | null>(null);
   const [postsCursor, setPostsCursor] = useState<string | null>(null);
   const [postsHasNext, setPostsHasNext] = useState(false);
-  const [selectedPostComments, setSelectedPostComments] = useState<PostRow | null>(null);
-  const [postComments, setPostComments] = useState<AwarioCommentRow[]>([]);
-  const [postCommentsCursor, setPostCommentsCursor] = useState<string | null>(null);
-  const [postCommentsHasNext, setPostCommentsHasNext] = useState(false);
-  const [loadingPostComments, setLoadingPostComments] = useState(false);
-  const [updatingCommentId, setUpdatingCommentId] = useState<string | null>(null);
-  const [commentSentimentFilter, setCommentSentimentFilter] = useState<"all" | "positive" | "negative" | "neutral" | "unknown">("all");
-  const [commentSpamFilter, setCommentSpamFilter] = useState<"all" | "spam" | "not_spam">("all");
-  const [commentRelatedFilter, setCommentRelatedFilter] = useState<"all" | "related" | "not_related">("all");
   const [reloadVersion, setReloadVersion] = useState(0);
   const [pendingRunId, setPendingRunId] = useState<string | null>(null);
 
@@ -1189,6 +1153,7 @@ export const MonitorSocialOverviewPage = () => {
   const normalizePosts = (items: MonitorSocialPostsResponse["items"]): PostRow[] =>
     (items ?? []).map((item) => {
       const row = item as unknown as PostRow;
+      const raw = item as unknown as Record<string, unknown>;
       return {
         id: row.id,
         published_at: row.published_at,
@@ -1197,20 +1162,26 @@ export const MonitorSocialOverviewPage = () => {
         post_type: row.post_type,
         title: row.title,
         post_url: row.post_url,
+        text: row.text ?? null,
+        image_url: (raw.image_url as string | null) ?? null,
         exposure: Number(row.exposure ?? 0),
         engagement_total: Number(row.engagement_total ?? 0),
         likes: Number(row.likes ?? 0),
         comments: Number(row.comments ?? 0),
-        awario_comments_count: Number((item as unknown as { awario_comments_count?: number }).awario_comments_count ?? 0),
+        awario_comments_count: Number(raw.awario_comments_count ?? 0),
         shares: Number(row.shares ?? 0),
         views: Number(row.views ?? 0),
+        impressions: Number(raw.impressions ?? 0),
+        reach: Number(raw.reach ?? 0),
+        clicks: Number(raw.clicks ?? 0),
+        saves: Number(raw.saves ?? 0),
         sentiment: row.sentiment,
-        sentiment_confidence: (item as unknown as { sentiment_confidence?: number | null }).sentiment_confidence ?? null,
-        source_score: Number((item as unknown as { source_score?: number }).source_score ?? 0),
-        text: row.text ?? null,
-        campaign: (item as unknown as { campaign?: string | null }).campaign ?? null,
-        strategies: (item as unknown as { strategies?: string[] }).strategies ?? [],
-        hashtags: (item as unknown as { hashtags?: string[] }).hashtags ?? []
+        sentiment_confidence: (raw.sentiment_confidence as number | null) ?? null,
+        source_score: Number(raw.source_score ?? 0),
+        campaign: (raw.campaign as string | null) ?? null,
+        strategies: (raw.strategies as string[]) ?? [],
+        hashtags: (raw.hashtags as string[]) ?? [],
+        topics: (raw.topics as Array<{ key: string; label: string; confidence: number; rank: number }>) ?? []
       };
     });
 
@@ -1464,28 +1435,6 @@ export const MonitorSocialOverviewPage = () => {
     return () => clearInterval(timer);
   }, [client, pendingRunId]);
 
-  useEffect(() => {
-    if (!selectedPostComments) return;
-    void loadPostComments(selectedPostComments);
-  }, [selectedPostComments, commentSentimentFilter, commentSpamFilter, commentRelatedFilter]);
-
-  useEffect(() => {
-    if (!selectedPostDetail) return;
-    const refreshed = posts.find((item) => item.id === selectedPostDetail.id);
-    if (!refreshed) {
-      setSelectedPostDetail(null);
-      return;
-    }
-    if (refreshed !== selectedPostDetail) {
-      setSelectedPostDetail(refreshed);
-    }
-  }, [posts, selectedPostDetail]);
-
-  useEffect(() => {
-    if (selectedPostDetail || posts.length === 0) return;
-    setSelectedPostDetail(posts[0]);
-  }, [posts, selectedPostDetail]);
-
   const loadMorePosts = async () => {
     if (!postsHasNext || !postsCursor || loadingMorePosts) return;
     setLoadingMorePosts(true);
@@ -1506,77 +1455,6 @@ export const MonitorSocialOverviewPage = () => {
       applyRequestError(loadError);
     } finally {
       setLoadingMorePosts(false);
-    }
-  };
-
-  const buildPostCommentsQuery = (cursor?: string) => ({
-    limit: 25,
-    cursor,
-    sentiment: commentSentimentFilter === "all" ? undefined : commentSentimentFilter,
-    is_spam: commentSpamFilter === "all" ? undefined : commentSpamFilter === "spam",
-    related_to_post_text: commentRelatedFilter === "all" ? undefined : commentRelatedFilter === "related"
-  });
-
-  const loadPostComments = async (post: PostRow, cursor?: string, append = false) => {
-    setLoadingPostComments(true);
-    setError(null);
-    setUiError("none");
-    try {
-      const response = await client.listMonitorSocialPostComments(post.id, buildPostCommentsQuery(cursor));
-      const incoming = response.items ?? [];
-      setPostComments((current) => (append ? [...current, ...incoming] : incoming));
-      setPostCommentsCursor(response.page_info.next_cursor ?? null);
-      setPostCommentsHasNext(Boolean(response.page_info.has_next));
-    } catch (loadError) {
-      applyRequestError(loadError);
-      if (!append) {
-        setPostComments([]);
-        setPostCommentsCursor(null);
-        setPostCommentsHasNext(false);
-      }
-    } finally {
-      setLoadingPostComments(false);
-    }
-  };
-
-  const openCommentsModal = (post: PostRow) => {
-    setSelectedPostComments(post);
-    setPostComments([]);
-    setPostCommentsCursor(null);
-    setPostCommentsHasNext(false);
-  };
-
-  const closeCommentsModal = () => {
-    setSelectedPostComments(null);
-    setPostComments([]);
-    setPostCommentsCursor(null);
-    setPostCommentsHasNext(false);
-  };
-
-  const loadMorePostComments = async () => {
-    if (!selectedPostComments || !postCommentsHasNext || !postCommentsCursor || loadingPostComments) return;
-    await loadPostComments(selectedPostComments, postCommentsCursor, true);
-  };
-
-  const patchComment = async (
-    commentId: string,
-    payload: {
-      is_spam?: boolean;
-      related_to_post_text?: boolean;
-      sentiment?: "positive" | "negative" | "neutral" | "unknown";
-    }
-  ) => {
-    if (!canOverrideComments || updatingCommentId) return;
-    setUpdatingCommentId(commentId);
-    setError(null);
-    setUiError("none");
-    try {
-      const updated = await client.patchMonitorSocialComment(commentId, payload);
-      setPostComments((current) => current.map((item) => (item.id === commentId ? updated : item)));
-    } catch (patchError) {
-      applyRequestError(patchError);
-    } finally {
-      setUpdatingCommentId(null);
     }
   };
 
@@ -4034,155 +3912,20 @@ export const MonitorSocialOverviewPage = () => {
       ) : null}
 
       {tab === "posts" ? (
-        <section className="rounded-2xl border border-slate-200 bg-white/90 p-4 shadow-panel">
-          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-            <div>
-              <h3 className="text-base font-semibold text-slate-900">Posts</h3>
-              <span className="text-xs text-slate-500">Triage operativo con sentimiento, confianza y score de fuente.</span>
-            </div>
-            <div className="flex flex-wrap items-center gap-2">
-              <label className="text-xs font-semibold text-slate-600">
-                Orden
-                <select
-                  value={postsSort}
-                  onChange={(event) => setQueryPatch({ posts_sort: event.target.value })}
-                  className="ml-2 rounded-md border border-slate-200 px-2 py-1 text-xs"
-                >
-                  {POST_SORT_OPTIONS.map((sortOption) => (
-                    <option key={sortOption} value={sortOption}>
-                      {toPostSortLabel(sortOption)}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              {loadingPosts ? <span className="text-xs text-slate-500">Actualizando posts...</span> : null}
-            </div>
-          </div>
-
-          {!loadingPosts && posts.length === 0 ? <p className="text-sm text-slate-600">Sin posts para estos filtros.</p> : null}
-
-          {posts.length > 0 ? (
-            <div className="grid grid-cols-1 gap-3 xl:grid-cols-[2fr_1fr]">
-              <div className="overflow-x-auto rounded-xl border border-slate-200">
-                <table className="min-w-[1360px] w-full border-collapse text-sm">
-                  <thead>
-                    <tr className="border-b border-slate-200 bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500">
-                      <th className="px-2 py-2">Fecha</th>
-                      <th className="px-2 py-2">Canal</th>
-                      <th className="px-2 py-2">Cuenta</th>
-                      <th className="px-2 py-2">Tipo</th>
-                      <th className="px-2 py-2">Sentimiento</th>
-                      <th className="px-2 py-2">Confianza</th>
-                      <th className="px-2 py-2">Source score</th>
-                      <th className="px-2 py-2">Campaña</th>
-                      <th className="px-2 py-2">Estrategias</th>
-                      <th className="px-2 py-2">Hashtags</th>
-                      <th className="px-2 py-2">Post</th>
-                      <th className="px-2 py-2">Comentarios (Awario)</th>
-                      <th className="px-2 py-2">Exposición</th>
-                      <th className="px-2 py-2">Interacciones (L+C+S)</th>
-                      <th className="px-2 py-2">ER</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {posts.map((post) => {
-                      const er = (post.engagement_total / Math.max(post.exposure, 1)) * 100;
-                      const sentimentClass =
-                        post.sentiment === "positive"
-                          ? "bg-emerald-100 text-emerald-700"
-                          : post.sentiment === "negative"
-                            ? "bg-rose-100 text-rose-700"
-                            : post.sentiment === "neutral"
-                              ? "bg-sky-100 text-sky-700"
-                              : "bg-slate-100 text-slate-700";
-                      const isSelected = selectedPostDetail?.id === post.id;
-                      return (
-                        <tr
-                          key={post.id}
-                          className={`border-b border-slate-100 ${isSelected ? "bg-red-50/40" : "hover:bg-slate-50"} cursor-pointer`}
-                          onClick={() => setSelectedPostDetail(post)}
-                        >
-                          <td className="px-2 py-2">{formatDate(post.published_at)}</td>
-                          <td className="px-2 py-2">{toChannelLabel(post.channel)}</td>
-                          <td className="px-2 py-2">{post.account_name}</td>
-                          <td className="px-2 py-2">{post.post_type ?? "Sin tipo"}</td>
-                          <td className="px-2 py-2">
-                            <span className={`inline-flex rounded-full px-2 py-0.5 text-[11px] font-semibold ${sentimentClass}`}>{post.sentiment}</span>
-                          </td>
-                          <td className="px-2 py-2">{post.sentiment_confidence === null ? "n/a" : formatScore(post.sentiment_confidence)}</td>
-                          <td className="px-2 py-2">{formatScore(post.source_score)}</td>
-                          <td className="px-2 py-2">{post.campaign ?? "--"}</td>
-                          <td className="px-2 py-2">{post.strategies?.join(", ") || "--"}</td>
-                          <td className="px-2 py-2">{post.hashtags?.map((item) => `#${item}`).join(" ") || "--"}</td>
-                          <td className="px-2 py-2">
-                            <div className="grid gap-1">
-                              <strong>{truncate(post.title, 52)}</strong>
-                              <a href={post.post_url} target="_blank" rel="noreferrer" className="text-xs text-red-700 underline" onClick={(event) => event.stopPropagation()}>
-                                Ver post
-                              </a>
-                            </div>
-                          </td>
-                          <td className="px-2 py-2">
-                            <button
-                              type="button"
-                              className={`rounded-md px-2 py-1 text-xs font-semibold ${
-                                post.awario_comments_count > 0 ? "bg-red-50 text-red-700 hover:bg-red-100" : "bg-slate-100 text-slate-500"
-                              }`}
-                              onClick={(event) => {
-                                event.stopPropagation();
-                                openCommentsModal(post);
-                              }}
-                            >
-                              {formatNumber(post.awario_comments_count)}
-                            </button>
-                          </td>
-                          <td className="px-2 py-2">{formatNumber(post.exposure)}</td>
-                          <td className="px-2 py-2">{formatNumber(post.engagement_total)}</td>
-                          <td className="px-2 py-2">{formatPercent(er)}</td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-
-              <aside className="rounded-xl border border-slate-200 bg-white p-3">
-                <h4 className="text-sm font-semibold text-slate-900">Detalle del post</h4>
-                {!selectedPostDetail ? <p className="mt-2 text-xs text-slate-500">Selecciona un post para ver detalle y señales operativas.</p> : null}
-                {selectedPostDetail ? (
-                  <div className="mt-2 space-y-2 text-sm text-slate-700">
-                    <p className="font-semibold text-slate-900">{selectedPostDetail.title}</p>
-                    <p className="text-xs text-slate-500">
-                      {formatDateTime(selectedPostDetail.published_at)} · {toChannelLabel(selectedPostDetail.channel)} · {selectedPostDetail.account_name}
-                    </p>
-                    <p className="text-xs text-slate-600">{selectedPostDetail.text || "Sin texto disponible."}</p>
-                    <ul className="space-y-1 text-xs">
-                      <li className="flex items-center justify-between"><span>Sentimiento</span><strong>{selectedPostDetail.sentiment}</strong></li>
-                      <li className="flex items-center justify-between"><span>Confianza</span><strong>{selectedPostDetail.sentiment_confidence === null ? "n/a" : formatScore(selectedPostDetail.sentiment_confidence)}</strong></li>
-                      <li className="flex items-center justify-between"><span>Source score</span><strong>{formatScore(selectedPostDetail.source_score)}</strong></li>
-                      <li className="flex items-center justify-between"><span>Exposición</span><strong>{formatNumber(selectedPostDetail.exposure)}</strong></li>
-                      <li className="flex items-center justify-between"><span>Interacciones (L+C+S)</span><strong>{formatNumber(selectedPostDetail.engagement_total)}</strong></li>
-                      <li className="flex items-center justify-between"><span>Comentarios Awario</span><strong>{formatNumber(selectedPostDetail.awario_comments_count)}</strong></li>
-                    </ul>
-                    <div className="flex flex-wrap gap-1">
-                      {(selectedPostDetail.strategies ?? []).slice(0, 6).map((value) => (
-                        <span key={value} className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] text-slate-700">
-                          {value}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                ) : null}
-              </aside>
-            </div>
-          ) : null}
-
-          {postsHasNext ? (
-            <button className="mt-3 rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50" type="button" onClick={() => void loadMorePosts()} disabled={loadingMorePosts}>
-              {loadingMorePosts ? "Cargando..." : "Cargar más"}
-            </button>
-          ) : null}
-        </section>
+        <PostsTab
+          posts={posts}
+          loadingPosts={loadingPosts}
+          postsHasNext={postsHasNext}
+          loadingMorePosts={loadingMorePosts}
+          postsSort={postsSort}
+          onSortChange={(sort) => setQueryPatch({ posts_sort: sort })}
+          onLoadMore={() => void loadMorePosts()}
+          canOverrideComments={canOverrideComments}
+          client={client}
+          onError={applyRequestError}
+          activeChannels={selectedChannels}
+          onToggleChannel={(ch) => toggleMultiValue("channel", selectedChannels, ch)}
+        />
       ) : null}
 
       {tab === "risk" ? (
@@ -4435,160 +4178,7 @@ export const MonitorSocialOverviewPage = () => {
         </section>
       ) : null}
 
-      {selectedPostComments ? (
-        <div className="fixed inset-0 z-[70] flex items-start justify-center p-3 sm:p-6">
-          <button type="button" className="absolute inset-0 bg-slate-900/45" onClick={closeCommentsModal} aria-label="Cerrar modal de comentarios" />
-          <div className="relative z-[71] w-full max-w-5xl overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl">
-            <div className="flex items-start justify-between gap-3 border-b border-slate-200 px-4 py-3">
-              <div>
-                <h4 className="text-base font-semibold text-slate-900">Comentarios Awario vinculados</h4>
-                <p className="text-xs text-slate-600">
-                  {selectedPostComments.account_name} · {toChannelLabel(selectedPostComments.channel)} · {formatDate(selectedPostComments.published_at)}
-                </p>
-              </div>
-              <button type="button" className="rounded-md border border-slate-200 px-2 py-1 text-sm text-slate-700 hover:bg-slate-50" onClick={closeCommentsModal}>
-                Cerrar
-              </button>
-            </div>
-
-            <div className="flex flex-wrap gap-2 border-b border-slate-100 px-4 py-3">
-              <label className="text-xs font-semibold text-slate-600">
-                Sentimiento
-                <select
-                  className="ml-2 rounded-md border border-slate-200 px-2 py-1 text-xs"
-                  value={commentSentimentFilter}
-                  onChange={(event) => setCommentSentimentFilter(event.target.value as "all" | "positive" | "negative" | "neutral" | "unknown")}
-                >
-                  <option value="all">Todos</option>
-                  <option value="positive">Positivo</option>
-                  <option value="negative">Negativo</option>
-                  <option value="neutral">Neutro</option>
-                  <option value="unknown">Unknown</option>
-                </select>
-              </label>
-              <label className="text-xs font-semibold text-slate-600">
-                Spam
-                <select
-                  className="ml-2 rounded-md border border-slate-200 px-2 py-1 text-xs"
-                  value={commentSpamFilter}
-                  onChange={(event) => setCommentSpamFilter(event.target.value as "all" | "spam" | "not_spam")}
-                >
-                  <option value="all">Todos</option>
-                  <option value="not_spam">No spam</option>
-                  <option value="spam">Spam</option>
-                </select>
-              </label>
-              <label className="text-xs font-semibold text-slate-600">
-                Relación
-                <select
-                  className="ml-2 rounded-md border border-slate-200 px-2 py-1 text-xs"
-                  value={commentRelatedFilter}
-                  onChange={(event) => setCommentRelatedFilter(event.target.value as "all" | "related" | "not_related")}
-                >
-                  <option value="all">Todos</option>
-                  <option value="related">Relacionados</option>
-                  <option value="not_related">No relacionados</option>
-                </select>
-              </label>
-            </div>
-
-            <div className="max-h-[65vh] overflow-auto p-4">
-              {loadingPostComments && postComments.length === 0 ? <p className="text-sm text-slate-600">Cargando comentarios...</p> : null}
-              {!loadingPostComments && postComments.length === 0 ? <p className="text-sm text-slate-600">No hay comentarios para estos filtros.</p> : null}
-
-              {postComments.length > 0 ? (
-                <div className="space-y-3">
-                  {postComments.map((comment) => (
-                    <article key={comment.id} className="rounded-xl border border-slate-200 p-3">
-                      <div className="mb-1 flex flex-wrap items-center gap-2 text-xs text-slate-600">
-                        <strong>{comment.author_name ?? "Autor desconocido"}</strong>
-                        <span>{formatDateTime(comment.published_at)}</span>
-                        <span className={`rounded-full px-2 py-0.5 font-semibold ${
-                          comment.sentiment === "positive"
-                            ? "bg-emerald-50 text-emerald-700"
-                            : comment.sentiment === "negative"
-                              ? "bg-rose-50 text-rose-700"
-                              : comment.sentiment === "neutral"
-                                ? "bg-sky-50 text-sky-700"
-                                : "bg-slate-100 text-slate-700"
-                        }`}>
-                          {comment.sentiment}
-                        </span>
-                        <span className={`rounded-full px-2 py-0.5 font-semibold ${comment.is_spam ? "bg-rose-100 text-rose-700" : "bg-slate-100 text-slate-700"}`}>
-                          {comment.is_spam ? "spam" : "no spam"}
-                        </span>
-                        <span className={`rounded-full px-2 py-0.5 font-semibold ${comment.related_to_post_text ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"}`}>
-                          {comment.related_to_post_text ? "relacionado" : "no relacionado"}
-                        </span>
-                        {comment.needs_review ? <span className="rounded-full bg-amber-200 px-2 py-0.5 font-semibold text-amber-900">needs_review</span> : null}
-                      </div>
-                      <p className="text-sm text-slate-800">{comment.text || "(sin texto)"}</p>
-                      <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
-                        {comment.comment_url ? (
-                          <a href={comment.comment_url} target="_blank" rel="noreferrer" className="text-red-700 underline">
-                            Ver comentario original
-                          </a>
-                        ) : null}
-                        <span className="text-slate-500">confianza: {comment.confidence === null ? "n/a" : formatScore(comment.confidence)}</span>
-                      </div>
-
-                      {canOverrideComments ? (
-                        <div className="mt-3 flex flex-wrap items-center gap-2 text-xs">
-                          <button
-                            type="button"
-                            className="rounded-md border border-slate-200 px-2 py-1 text-slate-700 hover:bg-slate-50 disabled:opacity-50"
-                            disabled={updatingCommentId === comment.id}
-                            onClick={() => void patchComment(comment.id, { is_spam: !comment.is_spam })}
-                          >
-                            Marcar {comment.is_spam ? "no spam" : "spam"}
-                          </button>
-                          <button
-                            type="button"
-                            className="rounded-md border border-slate-200 px-2 py-1 text-slate-700 hover:bg-slate-50 disabled:opacity-50"
-                            disabled={updatingCommentId === comment.id}
-                            onClick={() => void patchComment(comment.id, { related_to_post_text: !comment.related_to_post_text })}
-                          >
-                            Marcar {comment.related_to_post_text ? "no relacionado" : "relacionado"}
-                          </button>
-                          <label className="text-slate-600">
-                            Sentimiento
-                            <select
-                              className="ml-2 rounded-md border border-slate-200 px-2 py-1 text-xs"
-                              value={comment.sentiment}
-                              disabled={updatingCommentId === comment.id}
-                              onChange={(event) =>
-                                void patchComment(comment.id, {
-                                  sentiment: event.target.value as "positive" | "negative" | "neutral" | "unknown"
-                                })
-                              }
-                            >
-                              <option value="positive">positive</option>
-                              <option value="negative">negative</option>
-                              <option value="neutral">neutral</option>
-                              <option value="unknown">unknown</option>
-                            </select>
-                          </label>
-                        </div>
-                      ) : null}
-                    </article>
-                  ))}
-
-                  {postCommentsHasNext ? (
-                    <button
-                      type="button"
-                      className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
-                      onClick={() => void loadMorePostComments()}
-                      disabled={loadingPostComments}
-                    >
-                      {loadingPostComments ? "Cargando..." : "Cargar más comentarios"}
-                    </button>
-                  ) : null}
-                </div>
-              ) : null}
-            </div>
-          </div>
-        </div>
-      ) : null}
+      {/* Comments modal moved to PostDetailModal inside PostsTab */}
     </section>
   );
 };

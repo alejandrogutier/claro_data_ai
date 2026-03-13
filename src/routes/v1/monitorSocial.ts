@@ -1823,6 +1823,7 @@ export const listMonitorSocialPosts = async (event: APIGatewayProxyEventV2) => {
     externalPostId: string;
     postUrl: string;
     postType: string | null;
+    imageUrl: string | null;
     publishedAt: Date | null;
     title: string;
     text: string | null;
@@ -1861,6 +1862,7 @@ export const listMonitorSocialPosts = async (event: APIGatewayProxyEventV2) => {
     external_post_id: item.externalPostId,
     post_url: item.postUrl,
     post_type: item.postType,
+    image_url: item.imageUrl,
     published_at: item.publishedAt?.toISOString() ?? null,
     title: item.title,
     text: item.text,
