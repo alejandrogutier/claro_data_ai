@@ -53,7 +53,7 @@ const PostDetailModal: React.FC<Props> = ({ post, onClose, client, canOverrideCo
       title={
         <div>
           {/* Channel color bar */}
-          <div style={{ height: 4, width: "100%", backgroundColor: colors.accent, borderRadius: "2px 2px 0 0", marginBottom: 12 }} />
+          <div style={{ height: 6, width: "100%", background: `linear-gradient(90deg, ${colors.accent}, ${colors.accent}60)`, borderRadius: "16px 16px 0 0", margin: "-20px -24px 16px -24px" }} />
           <Flex align="center" gap={8} wrap="wrap">
             <span style={{ fontSize: 18 }}>{channelIcon[post.channel] ?? ""}</span>
             <Text strong style={{ color: colors.text, fontSize: 14 }}>{toChannelLabel(post.channel)}</Text>
@@ -111,54 +111,56 @@ const PostDetailModal: React.FC<Props> = ({ post, onClose, client, canOverrideCo
 
       {/* Metrics Grid */}
       <Divider style={{ margin: "12px 0" }} />
-      <Title level={5} type="secondary" style={{ fontSize: 12, textTransform: "uppercase", letterSpacing: 1, marginBottom: 12 }}>
+      <Title level={5} type="secondary" style={{ fontSize: 12, textTransform: "uppercase", letterSpacing: 1, marginBottom: 12, borderLeft: "3px solid #e30613", paddingLeft: 8 }}>
         M&eacute;tricas
       </Title>
-      <Row gutter={[16, 16]} style={{ marginBottom: 16 }}>
-        <Col span={4}>
-          <Statistic
-            title={showReach ? "Reach" : "Impressions"}
-            value={formatNumber(showReach ? post.reach : post.impressions)}
-            valueStyle={{ fontSize: 16, fontFamily: "'Barlow Condensed', sans-serif" }}
-          />
-        </Col>
-        <Col span={4}>
-          <Statistic title="Engagement" value={formatNumber(post.engagement_total)} valueStyle={{ fontSize: 16, fontFamily: "'Barlow Condensed', sans-serif" }} />
-        </Col>
-        <Col span={4}>
-          <Statistic title={erLbl} value={formatPercent(er)} valueStyle={{ fontSize: 16, fontFamily: "'Barlow Condensed', sans-serif" }} />
-        </Col>
-        <Col span={3}>
-          <Statistic title="Likes" value={formatNumber(post.likes)} valueStyle={{ fontSize: 16, fontFamily: "'Barlow Condensed', sans-serif" }} />
-        </Col>
-        <Col span={4}>
-          <div>
-            <Statistic title="Comentarios" value={formatNumber(post.comments)} valueStyle={{ fontSize: 16, fontFamily: "'Barlow Condensed', sans-serif" }} />
-            {post.awario_comments_count > 0 && (
-              <Text type="secondary" style={{ fontSize: 10 }}>{formatNumber(post.awario_comments_count)} capt.</Text>
-            )}
-          </div>
-        </Col>
-        <Col span={3}>
-          <Statistic title="Shares" value={formatNumber(post.shares)} valueStyle={{ fontSize: 16, fontFamily: "'Barlow Condensed', sans-serif" }} />
-        </Col>
-        <Col span={3}>
-          <Statistic title="Views" value={formatNumber(post.views)} valueStyle={{ fontSize: 16, fontFamily: "'Barlow Condensed', sans-serif" }} />
-        </Col>
-        <Col span={4}>
-          <Statistic title="Impressions" value={formatNumber(post.impressions)} valueStyle={{ fontSize: 16, fontFamily: "'Barlow Condensed', sans-serif" }} />
-        </Col>
-        <Col span={3}>
-          <Statistic title="Clicks" value={formatNumber(post.clicks)} valueStyle={{ fontSize: 16, fontFamily: "'Barlow Condensed', sans-serif" }} />
-        </Col>
-        <Col span={3}>
-          <Statistic title="Saves" value={formatNumber(post.saves)} valueStyle={{ fontSize: 16, fontFamily: "'Barlow Condensed', sans-serif" }} />
-        </Col>
-      </Row>
+      <div style={{ background: "#fafbfc", borderRadius: 10, padding: 16, border: "1px solid #f0f2f5" }}>
+        <Row gutter={[16, 16]} style={{ marginBottom: 0 }}>
+          <Col span={4}>
+            <Statistic
+              title={showReach ? "Reach" : "Impressions"}
+              value={formatNumber(showReach ? post.reach : post.impressions)}
+              valueStyle={{ fontSize: 16, fontFamily: "'Barlow Condensed', sans-serif" }}
+            />
+          </Col>
+          <Col span={4}>
+            <Statistic title="Engagement" value={formatNumber(post.engagement_total)} valueStyle={{ fontSize: 16, fontFamily: "'Barlow Condensed', sans-serif" }} />
+          </Col>
+          <Col span={4}>
+            <Statistic title={erLbl} value={formatPercent(er)} valueStyle={{ fontSize: 16, fontFamily: "'Barlow Condensed', sans-serif" }} />
+          </Col>
+          <Col span={3}>
+            <Statistic title="Likes" value={formatNumber(post.likes)} valueStyle={{ fontSize: 16, fontFamily: "'Barlow Condensed', sans-serif" }} />
+          </Col>
+          <Col span={4}>
+            <div>
+              <Statistic title="Comentarios" value={formatNumber(post.comments)} valueStyle={{ fontSize: 16, fontFamily: "'Barlow Condensed', sans-serif" }} />
+              {post.awario_comments_count > 0 && (
+                <Text type="secondary" style={{ fontSize: 10 }}>{formatNumber(post.awario_comments_count)} capt.</Text>
+              )}
+            </div>
+          </Col>
+          <Col span={3}>
+            <Statistic title="Shares" value={formatNumber(post.shares)} valueStyle={{ fontSize: 16, fontFamily: "'Barlow Condensed', sans-serif" }} />
+          </Col>
+          <Col span={3}>
+            <Statistic title="Views" value={formatNumber(post.views)} valueStyle={{ fontSize: 16, fontFamily: "'Barlow Condensed', sans-serif" }} />
+          </Col>
+          <Col span={4}>
+            <Statistic title="Impressions" value={formatNumber(post.impressions)} valueStyle={{ fontSize: 16, fontFamily: "'Barlow Condensed', sans-serif" }} />
+          </Col>
+          <Col span={3}>
+            <Statistic title="Clicks" value={formatNumber(post.clicks)} valueStyle={{ fontSize: 16, fontFamily: "'Barlow Condensed', sans-serif" }} />
+          </Col>
+          <Col span={3}>
+            <Statistic title="Saves" value={formatNumber(post.saves)} valueStyle={{ fontSize: 16, fontFamily: "'Barlow Condensed', sans-serif" }} />
+          </Col>
+        </Row>
+      </div>
 
       {/* Classification */}
       <Divider style={{ margin: "12px 0" }} />
-      <Title level={5} type="secondary" style={{ fontSize: 12, textTransform: "uppercase", letterSpacing: 1, marginBottom: 12 }}>
+      <Title level={5} type="secondary" style={{ fontSize: 12, textTransform: "uppercase", letterSpacing: 1, marginBottom: 12, borderLeft: "3px solid #e30613", paddingLeft: 8 }}>
         Clasificaci&oacute;n
       </Title>
       <Flex wrap="wrap" align="center" gap={12} style={{ marginBottom: 8 }}>
@@ -209,7 +211,7 @@ const PostDetailModal: React.FC<Props> = ({ post, onClose, client, canOverrideCo
       {commentSentimentCounts && (commentSentimentCounts.positive + commentSentimentCounts.neutral + commentSentimentCounts.negative + commentSentimentCounts.unknown) > 0 && (
         <>
           <Divider style={{ margin: "12px 0" }} />
-          <Title level={5} type="secondary" style={{ fontSize: 12, textTransform: "uppercase", letterSpacing: 1, marginBottom: 12 }}>
+          <Title level={5} type="secondary" style={{ fontSize: 12, textTransform: "uppercase", letterSpacing: 1, marginBottom: 12, borderLeft: "3px solid #e30613", paddingLeft: 8 }}>
             Balance de sentimiento (comentarios)
           </Title>
           <SentimentBalanceBar {...commentSentimentCounts} />

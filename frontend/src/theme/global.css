@@ -18,3 +18,75 @@ body {
 .barlow-condensed {
   font-family: "Barlow Condensed", sans-serif;
 }
+
+/* ── Card glassmorphism-lite ── */
+.ant-card {
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid rgba(231, 233, 237, 0.6);
+  transition: box-shadow 0.25s cubic-bezier(0.4, 0, 0.2, 1),
+              transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.ant-card-hoverable:hover {
+  box-shadow: 0 4px 16px rgba(15, 23, 42, 0.10), 0 8px 24px rgba(15, 23, 42, 0.06);
+  transform: translateY(-2px);
+}
+
+/* ── Table refinements ── */
+body .ant-table-wrapper .ant-table-thead > tr > th,
+body .ant-table-wrapper .ant-table-thead > tr > td {
+  font-family: "Barlow Condensed", sans-serif;
+  font-weight: 600;
+  text-transform: uppercase;
+  font-size: 11px;
+  letter-spacing: 0.5px;
+}
+
+body .ant-table-wrapper .ant-table-tbody > tr:nth-child(even) > td {
+  background-color: rgba(250, 251, 252, 0.6);
+}
+
+body .ant-table-wrapper .ant-table-tbody > tr > td {
+  transition: background-color 0.15s ease;
+}
+
+/* ── Tabs ink bar weight ── */
+body .ant-tabs .ant-tabs-ink-bar {
+  height: 3px;
+  border-radius: 3px 3px 0 0;
+}
+
+/* ── Section label accent ── */
+.section-label {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: #64748b;
+  margin-bottom: 12px;
+  padding-left: 10px;
+  border-left: 3px solid #e30613;
+}
+
+/* ── Chart question text ── */
+.chart-question {
+  font-size: 12px;
+  color: #64748b;
+  font-style: italic;
+  margin-bottom: 8px;
+}
+
+/* ── Filter pill card ── */
+.filter-pill-card {
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.92) 0%, rgba(244, 246, 249, 0.88) 100%) !important;
+  border: 1px solid rgba(231, 233, 237, 0.5) !important;
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+}
+
+/* ── Scrollbar ── */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #94a3b8; }

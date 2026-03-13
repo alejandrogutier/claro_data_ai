@@ -9,7 +9,7 @@ type Props = {
 };
 
 const PostsCardGrid: React.FC<Props> = ({ posts, onSelectPost }) => (
-  <Row gutter={[16, 16]}>
+  <Row gutter={[16, 20]}>
     {posts.map((post) => (
       <Col key={post.id} xs={24} sm={12} lg={8} xl={6}>
         <PostCard post={post} onSelect={onSelectPost} />

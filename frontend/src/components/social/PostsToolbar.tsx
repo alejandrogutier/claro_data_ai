@@ -15,38 +15,41 @@ type Props = {
 };
 
 const PostsToolbar: React.FC<Props> = ({ totalVisible, viewMode, onViewModeChange, sort, onSortChange, loading }) => (
-  <Flex align="center" justify="space-between" wrap="wrap" gap={8}>
-    <Flex align="center" gap={12}>
-      <Text type="secondary" style={{ fontSize: 12 }}>
-        {totalVisible} post{totalVisible !== 1 ? "s" : ""}
-      </Text>
-      {loading && <Text type="secondary" style={{ fontSize: 12 }}>Actualizando...</Text>}
-    </Flex>
+  <div style={{ background: "#fafbfc", borderRadius: 10, padding: "8px 14px", border: "1px solid #f0f2f5" }}>
+    <Flex align="center" justify="space-between" wrap="wrap" gap={8}>
+      <Flex align="center" gap={12}>
+        <Text type="secondary" style={{ fontSize: 12 }}>
+          <span style={{ fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700 }}>{totalVisible}</span>{" "}
+          post{totalVisible !== 1 ? "s" : ""}
+        </Text>
+        {loading && <Text type="secondary" style={{ fontSize: 12 }}>Actualizando...</Text>}
+      </Flex>
 
-    <Flex align="center" gap={8}>
-      <Text strong style={{ fontSize: 12 }}>Orden</Text>
-      <Select
-        value={sort}
-        onChange={onSortChange}
-        size="small"
-        style={{ width: 170 }}
-        options={POST_SORT_OPTIONS.map((opt) => ({
-          value: opt,
-          label: toPostSortLabel(opt),
-        }))}
-      />
+      <Flex align="center" gap={8}>
+        <Text strong style={{ fontSize: 12 }}>Orden</Text>
+        <Select
+          value={sort}
+          onChange={onSortChange}
+          size="small"
+          style={{ width: 170 }}
+          options={POST_SORT_OPTIONS.map((opt) => ({
+            value: opt,
+            label: toPostSortLabel(opt),
+          }))}
+        />
 
-      <Segmented
-        value={viewMode}
-        onChange={(val) => onViewModeChange(val as PostsViewMode)}
-        size="small"
-        options={[
-          { value: "table", label: "Tabla" },
-          { value: "cards", label: "Cards" },
-        ]}
-      />
+        <Segmented
+          value={viewMode}
+          onChange={(val) => onViewModeChange(val as PostsViewMode)}
+          size="small"
+          options={[
+            { value: "table", label: "Tabla" },
+            { value: "cards", label: "Cards" },
+          ]}
+        />
+      </Flex>
     </Flex>
-  </Flex>
+  </div>
 );
 
 export default PostsToolbar;

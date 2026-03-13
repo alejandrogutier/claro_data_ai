@@ -36,7 +36,7 @@ const PostsTableView: React.FC<Props> = ({ posts, onSelectPost }) => {
               preview={false}
               width={48}
               height={48}
-              style={{ borderRadius: 8, objectFit: "cover" }}
+              style={{ borderRadius: 8, objectFit: "cover", boxShadow: "0 1px 4px rgba(0,0,0,0.08)" }}
               loading="lazy"
               onError={() => handleImgError(post.id)}
             />
@@ -52,6 +52,7 @@ const PostsTableView: React.FC<Props> = ({ posts, onSelectPost }) => {
               borderRadius: 8,
               backgroundColor: colors.bg,
               fontSize: 18,
+              boxShadow: "0 1px 4px rgba(0,0,0,0.08)",
             }}
           >
             {channelIcon[post.channel] ?? "?"}
@@ -75,6 +76,7 @@ const PostsTableView: React.FC<Props> = ({ posts, onSelectPost }) => {
         const colors = channelColorStyles[post.channel] ?? channelColorStyles.facebook;
         return (
           <Flex align="center" gap={4}>
+            <span style={{ display: "inline-block", width: 6, height: 6, borderRadius: "50%", backgroundColor: colors.accent, marginRight: 4 }} />
             <span>{channelIcon[post.channel]}</span>
             <Text style={{ color: colors.text, fontWeight: 500, fontSize: 13 }}>{toChannelLabel(post.channel)}</Text>
           </Flex>
@@ -102,7 +104,7 @@ const PostsTableView: React.FC<Props> = ({ posts, onSelectPost }) => {
           <Link
             href={post.post_url}
             target="_blank"
-            style={{ fontSize: 12, color: "#b91c1c" }}
+            style={{ padding: "2px 10px", borderRadius: 999, background: "rgba(227, 6, 19, 0.06)", color: "#b91c1c", fontWeight: 600, fontSize: 11, display: "inline-block" }}
             onClick={(e) => e.stopPropagation()}
           >
             Ver post
@@ -125,7 +127,7 @@ const PostsTableView: React.FC<Props> = ({ posts, onSelectPost }) => {
         const showReach = post.reach > 0;
         return (
           <div>
-            <Text strong style={{ fontSize: 13 }}>{formatNumber(showReach ? post.reach : post.impressions)}</Text>
+            <Text strong style={{ fontSize: 13, fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700 }}>{formatNumber(showReach ? post.reach : post.impressions)}</Text>
             {!showReach && post.impressions > 0 && (
               <Text type="secondary" style={{ fontSize: 10, marginLeft: 4 }}>(imp)</Text>
             )}
@@ -138,7 +140,7 @@ const PostsTableView: React.FC<Props> = ({ posts, onSelectPost }) => {
       dataIndex: "engagement_total",
       key: "engagement_total",
       width: 100,
-      render: (val: number) => <Text strong style={{ fontSize: 13 }}>{formatNumber(val)}</Text>,
+      render: (val: number) => <Text strong style={{ fontSize: 13, fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700 }}>{formatNumber(val)}</Text>,
     },
     {
       title: "ER",
@@ -146,7 +148,8 @@ const PostsTableView: React.FC<Props> = ({ posts, onSelectPost }) => {
       width: 80,
       render: (_: unknown, post: PostRow) => {
         const er = computeER(post);
-        return <Text strong style={{ fontSize: 13 }}>{formatPercent(er)}</Text>;
+        const erColor = er !== null && er > 3 ? "#177a3f" : er !== null && er < 1 ? "#94a3b8" : undefined;
+        return <Text strong style={{ fontSize: 13, fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700, color: erColor }}>{formatPercent(er)}</Text>;
       },
     },
     {
@@ -155,7 +158,7 @@ const PostsTableView: React.FC<Props> = ({ posts, onSelectPost }) => {
       width: 110,
       render: (_: unknown, post: PostRow) => (
         <div>
-          <Text strong style={{ fontSize: 13 }}>{formatNumber(post.comments)}</Text>
+          <Text strong style={{ fontSize: 13, fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 700 }}>{formatNumber(post.comments)}</Text>
           {post.awario_comments_count > 0 && (
             <Text type="secondary" style={{ fontSize: 10, marginLeft: 4 }}>
               ({formatNumber(post.awario_comments_count)} capt.)

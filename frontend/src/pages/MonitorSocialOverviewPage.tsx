@@ -6,7 +6,8 @@ import {
 } from "antd";
 import {
   ReloadOutlined, DownloadOutlined, FileExcelOutlined, InfoCircleOutlined,
-  SearchOutlined, ClearOutlined, FilterOutlined
+  SearchOutlined, ClearOutlined, FilterOutlined,
+  DashboardOutlined, TeamOutlined, FileTextOutlined, WarningOutlined, CloudSyncOutlined, BookOutlined
 } from "@ant-design/icons";
 import { Group } from "@visx/group";
 import { Bar, LinePath, Pie, Circle, Line as VisxLine } from "@visx/shape";
@@ -630,14 +631,18 @@ const getErrorKind = (error: unknown): MonitorSocialUiError => {
    ──────────────────────────────────────────────────────── */
 const tooltipStyles: React.CSSProperties = {
   ...defaultTooltipStyles,
-  background: "#fff",
-  border: "1px solid #e2e8f0",
-  borderRadius: 8,
-  padding: "8px 12px",
+  background: "rgba(255, 255, 255, 0.96)",
+  backdropFilter: "blur(12px)",
+  WebkitBackdropFilter: "blur(12px)",
+  border: "1px solid rgba(231, 233, 237, 0.8)",
+  borderRadius: 10,
+  padding: "10px 14px",
   fontSize: 12,
-  boxShadow: "0 4px 12px rgba(0,0,0,0.1)",
-  minWidth: 160,
+  fontFamily: "'Barlow', sans-serif",
+  boxShadow: "0 8px 28px rgba(15, 23, 42, 0.12), 0 2px 8px rgba(15, 23, 42, 0.06)",
+  minWidth: 170,
   zIndex: 50,
+  lineHeight: 1.5,
 };
 
 /* ────────────────────────────────────────────────────────
@@ -684,10 +689,10 @@ const VisxDualLineChart = ({ data, xKey, leftKey, rightKey, leftLabel, rightLabe
           <div style={{ position: "relative" }}>
             <svg width={width} height={height}>
               <Group left={margin.left} top={margin.top}>
-                <GridRows scale={yLeftScale} width={xMax} stroke="#e2e8f0" strokeDasharray="3,3" />
-                <AxisBottom top={yMax} scale={xScale} tickLabelProps={() => ({ fontSize: 10, textAnchor: "end", angle: -30, dy: 4 })} numTicks={Math.min(data.length, 12)} />
-                <AxisLeft scale={yLeftScale} tickFormat={(v) => formatLeftTick(Number(v))} tickLabelProps={() => ({ fontSize: 10, textAnchor: "end", dx: -4 })} />
-                <AxisRight left={xMax} scale={yRightScale} tickFormat={(v) => formatRightTick(Number(v))} tickLabelProps={() => ({ fontSize: 10, textAnchor: "start", dx: 4 })} />
+                <GridRows scale={yLeftScale} width={xMax} stroke="#eef0f4" strokeOpacity={0.8} strokeDasharray="3,3" />
+                <AxisBottom stroke="#e2e8f0" top={yMax} scale={xScale} tickLabelProps={() => ({ fontSize: 11, fill: "#64748b", fontFamily: "'Barlow', sans-serif", textAnchor: "end", angle: -30, dy: 4 })} numTicks={Math.min(data.length, 12)} />
+                <AxisLeft stroke="#e2e8f0" scale={yLeftScale} tickFormat={(v) => formatLeftTick(Number(v))} tickLabelProps={() => ({ fontSize: 11, fill: "#64748b", fontFamily: "'Barlow', sans-serif", textAnchor: "end", dx: -4 })} />
+                <AxisRight stroke="#e2e8f0" left={xMax} scale={yRightScale} tickFormat={(v) => formatRightTick(Number(v))} tickLabelProps={() => ({ fontSize: 11, fill: "#64748b", fontFamily: "'Barlow', sans-serif", textAnchor: "start", dx: 4 })} />
                 <LinePath
                   data={data}
                   x={(d) => (xScale(String(d[xKey] ?? "")) ?? 0) + xScale.bandwidth() / 2}
@@ -695,6 +700,8 @@ const VisxDualLineChart = ({ data, xKey, leftKey, rightKey, leftLabel, rightLabe
                   stroke={leftColor}
                   strokeWidth={2.5}
                   curve={curveMonotoneX}
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
                 />
                 <LinePath
                   data={data}
@@ -703,6 +710,8 @@ const VisxDualLineChart = ({ data, xKey, leftKey, rightKey, leftLabel, rightLabe
                   stroke={rightColor}
                   strokeWidth={2.5}
                   curve={curveMonotoneX}
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
                 />
                 {data.map((d, i) => {
                   const cx = (xScale(String(d[xKey] ?? "")) ?? 0) + xScale.bandwidth() / 2;
@@ -782,10 +791,10 @@ const VisxBarLineChart = ({ data, xKey, barKey, lineKey, barLabel, lineLabel, ba
           <div style={{ position: "relative" }}>
             <svg width={width} height={height}>
               <Group left={margin.left} top={margin.top}>
-                <GridRows scale={yLeftScale} width={xMax} stroke="#e2e8f0" strokeDasharray="3,3" />
-                <AxisBottom top={yMax} scale={xScale} tickFormat={formatXTick ? (v) => formatXTick(String(v)) : undefined} tickLabelProps={() => ({ fontSize: 10, textAnchor: "end", angle: -30, dy: 4 })} />
-                <AxisLeft scale={yLeftScale} tickFormat={(v) => formatLeftTick(Number(v))} tickLabelProps={() => ({ fontSize: 10, textAnchor: "end", dx: -4 })} />
-                <AxisRight left={xMax} scale={yRightScale} tickFormat={(v) => formatRightTick(Number(v))} tickLabelProps={() => ({ fontSize: 10, textAnchor: "start", dx: 4 })} />
+                <GridRows scale={yLeftScale} width={xMax} stroke="#eef0f4" strokeOpacity={0.8} strokeDasharray="3,3" />
+                <AxisBottom stroke="#e2e8f0" top={yMax} scale={xScale} tickFormat={formatXTick ? (v) => formatXTick(String(v)) : undefined} tickLabelProps={() => ({ fontSize: 11, fill: "#64748b", fontFamily: "'Barlow', sans-serif", textAnchor: "end", angle: -30, dy: 4 })} />
+                <AxisLeft stroke="#e2e8f0" scale={yLeftScale} tickFormat={(v) => formatLeftTick(Number(v))} tickLabelProps={() => ({ fontSize: 11, fill: "#64748b", fontFamily: "'Barlow', sans-serif", textAnchor: "end", dx: -4 })} />
+                <AxisRight stroke="#e2e8f0" left={xMax} scale={yRightScale} tickFormat={(v) => formatRightTick(Number(v))} tickLabelProps={() => ({ fontSize: 11, fill: "#64748b", fontFamily: "'Barlow', sans-serif", textAnchor: "start", dx: 4 })} />
                 {data.map((d, i) => {
                   const x = xScale(String(d[xKey] ?? "")) ?? 0;
                   const barVal = Number(d[barKey] ?? 0);
@@ -798,6 +807,7 @@ const VisxBarLineChart = ({ data, xKey, barKey, lineKey, barLabel, lineLabel, ba
                       width={xScale.bandwidth()}
                       height={Math.max(0, yMax - barY)}
                       fill={barColor}
+                      rx={4}
                       onMouseMove={(event) => {
                         const point = localPoint(event) ?? { x: 0, y: 0 };
                         showTooltip({ tooltipData: d, tooltipLeft: point.x + margin.left, tooltipTop: point.y });
@@ -813,6 +823,8 @@ const VisxBarLineChart = ({ data, xKey, barKey, lineKey, barLabel, lineLabel, ba
                   stroke={lineColor}
                   strokeWidth={3}
                   curve={curveMonotoneX}
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
                 />
                 {data.map((d, i) => {
                   const cx = (xScale(String(d[xKey] ?? "")) ?? 0) + xScale.bandwidth() / 2;
@@ -865,9 +877,9 @@ const VisxMultiLineChart = ({ data, xKey, series, metric, formatYTick, formatToo
           <div style={{ position: "relative" }}>
             <svg width={width} height={height}>
               <Group left={margin.left} top={margin.top}>
-                <GridRows scale={yScale} width={xMax} stroke="#e2e8f0" strokeDasharray="3,3" />
-                <AxisBottom top={yMax} scale={xScale} tickLabelProps={() => ({ fontSize: 10, textAnchor: "end", angle: -30, dy: 4 })} numTicks={Math.min(data.length, 12)} />
-                <AxisLeft scale={yScale} tickFormat={(v) => formatYTick(Number(v))} tickLabelProps={() => ({ fontSize: 10, textAnchor: "end", dx: -4 })} />
+                <GridRows scale={yScale} width={xMax} stroke="#eef0f4" strokeOpacity={0.8} strokeDasharray="3,3" />
+                <AxisBottom stroke="#e2e8f0" top={yMax} scale={xScale} tickLabelProps={() => ({ fontSize: 11, fill: "#64748b", fontFamily: "'Barlow', sans-serif", textAnchor: "end", angle: -30, dy: 4 })} numTicks={Math.min(data.length, 12)} />
+                <AxisLeft stroke="#e2e8f0" scale={yScale} tickFormat={(v) => formatYTick(Number(v))} tickLabelProps={() => ({ fontSize: 11, fill: "#64748b", fontFamily: "'Barlow', sans-serif", textAnchor: "end", dx: -4 })} />
                 {series.map((s) => (
                   <LinePath
                     key={s.key}
@@ -877,6 +889,8 @@ const VisxMultiLineChart = ({ data, xKey, series, metric, formatYTick, formatToo
                     stroke={s.color}
                     strokeWidth={2.4}
                     curve={curveLinear}
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
                   />
                 ))}
                 {data.map((d, i) => {
@@ -956,9 +970,9 @@ const VisxHorizontalStackedBarChart = ({ data, yKey, segments, normalize100, met
           <div style={{ position: "relative" }}>
             <svg width={width} height={height}>
               <Group left={margin.left} top={margin.top}>
-                <GridRows scale={yScale} width={xMax} stroke="#e2e8f0" strokeDasharray="3,3" />
-                <AxisBottom top={yMax} scale={xScale} tickFormat={(v) => formatXTick(Number(v))} tickLabelProps={() => ({ fontSize: 10, textAnchor: "middle" })} />
-                <AxisLeft scale={yScale} tickFormat={(v) => truncate(String(v), 28)} tickLabelProps={() => ({ fontSize: 10, textAnchor: "end", dx: -4 })} />
+                <GridRows scale={yScale} width={xMax} stroke="#eef0f4" strokeOpacity={0.8} strokeDasharray="3,3" />
+                <AxisBottom stroke="#e2e8f0" top={yMax} scale={xScale} tickFormat={(v) => formatXTick(Number(v))} tickLabelProps={() => ({ fontSize: 11, fill: "#64748b", fontFamily: "'Barlow', sans-serif", textAnchor: "middle" })} />
+                <AxisLeft stroke="#e2e8f0" scale={yScale} tickFormat={(v) => truncate(String(v), 28)} tickLabelProps={() => ({ fontSize: 11, fill: "#64748b", fontFamily: "'Barlow', sans-serif", textAnchor: "end", dx: -4 })} />
                 {data.map((d, i) => {
                   let cumX = 0;
                   const y = yScale(String(d[yKey] ?? "")) ?? 0;
@@ -1031,9 +1045,9 @@ const VisxHorizontalBarChart = ({ data, metricLabel, formatTick }: VisxHorizonta
           <div style={{ position: "relative" }}>
             <svg width={width} height={height}>
               <Group left={margin.left} top={margin.top}>
-                <GridRows scale={yScale} width={xMax} stroke="#e2e8f0" strokeDasharray="3,3" />
-                <AxisBottom top={yMax} scale={xScale} tickFormat={(v) => formatTick(Number(v))} tickLabelProps={() => ({ fontSize: 10, textAnchor: "middle" })} />
-                <AxisLeft scale={yScale} tickFormat={(v) => truncate(String(v), 24)} tickLabelProps={() => ({ fontSize: 10, textAnchor: "end", dx: -4 })} />
+                <GridRows scale={yScale} width={xMax} stroke="#eef0f4" strokeOpacity={0.8} strokeDasharray="3,3" />
+                <AxisBottom stroke="#e2e8f0" top={yMax} scale={xScale} tickFormat={(v) => formatTick(Number(v))} tickLabelProps={() => ({ fontSize: 11, fill: "#64748b", fontFamily: "'Barlow', sans-serif", textAnchor: "middle" })} />
+                <AxisLeft stroke="#e2e8f0" scale={yScale} tickFormat={(v) => truncate(String(v), 24)} tickLabelProps={() => ({ fontSize: 11, fill: "#64748b", fontFamily: "'Barlow', sans-serif", textAnchor: "end", dx: -4 })} />
                 {data.map((d, i) => {
                   const y = yScale(d.label) ?? 0;
                   const barWidth = Math.max(0, xScale(d.metric_value));
@@ -1045,6 +1059,7 @@ const VisxHorizontalBarChart = ({ data, metricLabel, formatTick }: VisxHorizonta
                       width={barWidth}
                       height={yScale.bandwidth()}
                       fill="#7c3aed"
+                      rx={4}
                       onMouseMove={(event) => {
                         const point = localPoint(event) ?? { x: 0, y: 0 };
                         showTooltip({ tooltipData: d, tooltipLeft: point.x + margin.left, tooltipTop: point.y });
@@ -1099,9 +1114,9 @@ const VisxScatterChart = ({ data, xLabel, yLabel, xMetric, yMetric }: VisxScatte
           <div style={{ position: "relative" }}>
             <svg width={width} height={height}>
               <Group left={margin.left} top={margin.top}>
-                <GridRows scale={yScale} width={xMax} stroke="#e2e8f0" strokeDasharray="3,3" />
-                <AxisBottom top={yMax} scale={xScale} tickFormat={(v) => formatChartAxisByMetrics([xMetric], Number(v))} label={xLabel} labelProps={{ fontSize: 11, dy: 10 }} tickLabelProps={() => ({ fontSize: 10, textAnchor: "middle" })} />
-                <AxisLeft scale={yScale} tickFormat={(v) => formatChartAxisByMetrics([yMetric], Number(v))} label={yLabel} labelProps={{ fontSize: 11, dx: -10 }} tickLabelProps={() => ({ fontSize: 10, textAnchor: "end", dx: -4 })} />
+                <GridRows scale={yScale} width={xMax} stroke="#eef0f4" strokeOpacity={0.8} strokeDasharray="3,3" />
+                <AxisBottom stroke="#e2e8f0" top={yMax} scale={xScale} tickFormat={(v) => formatChartAxisByMetrics([xMetric], Number(v))} label={xLabel} labelProps={{ fontSize: 11, dy: 10 }} tickLabelProps={() => ({ fontSize: 11, fill: "#64748b", fontFamily: "'Barlow', sans-serif", textAnchor: "middle" })} />
+                <AxisLeft stroke="#e2e8f0" scale={yScale} tickFormat={(v) => formatChartAxisByMetrics([yMetric], Number(v))} label={yLabel} labelProps={{ fontSize: 11, dx: -10 }} tickLabelProps={() => ({ fontSize: 11, fill: "#64748b", fontFamily: "'Barlow', sans-serif", textAnchor: "end", dx: -4 })} />
                 {data.map((d, i) => {
                   const r = Math.max(4, Math.min(20, Math.sqrt(d.z) * 2));
                   return (
@@ -1111,9 +1126,9 @@ const VisxScatterChart = ({ data, xLabel, yLabel, xMetric, yMetric }: VisxScatte
                       cy={yScale(d.y_value)}
                       r={r}
                       fill="#0f766e"
-                      fillOpacity={0.6}
-                      stroke="#0f766e"
-                      strokeWidth={1}
+                      fillOpacity={0.5}
+                      stroke="#fff"
+                      strokeWidth={1.5}
                       onMouseMove={(event) => {
                         const point = localPoint(event) ?? { x: 0, y: 0 };
                         showTooltip({ tooltipData: d, tooltipLeft: point.x + margin.left, tooltipTop: point.y });
@@ -1164,7 +1179,8 @@ const VisxPieChart = ({ data, colors }: VisxPieChartProps) => {
                   data={data}
                   pieValue={(d) => d.value}
                   outerRadius={radius}
-                  innerRadius={0}
+                  innerRadius={Math.round(radius * 0.55)}
+                  cornerRadius={3}
                   padAngle={0.02}
                 >
                   {(pie) =>
@@ -1233,16 +1249,16 @@ const VisxRiskTrendChart = ({ data, thresholdY }: VisxRiskTrendChartProps) => {
           <div style={{ position: "relative" }}>
             <svg width={width} height={height}>
               <Group left={margin.left} top={margin.top}>
-                <GridRows scale={yLeftScale} width={xMax} stroke="#e2e8f0" strokeDasharray="3,3" />
-                <AxisBottom top={yMax} scale={xScale} tickLabelProps={() => ({ fontSize: 10, textAnchor: "end", angle: -30, dy: 4 })} numTicks={Math.min(data.length, 12)} />
-                <AxisLeft scale={yLeftScale} tickLabelProps={() => ({ fontSize: 10, textAnchor: "end", dx: -4 })} />
-                <AxisRight left={xMax} scale={yRightScale} tickFormat={(v) => formatAxisPercentNoDecimals(Number(v))} tickLabelProps={() => ({ fontSize: 10, textAnchor: "start", dx: 4 })} />
+                <GridRows scale={yLeftScale} width={xMax} stroke="#eef0f4" strokeOpacity={0.8} strokeDasharray="3,3" />
+                <AxisBottom stroke="#e2e8f0" top={yMax} scale={xScale} tickLabelProps={() => ({ fontSize: 11, fill: "#64748b", fontFamily: "'Barlow', sans-serif", textAnchor: "end", angle: -30, dy: 4 })} numTicks={Math.min(data.length, 12)} />
+                <AxisLeft stroke="#e2e8f0" scale={yLeftScale} tickLabelProps={() => ({ fontSize: 11, fill: "#64748b", fontFamily: "'Barlow', sans-serif", textAnchor: "end", dx: -4 })} />
+                <AxisRight stroke="#e2e8f0" left={xMax} scale={yRightScale} tickFormat={(v) => formatAxisPercentNoDecimals(Number(v))} tickLabelProps={() => ({ fontSize: 11, fill: "#64748b", fontFamily: "'Barlow', sans-serif", textAnchor: "start", dx: 4 })} />
                 {/* Threshold line */}
                 <line x1={0} x2={xMax} y1={yRightScale(thresholdY)} y2={yRightScale(thresholdY)} stroke="#dc2626" strokeDasharray="5,4" strokeWidth={1.5} />
                 <Text x={xMax - 4} y={yRightScale(thresholdY) - 6} fontSize={10} fill="#dc2626" textAnchor="end">Umbral</Text>
-                <LinePath data={data} x={(d) => (xScale(d.date) ?? 0) + xScale.bandwidth() / 2} y={(d) => yLeftScale(d.negativos)} stroke="#b91c1c" strokeWidth={2} curve={curveMonotoneX} />
-                <LinePath data={data} x={(d) => (xScale(d.date) ?? 0) + xScale.bandwidth() / 2} y={(d) => yRightScale(d.riesgo_activo)} stroke="#f59f00" strokeWidth={2} curve={curveMonotoneX} />
-                <LinePath data={data} x={(d) => (xScale(d.date) ?? 0) + xScale.bandwidth() / 2} y={(d) => yRightScale(d.sentimiento_neto)} stroke="#0f766e" strokeWidth={2} curve={curveMonotoneX} />
+                <LinePath data={data} x={(d) => (xScale(d.date) ?? 0) + xScale.bandwidth() / 2} y={(d) => yLeftScale(d.negativos)} stroke="#b91c1c" strokeWidth={2} curve={curveMonotoneX} strokeLinecap="round" strokeLinejoin="round" />
+                <LinePath data={data} x={(d) => (xScale(d.date) ?? 0) + xScale.bandwidth() / 2} y={(d) => yRightScale(d.riesgo_activo)} stroke="#f59f00" strokeWidth={2} curve={curveMonotoneX} strokeLinecap="round" strokeLinejoin="round" />
+                <LinePath data={data} x={(d) => (xScale(d.date) ?? 0) + xScale.bandwidth() / 2} y={(d) => yRightScale(d.sentimiento_neto)} stroke="#0f766e" strokeWidth={2} curve={curveMonotoneX} strokeLinecap="round" strokeLinejoin="round" />
                 {data.map((d, i) => (
                   <rect
                     key={i}
@@ -1380,7 +1396,7 @@ const Heatmap = ({ data }: { data: MonitorSocialHeatmapResponse | null }) => {
               return (
                 <div
                   key={`${month}-${dayIndex}`}
-                  style={{ height: 24, borderRadius: 4, background: toColor(value) }}
+                  style={{ height: 24, borderRadius: 4, cursor: "pointer", background: toColor(value) }}
                   onMouseEnter={(event) => onHoverCell(event, `${month} ${weekdays[dayIndex]}`, value, item?.posts ?? 0)}
                   onMouseMove={(event) => onHoverCell(event, `${month} ${weekdays[dayIndex]}`, value, item?.posts ?? 0)}
                   onMouseLeave={() => setHovered(null)}
@@ -2047,9 +2063,9 @@ export const MonitorSocialOverviewPage = () => {
   });
 
   const tabItems = [
-    { key: "summary", label: "Resumen" }, { key: "accounts", label: "Cuentas" },
-    { key: "posts", label: "Posts" }, { key: "risk", label: "Riesgo" },
-    { key: "etl", label: "ETL" }, { key: "glossary", label: "Glosario" }
+    { key: "summary", label: "Resumen", icon: <DashboardOutlined /> }, { key: "accounts", label: "Cuentas", icon: <TeamOutlined /> },
+    { key: "posts", label: "Posts", icon: <FileTextOutlined /> }, { key: "risk", label: "Riesgo", icon: <WarningOutlined /> },
+    { key: "etl", label: "ETL", icon: <CloudSyncOutlined /> }, { key: "glossary", label: "Glosario", icon: <BookOutlined /> }
   ];
 
   return (
@@ -2132,8 +2148,8 @@ export const MonitorSocialOverviewPage = () => {
 
       {/* ═══════ SUMMARY TAB ═══════ */}
       {tab === "summary" && (
-        <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-          <Row gutter={[12, 12]}>
+        <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+          <Row gutter={[16, 16]}>
             {kpiCards.map((card) => (
               <Col key={card.id} xs={12} md={8} xl={4}>
                 <KpiCard title={card.title} value={card.value} info={card.info} caption={`Periodo anterior: ${card.previous} | ${card.goal}`} valueStyle={{ color: "#a0000a" }} suffix={<span style={{ fontSize: 12, fontWeight: 600, color: card.statusColor }}>{card.status}</span>} />
@@ -2144,10 +2160,10 @@ export const MonitorSocialOverviewPage = () => {
           <Row gutter={[8, 8]}>
             {secondaryKpis.map((item) => (
               <Col key={item.metric} xs={12} sm={8} lg={6} xl={3}>
-                <Card size="small">
+                <Card size="small" style={{ background: "linear-gradient(135deg, rgba(255,255,255,0.95) 0%, rgba(250,248,249,0.92) 100%)" }}>
                   <div style={{ fontSize: 11, fontWeight: 600, textTransform: "uppercase", color: "#64748b" }}>{item.label}</div>
-                  <div style={{ fontSize: 16, fontWeight: 700, color: "#1e293b", marginTop: 4 }}>{item.value}</div>
-                  <div style={{ fontSize: 11, fontWeight: 600, color: toDeltaColor(item.delta), marginTop: 2 }}>Vs anterior: {item.deltaLabel}</div>
+                  <div style={{ fontSize: 16, fontWeight: 700, color: "#1e293b", marginTop: 4, fontFamily: "'Barlow Condensed', sans-serif" }}>{item.value}</div>
+                  <div style={{ marginTop: 2 }}><span style={{ display: "inline-flex", padding: "2px 8px", borderRadius: 999, fontSize: 11, fontWeight: 600, color: toDeltaColor(item.delta) }}>Vs anterior: {item.deltaLabel}</span></div>
                 </Card>
               </Col>
             ))}
@@ -2156,7 +2172,7 @@ export const MonitorSocialOverviewPage = () => {
           {/* ── Trend + Mix ── */}
           <Row gutter={[12, 12]}>
             <Col xs={24} xl={16}>
-              <Card size="small" title="Tendencia" extra={<AntText type="secondary" style={{ fontSize: 11 }}>{normalizedOverview.comparison?.label ?? "Comparación activa"}</AntText>}>
+              <Card size="small" title="Tendencia" extra={<AntText type="secondary" style={{ fontSize: 11 }}>{normalizedOverview.comparison?.label ?? "Comparación activa"}</AntText>} styles={{ header: { borderBottom: "1px solid #f0f2f5", paddingBottom: 12 } }} style={{ overflow: "hidden" }}>
                 <AntText type="secondary" style={{ fontSize: 12 }}>{CHART_QUESTION_BY_KEY.trend}</AntText>
                 <Row gutter={8} style={{ marginTop: 8, marginBottom: 8 }}>
                   <Col span={12}><div style={{ fontSize: 11, fontWeight: 600, color: "#64748b" }}>Eje izquierdo</div><Select size="small" style={{ width: "100%" }} value={trendLeftMetric} onChange={(v) => setTrendLeftMetric(v as TrendMetric)} options={metricSelectOptions(TREND_METRICS)} /></Col>
@@ -2168,7 +2184,7 @@ export const MonitorSocialOverviewPage = () => {
               </Card>
             </Col>
             <Col xs={24} xl={8}>
-              <Card size="small" title="Mix por canal"><AntText type="secondary" style={{ fontSize: 12 }}>{CHART_QUESTION_BY_KEY.mix}</AntText>
+              <Card size="small" title="Mix por canal" styles={{ header: { borderBottom: "1px solid #f0f2f5", paddingBottom: 12 } }} style={{ overflow: "hidden" }}><AntText type="secondary" style={{ fontSize: 12 }}>{CHART_QUESTION_BY_KEY.mix}</AntText>
                 <Row gutter={8} style={{ marginTop: 8, marginBottom: 8 }}>
                   <Col span={12}><div style={{ fontSize: 11, fontWeight: 600, color: "#64748b" }}>Barra</div><Select size="small" style={{ width: "100%" }} value={mixBarMetric} onChange={(v) => setMixBarMetric(v as MixMetric)} options={metricSelectOptions(MIX_METRICS)} /></Col>
                   <Col span={12}><div style={{ fontSize: 11, fontWeight: 600, color: "#64748b" }}>Línea</div><Select size="small" style={{ width: "100%" }} value={mixLineMetric} onChange={(v) => setMixLineMetric(v as MixMetric)} options={metricSelectOptions(MIX_METRICS)} /></Col>
@@ -2181,7 +2197,7 @@ export const MonitorSocialOverviewPage = () => {
           </Row>
 
           {/* ── Trend by dimension ── */}
-          <Card size="small" title="Tendencia por dimensión" extra={
+          <Card size="small" title="Tendencia por dimensión" styles={{ header: { borderBottom: "1px solid #f0f2f5", paddingBottom: 12 } }} style={{ overflow: "hidden" }} extra={
             <Space wrap>
               <Select size="small" value={trendByDimensionDimension} onChange={(v) => setTrendByDimensionDimension(v)} options={[{label:"Canal",value:"channel"},{label:"Cuenta",value:"account"},{label:"Tipo de post",value:"post_type"},{label:"Campaña",value:"campaign"},{label:"Estrategia",value:"strategy"},{label:"Hashtag",value:"hashtag"}]} style={{ width: 130 }} />
               <Select size="small" value={trendByDimensionMetric} onChange={(v) => setTrendByDimensionMetric(v as TrendByDimensionMetric)} options={metricSelectOptions(TREND_METRICS)} style={{ width: 150 }} />
@@ -2200,7 +2216,7 @@ export const MonitorSocialOverviewPage = () => {
           </Card>
 
           {/* ── Topic breakdown ── */}
-          <Card size="small" title="Distribución por tema" extra={
+          <Card size="small" title="Distribución por tema" styles={{ header: { borderBottom: "1px solid #f0f2f5", paddingBottom: 12 } }} style={{ overflow: "hidden" }} extra={
             <Space wrap>
               <Select size="small" value={topicBreakdownDimension} onChange={(v) => setTopicBreakdownDimension(v)} options={[{label:"Canal",value:"channel"},{label:"Cuenta",value:"account"},{label:"Tipo de post",value:"post_type"},{label:"Campaña",value:"campaign"},{label:"Estrategia",value:"strategy"},{label:"Hashtag",value:"hashtag"}]} style={{ width: 130 }} />
               <Select size="small" value={topicBreakdownMetric} onChange={(v) => setTopicBreakdownMetric(v as TrendByDimensionMetric)} options={metricSelectOptions(TREND_METRICS)} style={{ width: 150 }} />
@@ -2221,7 +2237,7 @@ export const MonitorSocialOverviewPage = () => {
           {/* ── Ranking + Gap ── */}
           <Row gutter={[12, 12]}>
             <Col xs={24} xl={16}>
-              <Card size="small" title="Ranking de cuentas"><AntText type="secondary" style={{ fontSize: 12 }}>{CHART_QUESTION_BY_KEY.ranking}</AntText>
+              <Card size="small" title="Ranking de cuentas" styles={{ header: { borderBottom: "1px solid #f0f2f5", paddingBottom: 12 } }} style={{ overflow: "hidden" }}><AntText type="secondary" style={{ fontSize: 12 }}>{CHART_QUESTION_BY_KEY.ranking}</AntText>
                 <Row gutter={8} style={{ marginTop: 8, marginBottom: 8 }}>
                   <Col span={8}><div style={{ fontSize: 11, fontWeight: 600, color: "#64748b" }}>Métrica barra</div><Select size="small" style={{ width: "100%" }} value={accountBarMetric} onChange={(v) => setAccountBarMetric(v as AccountMetric)} options={metricSelectOptions(ACCOUNT_METRICS)} /></Col>
                   <Col span={8}><div style={{ fontSize: 11, fontWeight: 600, color: "#64748b" }}>Métrica línea</div><Select size="small" style={{ width: "100%" }} value={accountLineMetric} onChange={(v) => setAccountLineMetric(v as AccountMetric)} options={metricSelectOptions(ACCOUNT_METRICS)} /></Col>
@@ -2232,7 +2248,7 @@ export const MonitorSocialOverviewPage = () => {
               </Card>
             </Col>
             <Col xs={24} xl={8}>
-              <Card size="small" title="Brecha ER vs Meta"><AntText type="secondary" style={{ fontSize: 12 }}>{CHART_QUESTION_BY_KEY.gap}</AntText>
+              <Card size="small" title="Brecha ER vs Meta" styles={{ header: { borderBottom: "1px solid #f0f2f5", paddingBottom: 12 } }} style={{ overflow: "hidden" }}><AntText type="secondary" style={{ fontSize: 12 }}>{CHART_QUESTION_BY_KEY.gap}</AntText>
                 <div style={{ height: 320, marginTop: 8 }}>
                   <VisxBarLineChart data={erGapByChannel} xKey="channel" barKey="current_er" lineKey="target_2026_er" barLabel="ER actual" lineLabel="Meta ER 2026" barColor="#e30613" lineColor="#0f766e" formatXTick={(v) => toChannelLabel(v as SocialChannel)} formatLeftTick={(v) => formatAxisPercentNoDecimals(v)} formatRightTick={(v) => formatAxisPercentNoDecimals(v)} formatTooltipValue={(_m, v) => formatAxisPercentNoDecimals(v)} barAxis="left" lineAxis="left" />
                 </div>
@@ -2244,7 +2260,7 @@ export const MonitorSocialOverviewPage = () => {
           {/* ── Scatter + Heatmap ── */}
           <Row gutter={[12, 12]}>
             <Col xs={24} xl={16}>
-              <Card size="small" title="Scatter por métricas" extra={
+              <Card size="small" title="Scatter por métricas" styles={{ header: { borderBottom: "1px solid #f0f2f5", paddingBottom: 12 } }} style={{ overflow: "hidden" }} extra={
                 <Space wrap>
                   <Select size="small" value={scatterDimension} onChange={(v) => setScatterDimension(v)} options={[{label:"Tipo de post",value:"post_type"},{label:"Canal",value:"channel"},{label:"Cuenta",value:"account"},{label:"Campaña",value:"campaign"},{label:"Estrategia",value:"strategy"},{label:"Hashtag",value:"hashtag"}]} style={{ width: 130 }} />
                   <Select size="small" value={scatterXMetric} onChange={(v) => setScatterXMetric(v as ScatterMetric)} options={metricSelectOptions(SCATTER_METRICS)} style={{ width: 140 }} />
@@ -2258,7 +2274,7 @@ export const MonitorSocialOverviewPage = () => {
               </Card>
             </Col>
             <Col xs={24} xl={8}>
-              <Card size="small" title="Heatmap actividad" extra={<Select size="small" value={heatmapMetric} onChange={(v) => setHeatmapMetric(v)} options={[{label:"ER",value:"er"},{label:"Interacciones",value:"engagement_total"},{label:"Impresiones",value:"impressions"},{label:"Reach",value:"reach"},{label:"Clicks",value:"clicks"},{label:"Likes",value:"likes"},{label:"Comments",value:"comments"},{label:"Shares",value:"shares"},{label:"Views",value:"views"},{label:"CTR",value:"ctr"},{label:"ER impresiones",value:"er_impressions"},{label:"ER reach",value:"er_reach"},{label:"View rate",value:"view_rate"}]} style={{ width: 140 }} />}>
+              <Card size="small" title="Heatmap actividad" styles={{ header: { borderBottom: "1px solid #f0f2f5", paddingBottom: 12 } }} style={{ overflow: "hidden" }} extra={<Select size="small" value={heatmapMetric} onChange={(v) => setHeatmapMetric(v)} options={[{label:"ER",value:"er"},{label:"Interacciones",value:"engagement_total"},{label:"Impresiones",value:"impressions"},{label:"Reach",value:"reach"},{label:"Clicks",value:"clicks"},{label:"Likes",value:"likes"},{label:"Comments",value:"comments"},{label:"Shares",value:"shares"},{label:"Views",value:"views"},{label:"CTR",value:"ctr"},{label:"ER impresiones",value:"er_impressions"},{label:"ER reach",value:"er_reach"},{label:"View rate",value:"view_rate"}]} style={{ width: 140 }} />}>
                 <AntText type="secondary" style={{ fontSize: 12 }}>{CHART_QUESTION_BY_KEY.heatmap}</AntText>
                 <div style={{ minHeight: 320, marginTop: 8 }}><Heatmap data={heatmapData} /></div>
               </Card>
@@ -2268,7 +2284,7 @@ export const MonitorSocialOverviewPage = () => {
           {/* ── Breakdown + SOV Pie ── */}
           <Row gutter={[12, 12]}>
             <Col xs={24} xl={16}>
-              <Card size="small" title="Métrica por dimensión" extra={
+              <Card size="small" title="Métrica por dimensión" styles={{ header: { borderBottom: "1px solid #f0f2f5", paddingBottom: 12 } }} style={{ overflow: "hidden" }} extra={
                 <Space wrap>
                   <Select size="small" value={breakdownDimension} onChange={(v) => setBreakdownDimension(v)} options={[{label:"Hashtag",value:"hashtag"},{label:"Término más usado",value:"word"},{label:"Tipo de post",value:"post_type"},{label:"Frecuencia",value:"publish_frequency"},{label:"Día publicación",value:"weekday"}]} style={{ width: 150 }} />
                   <Select size="small" value={breakdownMetric} onChange={(v) => setBreakdownMetric(v as BreakdownMetric)} options={metricSelectOptions(BREAKDOWN_METRICS)} style={{ width: 150 }} />
@@ -2281,7 +2297,7 @@ export const MonitorSocialOverviewPage = () => {
               </Card>
             </Col>
             <Col xs={24} xl={8}>
-              <Card size="small" title="Share por cuenta"><AntText type="secondary" style={{ fontSize: 12 }}>{CHART_QUESTION_BY_KEY.share}</AntText>
+              <Card size="small" title="Share por cuenta" styles={{ header: { borderBottom: "1px solid #f0f2f5", paddingBottom: 12 } }} style={{ overflow: "hidden" }}><AntText type="secondary" style={{ fontSize: 12 }}>{CHART_QUESTION_BY_KEY.share}</AntText>
                 <div style={{ height: 320, marginTop: 8 }}><VisxPieChart data={sovPieData} colors={pieColors} /></div>
               </Card>
             </Col>
@@ -2334,7 +2350,7 @@ export const MonitorSocialOverviewPage = () => {
           <AntText type="secondary" style={{ fontSize: 12 }}>Detección y respuesta con umbrales, hotspots y alertas activas. Serie: {toTimeGranularityLabel(timeGranularity)}.</AntText>
           <Row gutter={[12, 12]} style={{ marginTop: 12 }}>
             <Col xs={24} xl={16}>
-              <Card size="small" title="Tendencia de riesgo vs sentimiento">
+              <Card size="small" title="Tendencia de riesgo vs sentimiento" styles={{ header: { borderBottom: "1px solid #f0f2f5", paddingBottom: 12 } }} style={{ overflow: "hidden" }}>
                 <div style={{ height: 280 }}>
                   <VisxRiskTrendChart data={riskSentimentTrendData} thresholdY={riskData?.thresholds?.risk_threshold ?? 0} />
                 </div>

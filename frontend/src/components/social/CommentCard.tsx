@@ -13,12 +13,28 @@ type Props = {
   onPatch: (commentId: string, payload: { is_spam?: boolean; related_to_post_text?: boolean; sentiment?: "positive" | "negative" | "neutral" | "unknown" }) => void;
 };
 
+const sentimentBorderColor = (sentiment: string): string => {
+  switch (sentiment) {
+    case "negative": return "#f43f5e";
+    case "positive": return "#10b981";
+    case "neutral": return "#38bdf8";
+    default: return "#e7e9ed";
+  }
+};
+
 const CommentCard: React.FC<Props> = ({ comment, canOverride, updating, onPatch }) => {
   return (
-    <Card size="small" style={{ marginBottom: 8 }}>
+    <Card
+      size="small"
+      style={{
+        marginBottom: 8,
+        borderLeft: `3px solid ${sentimentBorderColor(comment.sentiment)}`,
+        ...(comment.is_spam ? { background: "#fffbfb" } : {}),
+      }}
+    >
       {/* Header */}
       <Flex align="center" wrap="wrap" gap={8} style={{ marginBottom: 4 }}>
-        <Text strong style={{ fontSize: 12 }}>{comment.author_name ?? "Autor desconocido"}</Text>
+        <Text strong style={{ fontSize: 13, fontWeight: 600 }}>{comment.author_name ?? "Autor desconocido"}</Text>
         <Text type="secondary" style={{ fontSize: 12 }}>{formatDateTime(comment.published_at)}</Text>
         <SentimentTag sentiment={comment.sentiment} />
         <Tag color={comment.is_spam ? "error" : "default"}>
@@ -31,7 +47,7 @@ const CommentCard: React.FC<Props> = ({ comment, canOverride, updating, onPatch 
       </Flex>
 
       {/* Body */}
-      <Text style={{ fontSize: 13 }}>{comment.text || "(sin texto)"}</Text>
+      <Text style={{ fontSize: 13, lineHeight: 1.65 }}>{comment.text || "(sin texto)"}</Text>
 
       {/* Meta */}
       <Flex align="center" wrap="wrap" gap={8} style={{ marginTop: 8 }}>

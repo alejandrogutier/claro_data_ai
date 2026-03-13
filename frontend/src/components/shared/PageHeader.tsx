@@ -10,7 +10,7 @@ type Props = {
 };
 
 export const PageHeader: React.FC<Props> = ({ title, subtitle, extra }) => (
-  <Flex justify="space-between" align="flex-start" style={{ marginBottom: 20 }}>
+  <Flex justify="space-between" align="flex-start" style={{ marginBottom: 24 }}>
     <div>
       <Title
         level={2}
@@ -18,13 +18,16 @@ export const PageHeader: React.FC<Props> = ({ title, subtitle, extra }) => (
           margin: 0,
           fontFamily: "'Barlow Condensed', sans-serif",
           fontWeight: 700,
-          fontSize: 28,
+          fontSize: 30,
+          letterSpacing: "-0.3px",
+          borderLeft: "4px solid #e30613",
+          paddingLeft: 12,
         }}
       >
         {title}
       </Title>
       {subtitle && (
-        <Paragraph type="secondary" style={{ margin: "4px 0 0" }}>
+        <Paragraph type="secondary" style={{ margin: "6px 0 0", paddingLeft: 16 }}>
           {subtitle}
         </Paragraph>
       )}

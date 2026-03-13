@@ -4,6 +4,7 @@ import type { PostRow } from "./postsTypes";
 import { channelColorStyles, channelIcon, toChannelLabel, truncate, formatShortDate, formatCompact, formatPercent, computeER, erLabel } from "./postsUtils";
 import { SentimentTag } from "../shared/SentimentTag";
 import SentimentBalanceBar from "./SentimentBalanceBar";
+import { CLARO_SHADOWS } from "../../theme/claroTheme";
 
 const { Text, Paragraph, Link } = Typography;
 
@@ -23,9 +24,19 @@ const PostCard: React.FC<Props> = ({ post, onSelect, sentimentCounts }) => {
     <Card
       hoverable
       onClick={() => onSelect(post)}
-      style={{ borderLeft: `4px solid ${colors.accent}`, height: "100%" }}
+      style={{ boxShadow: CLARO_SHADOWS.card, height: "100%" }}
       styles={{ body: { padding: 16 } }}
     >
+      {/* Top accent bar */}
+      <div
+        style={{
+          height: 3,
+          background: `linear-gradient(90deg, ${colors.accent}, ${colors.accent}88)`,
+          borderRadius: "14px 14px 0 0",
+          margin: "-16px -16px 12px -16px",
+        }}
+      />
+
       {/* Header */}
       <Flex align="center" justify="space-between" style={{ marginBottom: 8, fontSize: 12 }}>
         <Flex align="center" gap={6}>
@@ -113,7 +124,7 @@ const PostCard: React.FC<Props> = ({ post, onSelect, sentimentCounts }) => {
       </Flex>
 
       {/* Mini-KPIs */}
-      <Flex justify="space-between" style={{ marginBottom: 8 }}>
+      <Flex justify="space-between" style={{ borderTop: "1px solid #f0f2f5", paddingTop: 10, marginTop: 8 }}>
         <Statistic
           title={post.reach > 0 ? "Reach" : "Impr"}
           value={formatCompact(post.reach > 0 ? post.reach : post.impressions)}
@@ -149,7 +160,14 @@ const PostCard: React.FC<Props> = ({ post, onSelect, sentimentCounts }) => {
         <Link
           href={post.post_url}
           target="_blank"
-          style={{ color: "#b91c1c", fontWeight: 600, fontSize: 12 }}
+          style={{
+            padding: "2px 10px",
+            borderRadius: 999,
+            background: "rgba(227, 6, 19, 0.06)",
+            color: "#b91c1c",
+            fontWeight: 600,
+            fontSize: 11,
+          }}
           onClick={(e) => e.stopPropagation()}
         >
           Ver post &#x2197;

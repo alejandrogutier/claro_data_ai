@@ -20,15 +20,16 @@ const COLORS = {
 
 const barStyle: React.CSSProperties = {
   display: "flex",
-  height: 8,
-  borderRadius: 4,
+  height: 10,
+  borderRadius: 5,
   overflow: "hidden",
   width: "100%",
+  boxShadow: "inset 0 1px 2px rgba(0,0,0,0.06)",
 };
 
 const compactBarStyle: React.CSSProperties = {
   ...barStyle,
-  height: 6,
+  height: 8,
 };
 
 const segmentBase: React.CSSProperties = {
@@ -38,10 +39,11 @@ const segmentBase: React.CSSProperties = {
 
 const dotStyle = (color: string): React.CSSProperties => ({
   display: "inline-block",
-  height: 8,
-  width: 8,
+  height: 10,
+  width: 10,
   borderRadius: "50%",
   backgroundColor: color,
+  boxShadow: "0 1px 2px rgba(0,0,0,0.1)",
 });
 
 const SentimentBalanceBar: React.FC<Props> = ({ positive, neutral, negative, unknown, compact = false, label }) => {
