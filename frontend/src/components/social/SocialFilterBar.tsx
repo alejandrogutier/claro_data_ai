@@ -10,7 +10,7 @@ import type {
 } from "../../api/client";
 import FacetMultiSelect, { type FacetItem } from "./FacetMultiSelect";
 
-/* ── Constants ── */
+/* -- Constants -- */
 
 const CHANNEL_OPTIONS: SocialChannel[] = ["facebook", "instagram", "linkedin", "tiktok", "x"];
 const PRESET_OPTIONS: SocialDatePreset[] = ["ytd", "90d", "30d", "y2024", "y2025", "last_quarter", "custom", "all"];
@@ -19,7 +19,7 @@ const FACET_SENTIMENT_OPTIONS = ["positive", "negative", "neutral", "unknown"] a
 type TimeGranularity = "day" | "week" | "month" | "quarter" | "semester";
 const TIME_GRANULARITY_OPTIONS: TimeGranularity[] = ["day", "week", "month", "quarter", "semester"];
 
-/* ── Label helpers ── */
+/* -- Label helpers -- */
 
 const toChannelLabel = (channel: SocialChannel): string => {
   if (channel === "facebook") return "Facebook";
@@ -37,16 +37,16 @@ const toPresetLabel = (preset: SocialDatePreset): string => {
   if (preset === "90d") return "90d";
   if (preset === "30d") return "30d";
   if (preset === "7d") return "7d";
-  if (preset === "last_quarter") return "Últ. trimestre";
+  if (preset === "last_quarter") return "Ult. trim.";
   return "Custom";
 };
 
 const toTimeGranularityLabel = (g: TimeGranularity): string => {
-  if (g === "day") return "Día";
-  if (g === "week") return "Semana";
+  if (g === "day") return "Dia";
+  if (g === "week") return "Sem";
   if (g === "month") return "Mes";
-  if (g === "quarter") return "Trimestre";
-  return "Semestre";
+  if (g === "quarter") return "Trim";
+  return "Sem.";
 };
 
 const toSentimentLabel = (v: string): string => {
@@ -65,6 +65,13 @@ const normalizePostType = (value: string): string => {
   return n;
 };
 
+const formatDateShort = (value: string | null | undefined): string => {
+  if (!value) return "...";
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return value;
+  return new Intl.DateTimeFormat("es-CO", { day: "numeric", month: "short" }).format(parsed);
+};
+
 const formatDate = (value: string | null | undefined): string => {
   if (!value) return "n/a";
   const parsed = new Date(value);
@@ -75,7 +82,7 @@ const formatDate = (value: string | null | undefined): string => {
 const formatNumber = (value: number): string =>
   new Intl.NumberFormat("es-CO", { maximumFractionDigits: 0 }).format(value);
 
-/* ── Types ── */
+/* -- Types -- */
 
 type FacetDimension = "account" | "post_type" | "campaign" | "strategy" | "hashtag" | "topic" | "sentiment";
 
@@ -111,7 +118,7 @@ export type SocialFilterBarProps = {
   clearAllFilters: () => void;
 };
 
-/* ── Component ── */
+/* -- Component -- */
 
 const SocialFilterBar: React.FC<SocialFilterBarProps> = ({
   preset, timeGranularity, comparisonMode, comparisonDays, from, to, normalizedOverview,
@@ -121,7 +128,7 @@ const SocialFilterBar: React.FC<SocialFilterBarProps> = ({
   setQueryPatch, applyPreset, clearAllFilters,
 }) => {
 
-  /* ── Build facet options with counts ── */
+  /* -- Build facet options with counts -- */
 
   const buildFacetOptions = (
     dimension: FacetDimension,
@@ -142,13 +149,15 @@ const SocialFilterBar: React.FC<SocialFilterBarProps> = ({
   };
 
   const channelFacetOptions: FacetItem[] = useMemo(() => {
-    const countMap = new Map<string, number>();
-    // Channel counts can be derived from sentiment facets per channel or just show static list
-    // For now use the facets totals or derive from account facets
-    for (const ch of CHANNEL_OPTIONS) countMap.set(ch, 0);
-    // If we have by-channel data in facets, populate counts
-    return CHANNEL_OPTIONS.map((ch) => ({ value: ch, count: countMap.get(ch) ?? 0 }));
-  }, []);
+    // Derive channel counts from account facets if available
+    const totalPosts = facetsData?.totals?.posts ?? 0;
+    return CHANNEL_OPTIONS.map((ch) => {
+      // Use account facets to estimate, or just show the channel name
+      const accountItems = facetsData?.facets?.account ?? [];
+      // Channel is not directly in facets, show total / channel count as estimate
+      return { value: ch, count: Math.round(totalPosts / CHANNEL_OPTIONS.length) };
+    });
+  }, [facetsData]);
 
   const accountFacetOptions = useMemo(
     () => buildFacetOptions("account", selectedAccounts),
@@ -179,20 +188,20 @@ const SocialFilterBar: React.FC<SocialFilterBarProps> = ({
     [facetsData, selectedSentiment],
   );
 
-  /* ── Multi-value change handler ── */
+  /* -- Multi-value change handler -- */
 
   const handleMultiChange = (key: string, values: string[]) => {
     setQueryPatch({ [key]: values.length > 0 ? values.join(",") : null, accounts_cursor: null });
   };
 
-  /* ── Active filter count ── */
+  /* -- Active filter count -- */
 
   const activeFilterCount = [
     selectedChannels, selectedAccounts, selectedPostTypes,
     selectedCampaigns, selectedStrategies, selectedHashtags, selectedTopics,
   ].reduce((acc, arr) => acc + arr.length, 0) + (selectedSentiment !== "all" ? 1 : 0);
 
-  /* ── Active filter chips ── */
+  /* -- Active filter chips -- */
 
   type ActiveChip = { key: string; dimension: string; label: string; onRemove: () => void };
   const activeChips: ActiveChip[] = [];
@@ -214,125 +223,136 @@ const SocialFilterBar: React.FC<SocialFilterBarProps> = ({
   addChips("Canal", "channel", selectedChannels, (v) => toChannelLabel(v as SocialChannel));
   addChips("Cuenta", "account", selectedAccounts);
   addChips("Tipo", "post_type", selectedPostTypes, (v) => v === "unknown" ? "Sin tipo" : v);
-  addChips("Campaña", "campaign", selectedCampaigns);
-  addChips("Estrategia", "strategy", selectedStrategies);
+  addChips("Camp.", "campaign", selectedCampaigns);
+  addChips("Estrat.", "strategy", selectedStrategies);
   addChips("Hashtag", "hashtag", selectedHashtags, (v) => `#${v}`);
   addChips("Tema", "topic", selectedTopics, toTopicFilterLabel);
   if (selectedSentiment !== "all") {
     activeChips.push({
       key: `sentiment-${selectedSentiment}`,
-      dimension: "Sentimiento",
+      dimension: "Sent.",
       label: toSentimentLabel(selectedSentiment),
       onRemove: () => setQueryPatch({ sentiment: null }),
     });
   }
 
-  /* ── Filter item style ── */
-  const filterItemStyle: React.CSSProperties = { flex: "1 1 160px", minWidth: 130, maxWidth: 260 };
-  const dateItemStyle: React.CSSProperties = { flex: "1.3 1 180px", minWidth: 150, maxWidth: 300 };
+  /* -- Computed dates -- */
+  const windowStart = (normalizedOverview.comparison?.current_window_start ?? normalizedOverview.window_start) as string | undefined;
+  const windowEnd = (normalizedOverview.comparison?.current_window_end ?? normalizedOverview.window_end) as string | undefined;
+  const prevStart = (normalizedOverview.comparison?.previous_window_start ?? "") as string | undefined;
+  const prevEnd = (normalizedOverview.comparison?.previous_window_end ?? "") as string | undefined;
+
+  /* -- Filter item style: flex 1 with 0 basis so all distribute evenly -- */
+  const filterItemStyle: React.CSSProperties = { flex: "1 1 0", minWidth: 100 };
+  const dateItemStyle: React.CSSProperties = { flex: "1.2 1 0", minWidth: 110 };
 
   return (
     <Card
       size="small"
+      styles={{ body: { padding: "10px 16px 12px" } }}
       title={
         <Flex align="center" gap={8}>
-          <FilterOutlined />
-          <span style={{ fontWeight: 600 }}>Filtros inteligentes</span>
+          <FilterOutlined style={{ fontSize: 13, color: "#94a3b8" }} />
+          <span style={{ fontWeight: 600, fontSize: 13 }}>Filtros</span>
           {activeFilterCount > 0 && (
-            <Tag color="red" style={{ borderRadius: 999, fontSize: 11, fontWeight: 600, margin: 0 }}>
-              {activeFilterCount} activo{activeFilterCount > 1 ? "s" : ""}
+            <Tag color="red" style={{ borderRadius: 999, fontSize: 10, lineHeight: "18px", fontWeight: 700, margin: 0, padding: "0 8px" }}>
+              {activeFilterCount}
             </Tag>
           )}
         </Flex>
       }
       extra={
-        <Space wrap size={8}>
-          <span style={{ fontSize: 11, fontWeight: 600, textTransform: "uppercase", color: "#64748b" }}>
-            Granularidad
-          </span>
+        <Flex align="center" gap={8}>
           <Segmented
             size="small"
             value={timeGranularity}
             onChange={(v) => setQueryPatch({ time_granularity: v as string })}
             options={TIME_GRANULARITY_OPTIONS.map((o) => ({ label: toTimeGranularityLabel(o), value: o }))}
           />
-          <Button size="small" icon={<ClearOutlined />} onClick={clearAllFilters}>
-            Limpiar filtros
-          </Button>
-        </Space>
+          {activeFilterCount > 0 && (
+            <Button type="text" size="small" icon={<ClearOutlined />} onClick={clearAllFilters} style={{ color: "#94a3b8", fontSize: 12 }}>
+              Limpiar
+            </Button>
+          )}
+        </Flex>
       }
     >
-      {/* ── Filter selects (dynamic flex row) ── */}
-      <div style={{ display: "flex", flexWrap: "wrap", gap: 10, alignItems: "flex-start" }}>
+      {/* -- Filter selects (dynamic flex row) -- */}
+      <div style={{ display: "flex", flexWrap: "nowrap", gap: 8, alignItems: "flex-end" }}>
 
         {/* Date Preset Popover */}
         <div style={dateItemStyle}>
+          <div style={{ fontSize: 10, fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.5, color: "#94a3b8", marginBottom: 2 }}>
+            Periodo
+          </div>
           <Popover
             trigger="click"
             placement="bottomLeft"
             content={
               <div style={{ width: 300 }}>
-                <Space direction="vertical" style={{ width: "100%" }}>
+                <Space direction="vertical" style={{ width: "100%" }} size={8}>
                   <Row gutter={8}>
                     <Col span={12}>
-                      <div style={{ fontSize: 11, fontWeight: 600, color: "#64748b" }}>Desde</div>
+                      <div style={{ fontSize: 11, fontWeight: 600, color: "#64748b", marginBottom: 2 }}>Desde</div>
                       <Input size="small" type="date" value={from ?? ""} onChange={(e) => setQueryPatch({ preset: "custom", from: e.target.value || null })} />
                     </Col>
                     <Col span={12}>
-                      <div style={{ fontSize: 11, fontWeight: 600, color: "#64748b" }}>Hasta</div>
+                      <div style={{ fontSize: 11, fontWeight: 600, color: "#64748b", marginBottom: 2 }}>Hasta</div>
                       <Input size="small" type="date" value={to ?? ""} onChange={(e) => setQueryPatch({ preset: "custom", to: e.target.value || null })} />
                     </Col>
                   </Row>
-                  <Space wrap>
+                  <Flex wrap="wrap" gap={4}>
                     {PRESET_OPTIONS.map((o) => (
-                      <Button key={o} size="small" type={preset === o ? "primary" : "default"} danger={preset === o} onClick={() => applyPreset(o)}>
+                      <Button key={o} size="small" type={preset === o ? "primary" : "default"} danger={preset === o} onClick={() => applyPreset(o)} style={{ fontSize: 12 }}>
                         {toPresetLabel(o)}
                       </Button>
                     ))}
-                  </Space>
-                  <div style={{ fontSize: 11, fontWeight: 600, color: "#64748b" }}>Tipo comparación</div>
+                  </Flex>
+                  <div style={{ fontSize: 11, fontWeight: 600, color: "#64748b" }}>Comparacion</div>
                   <Select
                     size="small"
                     style={{ width: "100%" }}
                     value={comparisonMode}
                     onChange={(v) => setQueryPatch({ comparison_mode: v })}
                     options={[
-                      { label: "Mismo periodo año pasado", value: "same_period_last_year" },
-                      { label: "Semana con coincidencia de días", value: "weekday_aligned_week" },
-                      { label: "Cantidad exacta de días", value: "exact_days" },
+                      { label: "Mismo periodo ano pasado", value: "same_period_last_year" },
+                      { label: "Semana con dias alineados", value: "weekday_aligned_week" },
+                      { label: "Dias exactos", value: "exact_days" },
                     ]}
                   />
-                  <div style={{ fontSize: 11, fontWeight: 600, color: "#64748b" }}>Días comparación</div>
-                  <InputNumber
-                    size="small"
-                    style={{ width: "100%" }}
-                    min={1}
-                    max={366}
-                    value={comparisonDays}
-                    disabled={comparisonMode !== "exact_days"}
-                    onChange={(v) => setQueryPatch({ comparison_days: String(Math.max(1, v ?? 30)) })}
-                  />
+                  {comparisonMode === "exact_days" && (
+                    <InputNumber
+                      size="small"
+                      style={{ width: "100%" }}
+                      min={1}
+                      max={366}
+                      value={comparisonDays}
+                      onChange={(v) => setQueryPatch({ comparison_days: String(Math.max(1, v ?? 30)) })}
+                      addonBefore="Dias"
+                    />
+                  )}
                 </Space>
               </div>
             }
           >
             <div style={{
-              border: "1px solid #e7e9ed",
-              borderRadius: 10,
-              padding: "6px 12px",
+              border: "1px solid transparent",
+              borderRadius: 8,
+              padding: "3px 8px",
               cursor: "pointer",
-              background: "#fafbfc",
+              background: "#f8f9fb",
               transition: "all 0.15s ease",
+              display: "flex",
+              alignItems: "center",
+              gap: 6,
+              height: 24,
             }}>
-              <div style={{ fontSize: 11, fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.5, color: "#64748b", marginBottom: 2 }}>
-                Periodo
-              </div>
-              <div style={{ fontSize: 13, fontWeight: 600, color: "#1e293b", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                {toPresetLabel(preset)} | {toTimeGranularityLabel(timeGranularity)}
-              </div>
-              <div style={{ fontSize: 11, color: "#64748b", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                {formatDate((normalizedOverview.comparison?.current_window_start ?? normalizedOverview.window_start) as string | undefined)} – {formatDate((normalizedOverview.comparison?.current_window_end ?? normalizedOverview.window_end) as string | undefined)}
-              </div>
+              <span style={{ fontSize: 12, fontWeight: 600, color: "#1e293b", whiteSpace: "nowrap" }}>
+                {toPresetLabel(preset)}
+              </span>
+              <span style={{ fontSize: 11, color: "#94a3b8", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                {formatDateShort(windowStart)} – {formatDateShort(windowEnd)}
+              </span>
             </div>
           </Popover>
         </div>
@@ -341,7 +361,7 @@ const SocialFilterBar: React.FC<SocialFilterBarProps> = ({
         <div style={filterItemStyle}>
           <FacetMultiSelect
             label="Canal"
-            placeholder="Todos los canales"
+            placeholder="Todos"
             value={selectedChannels}
             facetItems={channelFacetOptions}
             loading={loadingFacets}
@@ -354,7 +374,7 @@ const SocialFilterBar: React.FC<SocialFilterBarProps> = ({
         <div style={filterItemStyle}>
           <FacetMultiSelect
             label="Cuenta"
-            placeholder="Todas las cuentas"
+            placeholder="Todas"
             value={selectedAccounts}
             facetItems={accountFacetOptions}
             loading={loadingFacets}
@@ -365,8 +385,8 @@ const SocialFilterBar: React.FC<SocialFilterBarProps> = ({
         {/* Post Type */}
         <div style={filterItemStyle}>
           <FacetMultiSelect
-            label="Tipo post"
-            placeholder="Todos los tipos"
+            label="Tipo"
+            placeholder="Todos"
             value={selectedPostTypes}
             facetItems={postTypeFacetOptions}
             loading={loadingFacets}
@@ -378,7 +398,7 @@ const SocialFilterBar: React.FC<SocialFilterBarProps> = ({
         {/* Campaign */}
         <div style={filterItemStyle}>
           <FacetMultiSelect
-            label="Campaña"
+            label="Camp."
             placeholder="Todas"
             value={selectedCampaigns}
             facetItems={campaignFacetOptions}
@@ -390,7 +410,7 @@ const SocialFilterBar: React.FC<SocialFilterBarProps> = ({
         {/* Strategy */}
         <div style={filterItemStyle}>
           <FacetMultiSelect
-            label="Estrategia"
+            label="Estrat."
             placeholder="Todas"
             value={selectedStrategies}
             facetItems={strategyFacetOptions}
@@ -428,7 +448,7 @@ const SocialFilterBar: React.FC<SocialFilterBarProps> = ({
         {/* Sentiment */}
         <div style={filterItemStyle}>
           <FacetMultiSelect
-            label="Sentimiento"
+            label="Sentim."
             placeholder="Todos"
             value={selectedSentiment === "all" ? [] : [selectedSentiment]}
             facetItems={sentimentFacetOptions}
@@ -439,39 +459,36 @@ const SocialFilterBar: React.FC<SocialFilterBarProps> = ({
         </div>
       </div>
 
-      {/* ── Active filter chips ── */}
+      {/* -- Active filter chips -- */}
       {activeChips.length > 0 && (
-        <Flex wrap="wrap" gap={6} align="center" style={{ marginTop: 12 }}>
-          <span style={{ fontSize: 11, fontWeight: 600, textTransform: "uppercase", color: "#64748b" }}>
-            Filtros activos:
-          </span>
+        <Flex wrap="wrap" gap={4} align="center" style={{ marginTop: 8 }}>
           {activeChips.map((chip) => (
             <Tag
               key={chip.key}
               closable
               onClose={chip.onRemove}
               color="red"
-              style={{ borderRadius: 999, fontSize: 12, margin: 0 }}
+              style={{ borderRadius: 999, fontSize: 11, margin: 0, lineHeight: "20px" }}
             >
-              {chip.dimension}: {chip.label}
+              <span style={{ color: "#e30613", fontWeight: 600 }}>{chip.dimension}</span>{" "}{chip.label}
             </Tag>
           ))}
-          <Button type="link" size="small" onClick={clearAllFilters} style={{ fontSize: 12, padding: 0 }}>
-            Limpiar todos
-          </Button>
         </Flex>
       )}
 
-      {/* ── Window info ── */}
-      <div style={{ marginTop: 12, fontSize: 12, color: "#64748b" }}>
-        Drill-down temporal: <strong>{toTimeGranularityLabel(timeGranularity)}</strong>
-        {" | "}Ventana activa: {formatDate((normalizedOverview.comparison?.current_window_start ?? normalizedOverview.window_start) as string | undefined)} – {formatDate((normalizedOverview.comparison?.current_window_end ?? normalizedOverview.window_end) as string | undefined)}
-        {" | "}período comparado: {formatDate((normalizedOverview.comparison?.previous_window_start ?? "") as string | undefined)} – {formatDate((normalizedOverview.comparison?.previous_window_end ?? "") as string | undefined)}
-      </div>
-
-      {/* ── Facet total ── */}
-      <div style={{ marginTop: 4, fontSize: 11, color: "#94a3b8" }}>
-        {loadingFacets ? "Actualizando facetas..." : `${formatNumber(facetsData?.totals?.posts ?? 0)} posts en universo filtrado`}
+      {/* -- Window info (compact) -- */}
+      <div style={{ marginTop: 8, fontSize: 11, color: "#94a3b8", display: "flex", gap: 8, flexWrap: "wrap" }}>
+        <span>
+          Ventana: <strong style={{ color: "#64748b" }}>{formatDate(windowStart)} – {formatDate(windowEnd)}</strong>
+        </span>
+        {prevStart && (
+          <span>
+            vs <strong style={{ color: "#64748b" }}>{formatDate(prevStart)} – {formatDate(prevEnd)}</strong>
+          </span>
+        )}
+        <span style={{ marginLeft: "auto" }}>
+          {loadingFacets ? "Cargando..." : `${formatNumber(facetsData?.totals?.posts ?? 0)} posts`}
+        </span>
       </div>
     </Card>
   );

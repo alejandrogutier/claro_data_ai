@@ -42,12 +42,12 @@ const FacetMultiSelect: React.FC<FacetMultiSelectProps> = ({
   return (
     <div>
       <div style={{
-        fontSize: 11,
+        fontSize: 10,
         fontWeight: 600,
         textTransform: "uppercase",
         letterSpacing: 0.5,
-        color: "#64748b",
-        marginBottom: 4,
+        color: "#94a3b8",
+        marginBottom: 2,
         whiteSpace: "nowrap",
         overflow: "hidden",
         textOverflow: "ellipsis",
@@ -70,20 +70,23 @@ const FacetMultiSelect: React.FC<FacetMultiSelectProps> = ({
         )}
         optionFilterProp="searchLabel"
         popupMatchSelectWidth={false}
-        dropdownStyle={{ minWidth: 280 }}
+        dropdownStyle={{ minWidth: 260 }}
         loading={loading}
         notFoundContent={loading ? "Cargando..." : "Sin resultados"}
         variant="filled"
-        tagRender={({ label: tagContent, closable, onClose }) => (
-          <Tag
-            closable={closable}
-            onClose={onClose}
-            color="red"
-            style={{ borderRadius: 999, fontSize: 11, margin: "2px 2px 2px 0", maxWidth: 120, overflow: "hidden", textOverflow: "ellipsis" }}
-          >
-            {typeof tagContent === "string" ? tagContent : ""}
-          </Tag>
-        )}
+        tagRender={({ value: tagValue, closable, onClose }) => {
+          const displayText = toLabel ? toLabel(tagValue as string) : (tagValue as string);
+          return (
+            <Tag
+              closable={closable}
+              onClose={onClose}
+              color="red"
+              style={{ borderRadius: 999, fontSize: 10, lineHeight: "18px", margin: "1px 2px 1px 0", maxWidth: 100, overflow: "hidden", textOverflow: "ellipsis" }}
+            >
+              {displayText}
+            </Tag>
+          );
+        }}
       />
     </div>
   );
