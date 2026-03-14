@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState, useCallback, type MouseEvent } from "react";
 import { useSearchParams } from "react-router-dom";
 import {
-  Card, Row, Col, Tabs, Select, Input, InputNumber, Button, Alert, Spin,
+  Card, Row, Col, Tabs, Select, Input, InputNumber, Button, Spin,
   Empty, Table, Tag, Tooltip as AntTooltip, Descriptions, Typography, Checkbox, Space, Flex,
   notification
 } from "antd";
@@ -197,30 +197,12 @@ const BREAKDOWN_METRICS: BreakdownMetric[] = [
   "impressions_total", "reach_total", "clicks_total", "likes_total", "comments_total",
   "shares_total", "views_total", "posts"
 ];
-const SECONDARY_KPI_METRICS: SecondaryKpiMetric[] = [
-  "impressions_total", "reach_total", "clicks_total", "likes_total", "comments_total",
-  "shares_total", "views_total", "ctr", "er_impressions", "er_reach", "view_rate",
-  "likes_share", "comments_share", "shares_share"
-];
+/* SECONDARY_KPI_METRICS kept for reference — active list is SECONDARY_KPI_FLAT below */
 
-/* ── Secondary KPI groups with icons ── */
-type SecondaryKpiGroup = { title: string; color: string; metrics: SecondaryKpiMetric[] };
-const SECONDARY_KPI_GROUPS: SecondaryKpiGroup[] = [
-  {
-    title: "Volumen",
-    color: "#2563eb",
-    metrics: ["impressions_total", "reach_total", "clicks_total", "likes_total", "comments_total", "shares_total", "views_total"],
-  },
-  {
-    title: "Tasas de eficiencia",
-    color: "#0f766e",
-    metrics: ["ctr", "er_impressions", "er_reach", "view_rate"],
-  },
-  {
-    title: "Mix de interacciones",
-    color: "#7c3aed",
-    metrics: ["likes_share", "comments_share", "shares_share"],
-  },
+/* ── Secondary KPI flat list (no group headers, no mix de interacciones, no er_impressions/er_reach) ── */
+const SECONDARY_KPI_FLAT: SecondaryKpiMetric[] = [
+  "impressions_total", "reach_total", "clicks_total", "likes_total", "comments_total", "shares_total", "views_total",
+  "ctr", "view_rate",
 ];
 
 const SECONDARY_KPI_ICONS: Partial<Record<string, React.ReactNode>> = {
@@ -1433,7 +1415,7 @@ export const MonitorSocialOverviewPage = () => {
 
   const role = session?.role ?? "Viewer";
   const canRefresh = role === "Admin" || role === "Analyst";
-  const canExport = role === "Admin" || role === "Analyst";
+  const canExport = true; // Export visible for all profiles
   const canOverrideComments = role === "Admin" || role === "Analyst";
 
   const tab = useMemo(() => parseTab(searchParams.get("tab")), [searchParams]);
@@ -1857,18 +1839,33 @@ export const MonitorSocialOverviewPage = () => {
     if (riskData?.stale_data) return "stale_data"; return "ready";
   }, [loading, uiError, error, normalizedOverview, posts.length, riskData?.stale_data]);
 
-  /* Toast notification for stale_data — shown once per browser session */
+  /* Toast notifications for all data statuses — each shown once per browser session */
   useEffect(() => {
-    if (dataStatus === "stale_data" && !sessionStorage.getItem("social_stale_toast_shown")) {
-      sessionStorage.setItem("social_stale_toast_shown", "1");
-      notification.warning({
-        message: "Datos no actualizados",
-        description: "La última ETL está fuera del umbral de frescura configurado.",
-        placement: "topRight",
-        duration: 6,
-      });
+    const toastKey = `social_toast_${dataStatus}`;
+    if (dataStatus === "ready" || dataStatus === "loading") return;
+    if (sessionStorage.getItem(toastKey)) return;
+    sessionStorage.setItem(toastKey, "1");
+
+    const toasts: Record<string, { type: "info" | "warning" | "error"; message: string; description: string }> = {
+      stale_data: { type: "warning", message: "Datos no actualizados", description: "La última ETL está fuera del umbral de frescura configurado." },
+      partial_data: { type: "warning", message: "Datos parciales", description: "Hay clasificación pendiente o muestra insuficiente para algún indicador." },
+      recon_warning: { type: "warning", message: "Reconciliación con deltas", description: "La reconciliación S3-DB tiene diferencias detectadas." },
+      empty: { type: "info", message: "Sin datos", description: "No se encontraron datos para la combinación de filtros seleccionada." },
+      permission_denied: { type: "error", message: "Permisos insuficientes", description: "No tienes permisos para una o más consultas de Social Analytics." },
+      error: { type: "error", message: "Error al cargar datos", description: error ?? "No fue posible completar la solicitud." },
+    };
+    const toast = toasts[dataStatus];
+    if (toast) {
+      notification[toast.type]({ message: toast.message, description: toast.description, placement: "topRight", duration: 6 });
     }
-  }, [dataStatus]);
+  }, [dataStatus, error]);
+
+  /* Toast for pending run */
+  useEffect(() => {
+    if (pendingRunId) {
+      notification.info({ message: "ETL en progreso", description: `Corrida manual: ${pendingRunId}`, placement: "topRight", duration: 8, key: "pending_run" });
+    }
+  }, [pendingRunId]);
 
   /* ── Chart data derivations ── */
   const topAccountsDual = useMemo(() => [...(accountsData?.items ?? [])].sort((a, b) => Number(b[accountBarMetric]) - Number(a[accountBarMetric])).slice(0, 10).map((item) => ({
@@ -2017,7 +2014,7 @@ export const MonitorSocialOverviewPage = () => {
     ];
   }, [normalizedOverview, targetErGlobal, overview]);
 
-  const secondaryKpis = useMemo(() => SECONDARY_KPI_METRICS.map((metric) => {
+  const secondaryKpis = useMemo(() => SECONDARY_KPI_FLAT.map((metric) => {
     const current = Number(normalizedOverview.kpis?.[metric] ?? 0);
     const previous = Number(normalizedOverview.previous_period?.[metric] ?? 0);
     const delta = current - previous;
@@ -2068,7 +2065,6 @@ export const MonitorSocialOverviewPage = () => {
         subtitle="Dashboard comparativo 2026 vs 2025 con metas ER por canal y filtros inteligentes."
         extra={
           <Space wrap>
-            <Tag color="red" style={{ fontWeight: 600, textTransform: "uppercase", letterSpacing: 1 }}>No oficial</Tag>
             <Button icon={<ReloadOutlined />} onClick={() => setReloadVersion((c) => c + 1)} disabled={loading}>Refrescar vista</Button>
             <Button onClick={() => void triggerRun()} disabled={!canRefresh || refreshingRun} loading={refreshingRun}>Refresh manual ETL</Button>
             <Button icon={<DownloadOutlined />} onClick={() => void exportFilteredCsv()} disabled={!canExport || exportingCsv} loading={exportingCsv}>Exportar CSV</Button>
@@ -2077,14 +2073,7 @@ export const MonitorSocialOverviewPage = () => {
         }
       />
 
-      {role === "Viewer" && <Alert type="info" title="Rol Viewer: lectura habilitada." showIcon />}
-      {pendingRunId && <Alert type="info" title={`Corrida manual en progreso: ${pendingRunId}`} showIcon />}
-      {error && <Alert type="error" title={error} showIcon closable />}
-      {dataStatus === "permission_denied" && <Alert type="error" title="Estado permission_denied: no tienes permisos para una o más consultas de Social Analytics." showIcon />}
-      {/* stale_data: shown as toast notification (once per session) */}
-      {dataStatus === "partial_data" && <Alert type="warning" title="Estado partial_data: hay clasificación pendiente o muestra insuficiente." showIcon />}
-      {dataStatus === "recon_warning" && <Alert type="warning" title="Estado recon_warning: la reconciliación S3-DB tiene deltas." showIcon />}
-      {dataStatus === "empty" && <Alert type="info" title="Estado empty: no hay datos para los filtros seleccionados." showIcon />}
+      {/* All status notifications are shown as toasts via useEffect below */}
 
       {/* ── Filters ── */}
       <SocialFilterBar
@@ -2113,8 +2102,16 @@ export const MonitorSocialOverviewPage = () => {
       {/* ── Tabs ── */}
       <Tabs activeKey={tab} onChange={(key) => setQueryPatch({ tab: key })} items={tabItems} />
 
+      {/* ── Loading overlay ── */}
+      {loading && <Spin size="large" style={{ display: "block", margin: "60px auto" }} />}
+
+      {/* ── Error / empty fallback ── */}
+      {!loading && (dataStatus === "error" || dataStatus === "permission_denied") && (
+        <Empty description={error ?? "No fue posible cargar los datos. Intenta refrescar la página."} style={{ margin: "60px auto" }} />
+      )}
+
       {/* ═══════ SUMMARY TAB ═══════ */}
-      {tab === "summary" && (
+      {!loading && dataStatus !== "error" && dataStatus !== "permission_denied" && tab === "summary" && (
         <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
           {/* ── Primary KPIs ── */}
           <Row gutter={[16, 16]}>
@@ -2134,35 +2131,22 @@ export const MonitorSocialOverviewPage = () => {
             ))}
           </Row>
 
-          {/* ── Secondary KPIs grouped ── */}
-          {SECONDARY_KPI_GROUPS.map((group) => {
-            const groupKpis = secondaryKpis.filter((k) => group.metrics.includes(k.metric as SecondaryKpiMetric));
-            if (groupKpis.length === 0) return null;
-            return (
-              <div key={group.title}>
-                <Flex align="center" gap={8} style={{ marginBottom: 10 }}>
-                  <div style={{ width: 3, height: 16, borderRadius: 2, background: group.color }} />
-                  <span style={{ fontSize: 12, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.5px", color: group.color }}>{group.title}</span>
-                  <div style={{ flex: 1, height: 1, background: `linear-gradient(90deg, ${group.color}22, transparent)` }} />
-                </Flex>
-                <Row gutter={[12, 12]}>
-                  {groupKpis.map((item) => (
-                    <Col key={item.metric} xs={12} sm={8} lg={6} xl={group.metrics.length <= 4 ? 6 : 3}>
-                      <SecondaryKpiCard
-                        label={item.label}
-                        value={item.value}
-                        delta={item.delta}
-                        deltaLabel={item.deltaLabel}
-                        icon={SECONDARY_KPI_ICONS[item.metric]}
-                        accentColor={group.color}
-                        info={SECONDARY_KPI_INFO[item.metric]}
-                      />
-                    </Col>
-                  ))}
-                </Row>
-              </div>
-            );
-          })}
+          {/* ── Secondary KPIs (flat grid, no category headers) ── */}
+          <Row gutter={[12, 12]}>
+            {secondaryKpis.map((item) => (
+              <Col key={item.metric} xs={12} sm={8} lg={6} xl={3}>
+                <SecondaryKpiCard
+                  label={item.label}
+                  value={item.value}
+                  delta={item.delta}
+                  deltaLabel={item.deltaLabel}
+                  icon={SECONDARY_KPI_ICONS[item.metric]}
+                  accentColor="#475569"
+                  info={SECONDARY_KPI_INFO[item.metric]}
+                />
+              </Col>
+            ))}
+          </Row>
 
           {/* ── Trend + Mix ── */}
           <Row gutter={[12, 12]}>
@@ -2200,7 +2184,7 @@ export const MonitorSocialOverviewPage = () => {
             </Space>
           }>
             <AntText type="secondary" style={{ fontSize: 12 }}>{CHART_QUESTION_BY_KEY.trend_by_dimension}</AntText>
-            {trendByDimensionError && <Alert type="warning" title={trendByDimensionError} style={{ marginTop: 8, marginBottom: 8 }} />}
+            {trendByDimensionError && <AntText type="warning" style={{ display: "block", fontSize: 12, marginTop: 8, marginBottom: 8 }}>{trendByDimensionError}</AntText>}
             {loadingTrendByDimension && <Spin style={{ display: "block", margin: "40px auto" }} />}
             {!loadingTrendByDimension && trendByDimensionSeries.length === 0 && <Empty description={`Sin datos para ${toScatterDimensionLabel(trendByDimensionDimension)} con los filtros activos.`} />}
             {!loadingTrendByDimension && trendByDimensionVisibleSeries.length > 0 && (
@@ -2219,7 +2203,7 @@ export const MonitorSocialOverviewPage = () => {
             </Space>
           }>
             <AntText type="secondary" style={{ fontSize: 12 }}>{CHART_QUESTION_BY_KEY.topic_breakdown}</AntText>
-            {topicBreakdownError && <Alert type="warning" title={topicBreakdownError} style={{ marginTop: 8 }} />}
+            {topicBreakdownError && <AntText type="warning" style={{ display: "block", fontSize: 12, marginTop: 8 }}>{topicBreakdownError}</AntText>}
             {loadingTopicBreakdown && <Spin style={{ display: "block", margin: "40px auto" }} />}
             {!loadingTopicBreakdown && topicBreakdownChartData.length === 0 && <Empty description="Sin temas clasificados para los filtros activos." />}
             {!loadingTopicBreakdown && topicBreakdownChartData.length > 0 && (
@@ -2247,7 +2231,7 @@ export const MonitorSocialOverviewPage = () => {
                 <div style={{ height: 320, marginTop: 8 }}>
                   <VisxBarLineChart data={erGapByChannel} xKey="channel" barKey="current_er" lineKey="target_2026_er" barLabel="ER actual" lineLabel="Meta ER 2026" barColor="#e30613" lineColor="#0f766e" formatXTick={(v) => toChannelLabel(v as SocialChannel)} formatLeftTick={(v) => formatAxisPercentNoDecimals(v)} formatRightTick={(v) => formatAxisPercentNoDecimals(v)} formatTooltipValue={(_m, v) => formatAxisPercentNoDecimals(v)} barAxis="left" lineAxis="left" />
                 </div>
-                {!hasVisibleTargetByChannel && <Alert type="warning" title="No hay metas ER válidas (0/null) para los filtros activos." style={{ marginTop: 8 }} />}
+                {!hasVisibleTargetByChannel && <AntText type="secondary" style={{ display: "block", fontSize: 12, marginTop: 8 }}>No hay metas ER válidas para los filtros activos.</AntText>}
               </Card>
             </Col>
           </Row>
@@ -2301,7 +2285,7 @@ export const MonitorSocialOverviewPage = () => {
       )}
 
       {/* ═══════ ACCOUNTS TAB ═══════ */}
-      {tab === "accounts" && (
+      {!loading && dataStatus !== "error" && dataStatus !== "permission_denied" && tab === "accounts" && (
         <Card size="small" title="Cuentas" extra={
           <Space wrap>
             <span style={{ fontSize: 12, fontWeight: 600, color: "#64748b" }}>Orden:</span>
@@ -2329,12 +2313,12 @@ export const MonitorSocialOverviewPage = () => {
       )}
 
       {/* ═══════ POSTS TAB ═══════ */}
-      {tab === "posts" && (
+      {!loading && dataStatus !== "error" && dataStatus !== "permission_denied" && tab === "posts" && (
         <PostsTab posts={posts} loadingPosts={loadingPosts} postsHasNext={postsHasNext} loadingMorePosts={loadingMorePosts} postsSort={postsSort} onSortChange={(sort) => setQueryPatch({ posts_sort: sort })} onLoadMore={() => void loadMorePosts()} canOverrideComments={canOverrideComments} client={client} onError={applyRequestError} activeChannels={selectedChannels} onToggleChannel={(ch) => toggleMultiValue("channel", selectedChannels, ch)} />
       )}
 
       {/* ═══════ RISK TAB ═══════ */}
-      {tab === "risk" && (
+      {!loading && dataStatus !== "error" && dataStatus !== "permission_denied" && tab === "risk" && (
         <Card size="small" title="Riesgo" extra={
           <Space>
             <Tag color={riskData?.stale_data ? "orange" : "green"}>{riskData?.stale_data ? "stale_data" : "fresh_data"}</Tag>
