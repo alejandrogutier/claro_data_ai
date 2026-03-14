@@ -1,12 +1,11 @@
 import React, { useEffect, useMemo, useRef, useState, useCallback, type MouseEvent } from "react";
 import { useSearchParams } from "react-router-dom";
 import {
-  Card, Row, Col, Tabs, Segmented, Select, Input, InputNumber, Button, Alert, Spin,
-  Empty, Table, Tag, Tooltip as AntTooltip, Popover, Descriptions, Typography, Checkbox, Space, Flex
+  Card, Row, Col, Tabs, Select, Input, InputNumber, Button, Alert, Spin,
+  Empty, Table, Tag, Tooltip as AntTooltip, Descriptions, Typography, Checkbox, Space, Flex
 } from "antd";
 import {
   ReloadOutlined, DownloadOutlined, FileExcelOutlined, InfoCircleOutlined,
-  SearchOutlined, ClearOutlined, FilterOutlined,
   DashboardOutlined, TeamOutlined, FileTextOutlined, WarningOutlined, CloudSyncOutlined, BookOutlined,
   EyeOutlined, UsergroupAddOutlined, LinkOutlined, LikeOutlined, CommentOutlined,
   ShareAltOutlined, PlayCircleOutlined, PercentageOutlined, RiseOutlined,
@@ -58,6 +57,7 @@ import { PageHeader } from "../components/shared/PageHeader";
 import { KpiCard } from "../components/shared/KpiCard";
 import SecondaryKpiCard from "../components/shared/SecondaryKpiCard";
 import { SentimentTag } from "../components/shared/SentimentTag";
+import SocialFilterBar from "../components/social/SocialFilterBar";
 import { StatusTag } from "../components/shared/StatusTag";
 import { SeverityTag } from "../components/shared/SeverityTag";
 
@@ -1351,64 +1351,6 @@ const VisxRiskTrendChart = ({ data, thresholdY }: VisxRiskTrendChartProps) => {
   );
 };
 
-/* ────────────────────────────────────────────────────────
-   SmartMultiSelect (using Popover instead of <details>)
-   ──────────────────────────────────────────────────────── */
-type SmartMultiSelectProps = {
-  label: string;
-  summary: string;
-  secondary: string;
-  options: string[];
-  selected: string[];
-  search: string;
-  placeholder: string;
-  onSearch: (value: string) => void;
-  onToggle: (value: string) => void;
-  onClear: () => void;
-  toLabel?: (value: string) => string;
-};
-
-const SmartMultiSelect = ({ label, summary, secondary, options, selected, search, placeholder, onSearch, onToggle, onClear, toLabel }: SmartMultiSelectProps) => (
-  <Popover
-    trigger="click"
-    placement="bottomLeft"
-    content={
-      <div style={{ width: 280 }}>
-        <Input size="small" value={search} onChange={(e) => onSearch(e.target.value)} placeholder={placeholder} prefix={<SearchOutlined />} allowClear />
-        <div style={{ marginTop: 8, display: "flex", flexWrap: "wrap", gap: 4 }}>
-          {selected.length > 0 ? selected.map((item) => (
-            <Tag key={item} color="red">{toLabel ? toLabel(item) : item}</Tag>
-          )) : <AntText type="secondary" style={{ fontSize: 12 }}>Sin selección</AntText>}
-        </div>
-        <div style={{ marginTop: 8, maxHeight: 200, overflow: "auto", border: "1px solid #f0f0f0", borderRadius: 6, padding: 4 }}>
-          {options.length === 0 ? <AntText type="secondary" style={{ fontSize: 12, padding: 8 }}>Sin resultados.</AntText> : null}
-          {options.map((option) => {
-            const checked = selected.includes(option);
-            return (
-              <div
-                key={option}
-                onClick={() => onToggle(option)}
-                style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "4px 8px", borderRadius: 4, cursor: "pointer", background: checked ? "#fff1f2" : "transparent", color: checked ? "#be123c" : "#334155", fontSize: 13 }}
-              >
-                <span>{toLabel ? toLabel(option) : option}</span>
-                <span style={{ fontSize: 11 }}>{checked ? "✓" : "+"}</span>
-              </div>
-            );
-          })}
-        </div>
-        <div style={{ marginTop: 8, textAlign: "right" }}>
-          <Button size="small" onClick={onClear} icon={<ClearOutlined />}>Limpiar</Button>
-        </div>
-      </div>
-    }
-  >
-    <Card size="small" hoverable style={{ cursor: "pointer", minWidth: 0 }}>
-      <div style={{ fontSize: 11, fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.5, color: "#64748b" }}>{label}</div>
-      <div style={{ fontSize: 13, fontWeight: 600, color: "#1e293b", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{summary}</div>
-      <div style={{ fontSize: 11, color: "#64748b", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{secondary}</div>
-    </Card>
-  </Popover>
-);
 
 /* ────────────────────────────────────────────────────────
    Heatmap component
@@ -1590,13 +1532,6 @@ export const MonitorSocialOverviewPage = () => {
   const [trendByDimensionScaleMode, setTrendByDimensionScaleMode] = useState<ScaleMode>("auto");
   const [breakdownScaleMode, setBreakdownScaleMode] = useState<ScaleMode>("auto");
 
-  const [channelSearch, setChannelSearch] = useState("");
-  const [accountSearch, setAccountSearch] = useState("");
-  const [postTypeSearch, setPostTypeSearch] = useState("");
-  const [campaignSearch, setCampaignSearch] = useState("");
-  const [strategySearch, setStrategySearch] = useState("");
-  const [hashtagSearch, setHashtagSearch] = useState("");
-  const [topicSearch, setTopicSearch] = useState("");
   const [minPostsInput, setMinPostsInput] = useState(String(minPosts));
   const [minExposureInput, setMinExposureInput] = useState(String(minExposure));
 
@@ -1910,24 +1845,8 @@ export const MonitorSocialOverviewPage = () => {
     riesgo_activo: Number(item.riesgo_activo ?? 0), sov_interno: Number(item.sov_interno ?? 0)
   })), [normalizedOverview]);
 
-  /* ── Facet options ── */
-  const accountOptions = useMemo(() => { const v = new Set<string>(); for (const i of facetsData?.facets?.account ?? []) v.add(i.value); for (const r of selectedAccounts) v.add(r); return Array.from(v).sort((a, b) => a.localeCompare(b)); }, [facetsData, selectedAccounts]);
-  const postTypeOptions = useMemo(() => { const v = new Set<string>(["unknown"]); for (const i of facetsData?.facets?.post_type ?? []) v.add(normalizePostType(i.value)); for (const r of selectedPostTypes) v.add(normalizePostType(r)); return Array.from(v).sort((a, b) => a.localeCompare(b)); }, [facetsData, selectedPostTypes]);
-  const campaignOptions = useMemo(() => { const v = new Set<string>(); for (const i of facetsData?.facets?.campaign ?? []) v.add(i.value.toLowerCase()); for (const r of selectedCampaigns) v.add(r); return Array.from(v).sort((a, b) => a.localeCompare(b)); }, [facetsData, selectedCampaigns]);
-  const strategyOptions = useMemo(() => { const v = new Set<string>(); for (const i of facetsData?.facets?.strategy ?? []) v.add(i.value.toLowerCase()); for (const r of selectedStrategies) v.add(r); return Array.from(v).sort((a, b) => a.localeCompare(b)); }, [facetsData, selectedStrategies]);
-  const hashtagOptions = useMemo(() => { const v = new Set<string>(); for (const i of facetsData?.facets?.hashtag ?? []) v.add(i.value.toLowerCase().replace(/^#+/, "")); for (const r of selectedHashtags) v.add(r); return Array.from(v).sort((a, b) => a.localeCompare(b)); }, [facetsData, selectedHashtags]);
-  const topicOptions = useMemo(() => { const v = new Set<string>(); for (const i of facetsData?.facets?.topic ?? []) v.add(i.value.toLowerCase()); for (const r of selectedTopics) v.add(r); return Array.from(v).sort((a, b) => a.localeCompare(b)); }, [facetsData, selectedTopics]);
-
   const normalizeSearchToken = (value: string): string => value.trim().normalize("NFKD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase("es-CO").replace(/[^\p{L}\p{N}\s]+/gu, " ").replace(/\s+/g, " ");
   const filterBySearch = (values: string[], term: string): string[] => { const nt = normalizeSearchToken(term); const ct = nt.replace(/\s+/g, ""); if (!nt) return values; return values.filter((item) => { const ni = normalizeSearchToken(item); return ni.includes(nt) || ni.replace(/\s+/g, "").includes(ct); }); };
-
-  const filteredChannelOptions = useMemo(() => filterBySearch(CHANNEL_OPTIONS, channelSearch), [channelSearch]);
-  const filteredAccountOptions = useMemo(() => filterBySearch(accountOptions, accountSearch), [accountOptions, accountSearch]);
-  const filteredPostTypeOptions = useMemo(() => filterBySearch(postTypeOptions, postTypeSearch), [postTypeOptions, postTypeSearch]);
-  const filteredCampaignOptions = useMemo(() => filterBySearch(campaignOptions, campaignSearch), [campaignOptions, campaignSearch]);
-  const filteredStrategyOptions = useMemo(() => filterBySearch(strategyOptions, strategySearch), [strategyOptions, strategySearch]);
-  const filteredHashtagOptions = useMemo(() => filterBySearch(hashtagOptions, hashtagSearch), [hashtagOptions, hashtagSearch]);
-  const filteredTopicOptions = useMemo(() => filterBySearch(topicOptions, topicSearch), [topicOptions, topicSearch]);
 
   const dataStatus = useMemo(() => {
     if (loading) return "loading"; if (uiError === "permission_denied") return "permission_denied";
@@ -2154,54 +2073,28 @@ export const MonitorSocialOverviewPage = () => {
       {dataStatus === "empty" && <Alert type="info" title="Estado empty: no hay datos para los filtros seleccionados." showIcon />}
 
       {/* ── Filters ── */}
-      <Card size="small" title={<Flex align="center" gap={8}><FilterOutlined /> <span style={{ fontWeight: 600 }}>Filtros inteligentes</span></Flex>}
-        extra={<Space wrap>
-          <span style={{ fontSize: 11, fontWeight: 600, textTransform: "uppercase", color: "#64748b" }}>Drill-down temporal</span>
-          <Segmented size="small" value={timeGranularity} onChange={(v) => setQueryPatch({ time_granularity: v as string })}
-            options={TIME_GRANULARITY_OPTIONS.map((o) => ({ label: toTimeGranularityLabel(o), value: o }))} />
-          <Button size="small" icon={<ClearOutlined />} onClick={clearAllFilters}>Limpiar filtros</Button>
-        </Space>}
-      >
-        <Row gutter={[8, 8]}>
-          <Col xs={24} xl={5}>
-            <Popover trigger="click" placement="bottomLeft" content={
-              <div style={{ width: 300 }}>
-                <Space direction="vertical" style={{ width: "100%" }}>
-                  <Row gutter={8}><Col span={12}><div style={{ fontSize: 11, fontWeight: 600, color: "#64748b" }}>Desde</div><Input size="small" type="date" value={from ?? ""} onChange={(e) => setQueryPatch({ preset: "custom", from: e.target.value || null })} /></Col><Col span={12}><div style={{ fontSize: 11, fontWeight: 600, color: "#64748b" }}>Hasta</div><Input size="small" type="date" value={to ?? ""} onChange={(e) => setQueryPatch({ preset: "custom", to: e.target.value || null })} /></Col></Row>
-                  <Space wrap>{PRESET_OPTIONS.map((o) => <Button key={o} size="small" type={preset === o ? "primary" : "default"} danger={preset === o} onClick={() => applyPreset(o)}>{toPresetLabel(o)}</Button>)}</Space>
-                  <div style={{ fontSize: 11, fontWeight: 600, color: "#64748b" }}>Tipo comparación</div>
-                  <Select size="small" style={{ width: "100%" }} value={comparisonMode} onChange={(v) => setQueryPatch({ comparison_mode: v })} options={[{ label: "Mismo periodo del año pasado", value: "same_period_last_year" },{ label: "Última semana con coincidencia de días", value: "weekday_aligned_week" },{ label: "Última cantidad exacta de días", value: "exact_days" }]} />
-                  <div style={{ fontSize: 11, fontWeight: 600, color: "#64748b" }}>Días comparación</div>
-                  <InputNumber size="small" style={{ width: "100%" }} min={1} max={366} value={comparisonDays} disabled={comparisonMode !== "exact_days"} onChange={(v) => setQueryPatch({ comparison_days: String(Math.max(1, v ?? 30)) })} />
-                </Space>
-              </div>
-            }>
-              <Card size="small" hoverable style={{ cursor: "pointer" }}>
-                <div style={{ fontSize: 11, fontWeight: 600, textTransform: "uppercase", color: "#64748b" }}>Periodo y comparación</div>
-                <div style={{ fontSize: 13, fontWeight: 600, color: "#1e293b", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{toPresetLabel(preset)} | {toTimeGranularityLabel(timeGranularity)}</div>
-                <div style={{ fontSize: 11, color: "#64748b" }}>{formatDate((normalizedOverview.comparison?.current_window_start ?? normalizedOverview.window_start) as string | undefined)} - {formatDate((normalizedOverview.comparison?.current_window_end ?? normalizedOverview.window_end) as string | undefined)}</div>
-              </Card>
-            </Popover>
-          </Col>
-          <Col xs={12} xl={2}><SmartMultiSelect label="Canal" summary={selectedChannels.length > 0 ? `${selectedChannels.length} sel.` : "Todos"} secondary={`${CHANNEL_OPTIONS.length} canales`} options={filteredChannelOptions} selected={selectedChannels} search={channelSearch} placeholder="Buscar canal" onSearch={setChannelSearch} onToggle={(v) => toggleMultiValue("channel", selectedChannels, v)} onClear={() => setQueryPatch({ channel: null })} toLabel={(v) => toChannelLabel(v as SocialChannel)} /></Col>
-          <Col xs={12} xl={2}><SmartMultiSelect label="Cuenta" summary={selectedAccounts.length > 0 ? `${selectedAccounts.length} sel.` : "Todas"} secondary={`${accountOptions.length} disp.`} options={filteredAccountOptions} selected={selectedAccounts} search={accountSearch} placeholder="Buscar cuenta..." onSearch={setAccountSearch} onToggle={(v) => toggleMultiValue("account", selectedAccounts, v)} onClear={() => setQueryPatch({ account: null })} /></Col>
-          <Col xs={12} xl={2}><SmartMultiSelect label="Tipo post" summary={selectedPostTypes.length > 0 ? `${selectedPostTypes.length} sel.` : "Todos"} secondary={`${postTypeOptions.length} tipos`} options={filteredPostTypeOptions} selected={selectedPostTypes} search={postTypeSearch} placeholder="Buscar tipo..." onSearch={setPostTypeSearch} onToggle={(v) => toggleMultiValue("post_type", selectedPostTypes, v)} onClear={() => setQueryPatch({ post_type: null })} toLabel={(v) => (v === "unknown" ? "Sin tipo" : v)} /></Col>
-          <Col xs={12} xl={2}><SmartMultiSelect label="Campaña" summary={selectedCampaigns.length > 0 ? `${selectedCampaigns.length} sel.` : "Todas"} secondary={`${campaignOptions.length} disp.`} options={filteredCampaignOptions} selected={selectedCampaigns} search={campaignSearch} placeholder="Buscar campaña..." onSearch={setCampaignSearch} onToggle={(v) => toggleMultiValue("campaign", selectedCampaigns, v)} onClear={() => setQueryPatch({ campaign: null })} /></Col>
-          <Col xs={12} xl={2}><SmartMultiSelect label="Estrategia" summary={selectedStrategies.length > 0 ? `${selectedStrategies.length} sel.` : "Todas"} secondary={`${strategyOptions.length} disp.`} options={filteredStrategyOptions} selected={selectedStrategies} search={strategySearch} placeholder="Buscar estrategia..." onSearch={setStrategySearch} onToggle={(v) => toggleMultiValue("strategy", selectedStrategies, v)} onClear={() => setQueryPatch({ strategy: null })} /></Col>
-          <Col xs={12} xl={2}><SmartMultiSelect label="Hashtag" summary={selectedHashtags.length > 0 ? `${selectedHashtags.length} sel.` : "Todos"} secondary={`${hashtagOptions.length} disp.`} options={filteredHashtagOptions} selected={selectedHashtags} search={hashtagSearch} placeholder="Buscar hashtag..." onSearch={setHashtagSearch} onToggle={(v) => toggleMultiValue("hashtag", selectedHashtags, v)} onClear={() => setQueryPatch({ hashtag: null })} toLabel={(v) => `#${v}`} /></Col>
-          <Col xs={12} xl={2}><SmartMultiSelect label="Tema" summary={selectedTopics.length > 0 ? `${selectedTopics.length} sel.` : "Todos"} secondary={`${topicOptions.length} disp.`} options={filteredTopicOptions} selected={selectedTopics} search={topicSearch} placeholder="Buscar tema..." onSearch={setTopicSearch} onToggle={(v) => toggleMultiValue("topic", selectedTopics, v)} onClear={() => setQueryPatch({ topic: null })} toLabel={toTopicFilterLabel} /></Col>
-          <Col xs={12} xl={3}>
-            <Card size="small">
-              <div style={{ fontSize: 11, fontWeight: 600, textTransform: "uppercase", color: "#64748b" }}>Sentimiento</div>
-              <Select size="small" style={{ width: "100%", marginTop: 4 }} value={selectedSentiment} onChange={(v) => setQueryPatch({ sentiment: v === "all" ? null : v })} options={[{ label: "Todos", value: "all" },{ label: "Positivo", value: "positive" },{ label: "Negativo", value: "negative" },{ label: "Neutro", value: "neutral" },{ label: "Unknown", value: "unknown" }]} />
-              <div style={{ fontSize: 11, color: "#64748b", marginTop: 4 }}>{loadingFacets ? "Actualizando facetas..." : `${formatNumber(facetsData?.totals?.posts ?? 0)} posts en universo filtrado`}</div>
-            </Card>
-          </Col>
-        </Row>
-        <div style={{ marginTop: 12, fontSize: 12, color: "#64748b" }}>
-          Drill-down temporal: <strong>{toTimeGranularityLabel(timeGranularity)}</strong> | Ventana activa: {formatDate((normalizedOverview.comparison?.current_window_start ?? normalizedOverview.window_start) as string | undefined)} - {formatDate((normalizedOverview.comparison?.current_window_end ?? normalizedOverview.window_end) as string | undefined)} | período comparado: {formatDate((normalizedOverview.comparison?.previous_window_start ?? "") as string | undefined)} - {formatDate((normalizedOverview.comparison?.previous_window_end ?? "") as string | undefined)}
-        </div>
-      </Card>
+      <SocialFilterBar
+        preset={preset}
+        timeGranularity={timeGranularity}
+        comparisonMode={comparisonMode}
+        comparisonDays={comparisonDays}
+        from={from}
+        to={to}
+        normalizedOverview={normalizedOverview}
+        selectedChannels={selectedChannels}
+        selectedAccounts={selectedAccounts}
+        selectedPostTypes={selectedPostTypes}
+        selectedCampaigns={selectedCampaigns}
+        selectedStrategies={selectedStrategies}
+        selectedHashtags={selectedHashtags}
+        selectedTopics={selectedTopics}
+        selectedSentiment={selectedSentiment}
+        facetsData={facetsData}
+        loadingFacets={loadingFacets}
+        setQueryPatch={setQueryPatch}
+        applyPreset={applyPreset}
+        clearAllFilters={clearAllFilters}
+      />
 
       {/* ── Tabs ── */}
       <Tabs activeKey={tab} onChange={(key) => setQueryPatch({ tab: key })} items={tabItems} />
