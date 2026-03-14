@@ -249,7 +249,7 @@ const SocialFilterBar: React.FC<SocialFilterBarProps> = ({
   return (
     <Card
       size="small"
-      styles={{ body: { padding: "10px 16px 12px" } }}
+      styles={{ body: { padding: "10px 16px 12px" }, header: { padding: "8px 16px", minHeight: 44 } }}
       title={
         <Flex align="center" gap={8}>
           <FilterOutlined style={{ fontSize: 13, color: "#94a3b8" }} />
@@ -264,10 +264,10 @@ const SocialFilterBar: React.FC<SocialFilterBarProps> = ({
       extra={
         <Flex align="center" gap={8}>
           <Segmented
-            size="small"
             value={timeGranularity}
             onChange={(v) => setQueryPatch({ time_granularity: v as string })}
             options={TIME_GRANULARITY_OPTIONS.map((o) => ({ label: toTimeGranularityLabel(o), value: o }))}
+            style={{ fontSize: 12 }}
           />
           {activeFilterCount > 0 && (
             <Button type="text" size="small" icon={<ClearOutlined />} onClick={clearAllFilters} style={{ color: "#94a3b8", fontSize: 12 }}>

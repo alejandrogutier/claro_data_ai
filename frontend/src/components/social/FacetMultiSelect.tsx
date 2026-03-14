@@ -1,5 +1,6 @@
-import React from "react";
-import { Select, Tag } from "antd";
+import React, { useMemo } from "react";
+import { Select, Tag, Spin } from "antd";
+import { LoadingOutlined } from "@ant-design/icons";
 
 export type FacetItem = { value: string; count: number };
 
@@ -22,22 +23,27 @@ const FacetMultiSelect: React.FC<FacetMultiSelectProps> = ({
   onChange,
   toLabel,
 }) => {
-  const options = facetItems.map((item) => {
-    const displayText = toLabel ? toLabel(item.value) : item.value;
-    return {
-      label: (
-        <span style={{ display: "flex", justifyContent: "space-between", alignItems: "center", width: "100%" }}>
-          <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{displayText}</span>
-          <span style={{ fontSize: 11, color: "#94a3b8", fontWeight: 500, flexShrink: 0, marginLeft: 8 }}>
-            {item.count.toLocaleString("es-CO")}
-          </span>
-        </span>
-      ),
-      value: item.value,
-      searchLabel: displayText,
-      title: displayText,
-    };
-  });
+  /* Memoize options to prevent unnecessary re-renders that close the dropdown */
+  const options = useMemo(
+    () =>
+      facetItems.map((item) => {
+        const displayText = toLabel ? toLabel(item.value) : item.value;
+        return {
+          label: (
+            <span style={{ display: "flex", justifyContent: "space-between", alignItems: "center", width: "100%" }}>
+              <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{displayText}</span>
+              <span style={{ fontSize: 11, color: "#94a3b8", fontWeight: 500, flexShrink: 0, marginLeft: 8 }}>
+                {item.count.toLocaleString("es-CO")}
+              </span>
+            </span>
+          ),
+          value: item.value,
+          searchLabel: displayText,
+          title: displayText,
+        };
+      }),
+    [facetItems, toLabel],
+  );
 
   return (
     <div>
@@ -51,8 +57,12 @@ const FacetMultiSelect: React.FC<FacetMultiSelectProps> = ({
         whiteSpace: "nowrap",
         overflow: "hidden",
         textOverflow: "ellipsis",
+        display: "flex",
+        alignItems: "center",
+        gap: 4,
       }}>
         {label}
+        {loading && <Spin indicator={<LoadingOutlined style={{ fontSize: 9, color: "#94a3b8" }} spin />} size="small" />}
       </div>
       <Select
         mode="multiple"
@@ -70,10 +80,8 @@ const FacetMultiSelect: React.FC<FacetMultiSelectProps> = ({
         )}
         optionFilterProp="searchLabel"
         popupMatchSelectWidth={false}
-        dropdownStyle={{ minWidth: 260 }}
-        loading={loading}
+        styles={{ popup: { root: { minWidth: 260 } } }}
         notFoundContent={loading ? "Cargando..." : "Sin resultados"}
-        variant="filled"
         tagRender={({ value: tagValue, closable, onClose }) => {
           const displayText = toLabel ? toLabel(tagValue as string) : (tagValue as string);
           return (

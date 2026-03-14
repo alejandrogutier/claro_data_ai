@@ -2,7 +2,8 @@ import React, { useEffect, useMemo, useRef, useState, useCallback, type MouseEve
 import { useSearchParams } from "react-router-dom";
 import {
   Card, Row, Col, Tabs, Select, Input, InputNumber, Button, Alert, Spin,
-  Empty, Table, Tag, Tooltip as AntTooltip, Descriptions, Typography, Checkbox, Space, Flex
+  Empty, Table, Tag, Tooltip as AntTooltip, Descriptions, Typography, Checkbox, Space, Flex,
+  notification
 } from "antd";
 import {
   ReloadOutlined, DownloadOutlined, FileExcelOutlined, InfoCircleOutlined,
@@ -1856,6 +1857,19 @@ export const MonitorSocialOverviewPage = () => {
     if (riskData?.stale_data) return "stale_data"; return "ready";
   }, [loading, uiError, error, normalizedOverview, posts.length, riskData?.stale_data]);
 
+  /* Toast notification for stale_data — shown once per browser session */
+  useEffect(() => {
+    if (dataStatus === "stale_data" && !sessionStorage.getItem("social_stale_toast_shown")) {
+      sessionStorage.setItem("social_stale_toast_shown", "1");
+      notification.warning({
+        message: "Datos no actualizados",
+        description: "La última ETL está fuera del umbral de frescura configurado.",
+        placement: "topRight",
+        duration: 6,
+      });
+    }
+  }, [dataStatus]);
+
   /* ── Chart data derivations ── */
   const topAccountsDual = useMemo(() => [...(accountsData?.items ?? [])].sort((a, b) => Number(b[accountBarMetric]) - Number(a[accountBarMetric])).slice(0, 10).map((item) => ({
     account_name: item.account_name, posts: Number(item.posts ?? 0), exposure_total: Number(item.exposure_total ?? 0),
@@ -2067,7 +2081,7 @@ export const MonitorSocialOverviewPage = () => {
       {pendingRunId && <Alert type="info" title={`Corrida manual en progreso: ${pendingRunId}`} showIcon />}
       {error && <Alert type="error" title={error} showIcon closable />}
       {dataStatus === "permission_denied" && <Alert type="error" title="Estado permission_denied: no tienes permisos para una o más consultas de Social Analytics." showIcon />}
-      {dataStatus === "stale_data" && <Alert type="warning" title="Estado stale_data: la última ETL está fuera del umbral de frescura configurado para operación." showIcon />}
+      {/* stale_data: shown as toast notification (once per session) */}
       {dataStatus === "partial_data" && <Alert type="warning" title="Estado partial_data: hay clasificación pendiente o muestra insuficiente." showIcon />}
       {dataStatus === "recon_warning" && <Alert type="warning" title="Estado recon_warning: la reconciliación S3-DB tiene deltas." showIcon />}
       {dataStatus === "empty" && <Alert type="info" title="Estado empty: no hay datos para los filtros seleccionados." showIcon />}
