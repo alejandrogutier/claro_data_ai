@@ -1342,6 +1342,29 @@ const calculateRiesgoActivo = (negativos: number, classifiedItems: number): numb
 const calculateErGlobal = (engagementTotal: number, exposureTotal: number): number =>
   (engagementTotal / Math.max(exposureTotal, 1)) * 100;
 
+/**
+ * Correct ER denominator per channel:
+ *  - X / LinkedIn → impressions
+ *  - TikTok       → views
+ *  - Facebook / Instagram → reach  (only if reach > 0)
+ */
+const erDenominatorForRow = (row: { channel: string; reach: number; impressions: number; views: number }): number => {
+  if (row.channel === "x" || row.channel === "linkedin") return row.impressions;
+  if (row.channel === "tiktok") return row.views;
+  return row.reach; // FB / IG
+};
+
+/** ER Global calculated from individual rows with channel-aware denominators */
+const calculateErGlobalFromRows = (rows: Array<{ channel: string; engagementTotal: number; reach: number; impressions: number; views: number }>): number => {
+  let totalEngagement = 0;
+  let totalDenominator = 0;
+  for (const row of rows) {
+    totalEngagement += row.engagementTotal;
+    totalDenominator += erDenominatorForRow(row);
+  }
+  return totalDenominator > 0 ? (totalEngagement / totalDenominator) * 100 : 0;
+};
+
 const calculateDerivedMetrics = (input: {
   exposure: number;
   engagementTotal: number;
@@ -1909,6 +1932,7 @@ const computeGroupedMetrics = <T extends string>(
   {
     posts: number;
     exposureTotal: number;
+    erDenominatorTotal: number;
     engagementTotal: number;
     impressionsTotal: number;
     reachTotal: number;
@@ -1928,6 +1952,7 @@ const computeGroupedMetrics = <T extends string>(
     {
       posts: number;
       exposureTotal: number;
+      erDenominatorTotal: number;
       engagementTotal: number;
       impressionsTotal: number;
       reachTotal: number;
@@ -1948,6 +1973,7 @@ const computeGroupedMetrics = <T extends string>(
     const current = grouped.get(key) ?? {
       posts: 0,
       exposureTotal: 0,
+      erDenominatorTotal: 0,
       engagementTotal: 0,
       impressionsTotal: 0,
       reachTotal: 0,
@@ -1963,6 +1989,7 @@ const computeGroupedMetrics = <T extends string>(
     };
     current.posts += 1;
     current.exposureTotal += row.exposure;
+    current.erDenominatorTotal += erDenominatorForRow(row);
     current.engagementTotal += row.engagementTotal;
     current.impressionsTotal += row.impressions;
     current.reachTotal += row.reach;
@@ -2100,6 +2127,7 @@ type TrendBucketTemplate = {
 type TrendMetricAccumulator = {
   posts: number;
   exposure: number;
+  erDenominator: number;
   engagement: number;
   impressions: number;
   reach: number;
@@ -2116,6 +2144,7 @@ type TrendMetricAccumulator = {
 const createEmptyTrendMetricAccumulator = (): TrendMetricAccumulator => ({
   posts: 0,
   exposure: 0,
+  erDenominator: 0,
   engagement: 0,
   impressions: 0,
   reach: 0,
@@ -2132,6 +2161,7 @@ const createEmptyTrendMetricAccumulator = (): TrendMetricAccumulator => ({
 const addPostToTrendAccumulator = (target: TrendMetricAccumulator, post: SocialPostRecord): void => {
   target.posts += 1;
   target.exposure += post.exposure;
+  target.erDenominator += erDenominatorForRow(post);
   target.engagement += post.engagementTotal;
   target.impressions += post.impressions;
   target.reach += post.reach;
@@ -2148,6 +2178,7 @@ const addPostToTrendAccumulator = (target: TrendMetricAccumulator, post: SocialP
 const mergeTrendAccumulator = (target: TrendMetricAccumulator, source: TrendMetricAccumulator): void => {
   target.posts += source.posts;
   target.exposure += source.exposure;
+  target.erDenominator += source.erDenominator;
   target.engagement += source.engagement;
   target.impressions += source.impressions;
   target.reach += source.reach;
@@ -2191,7 +2222,7 @@ const computeTrendMetricValue = (
   if (metric === "comments_total") return stats.comments;
   if (metric === "shares_total") return stats.shares;
   if (metric === "views_total") return stats.views;
-  if (metric === "er_global") return calculateErGlobal(stats.engagement, stats.exposure);
+  if (metric === "er_global") return calculateErGlobal(stats.engagement, stats.erDenominator);
   if (metric === "ctr") return derived.ctr;
   if (metric === "er_impressions") return derived.erImpressions;
   if (metric === "er_reach") return derived.erReach;
@@ -5389,34 +5420,34 @@ class SocialStore {
 
     const monthByChannel = new Map<
       SocialChannel,
-      Map<number, { engagementTotal: number; exposureTotal: number }>
+      Map<number, { engagementTotal: number; erDenominatorTotal: number }>
     >();
     const quarterByChannel = new Map<
       SocialChannel,
-      { q1: { engagementTotal: number; exposureTotal: number }; q4: { engagementTotal: number; exposureTotal: number } }
+      { q1: { engagementTotal: number; erDenominatorTotal: number }; q4: { engagementTotal: number; erDenominatorTotal: number } }
     >();
 
     for (const row of rows2025) {
       const month = row.publishedAt.getUTCMonth();
-      const channelMonths = monthByChannel.get(row.channel) ?? new Map<number, { engagementTotal: number; exposureTotal: number }>();
-      const monthStats = channelMonths.get(month) ?? { engagementTotal: 0, exposureTotal: 0 };
+      const channelMonths = monthByChannel.get(row.channel) ?? new Map<number, { engagementTotal: number; erDenominatorTotal: number }>();
+      const monthStats = channelMonths.get(month) ?? { engagementTotal: 0, erDenominatorTotal: 0 };
       monthStats.engagementTotal += row.engagementTotal;
-      monthStats.exposureTotal += row.exposure;
+      monthStats.erDenominatorTotal += erDenominatorForRow(row);
       channelMonths.set(month, monthStats);
       monthByChannel.set(row.channel, channelMonths);
 
       const quarterStats =
         quarterByChannel.get(row.channel) ?? {
-          q1: { engagementTotal: 0, exposureTotal: 0 },
-          q4: { engagementTotal: 0, exposureTotal: 0 }
+          q1: { engagementTotal: 0, erDenominatorTotal: 0 },
+          q4: { engagementTotal: 0, erDenominatorTotal: 0 }
         };
       if (month <= 2) {
         quarterStats.q1.engagementTotal += row.engagementTotal;
-        quarterStats.q1.exposureTotal += row.exposure;
+        quarterStats.q1.erDenominatorTotal += erDenominatorForRow(row);
       }
       if (month >= 9) {
         quarterStats.q4.engagementTotal += row.engagementTotal;
-        quarterStats.q4.exposureTotal += row.exposure;
+        quarterStats.q4.erDenominatorTotal += erDenominatorForRow(row);
       }
       quarterByChannel.set(row.channel, quarterStats);
     }
@@ -5424,27 +5455,23 @@ class SocialStore {
     const stored = await this.getStoredErTargets(year, channels);
 
     return channels.map((channel) => {
-      const monthStats = monthByChannel.get(channel) ?? new Map<number, { engagementTotal: number; exposureTotal: number }>();
-      const monthErs = Array.from(monthStats.values()).map((item) => calculateErGlobal(item.engagementTotal, item.exposureTotal));
+      const monthStats = monthByChannel.get(channel) ?? new Map<number, { engagementTotal: number; erDenominatorTotal: number }>();
+      const monthErs = Array.from(monthStats.values()).map((item) => calculateErGlobal(item.engagementTotal, item.erDenominatorTotal));
       const baseline = monthErs.length > 0 ? monthErs.reduce((acc, value) => acc + value, 0) / monthErs.length : 0;
       const quarterStats = quarterByChannel.get(channel) ?? {
-        q1: { engagementTotal: 0, exposureTotal: 0 },
-        q4: { engagementTotal: 0, exposureTotal: 0 }
+        q1: { engagementTotal: 0, erDenominatorTotal: 0 },
+        q4: { engagementTotal: 0, erDenominatorTotal: 0 }
       };
-      const erQ1 = calculateErGlobal(quarterStats.q1.engagementTotal, quarterStats.q1.exposureTotal);
-      const erQ4 = calculateErGlobal(quarterStats.q4.engagementTotal, quarterStats.q4.exposureTotal);
+      const erQ1 = calculateErGlobal(quarterStats.q1.engagementTotal, quarterStats.q1.erDenominatorTotal);
+      const erQ4 = calculateErGlobal(quarterStats.q4.engagementTotal, quarterStats.q4.erDenominatorTotal);
       const momentumPct = (erQ4 - erQ1) / Math.max(erQ1, 0.01);
       const autoGrowthPct = clamp(0.5 * Math.max(momentumPct, 0) + 0.05, 0.03, 0.18);
       const autoTarget = baseline * (1 + autoGrowthPct);
       const storedTarget = stored.get(channel);
       const target = storedTarget?.source === "manual" ? storedTarget.targetEr : autoTarget;
 
-      const currentStats = currentByChannel.get(channel) ?? {
-        posts: 0,
-        exposureTotal: 0,
-        engagementTotal: 0
-      };
-      const currentEr = calculateErGlobal(currentStats.engagementTotal ?? 0, currentStats.exposureTotal ?? 0);
+      const currentStats = currentByChannel.get(channel);
+      const currentEr = calculateErGlobal(currentStats?.engagementTotal ?? 0, currentStats?.erDenominatorTotal ?? 0);
       const progressPct = (currentEr / Math.max(target, 0.001)) * 100;
 
       return {
@@ -5521,7 +5548,7 @@ class SocialStore {
 
     const currentSentimientoNeto = calculateSentimientoNeto(currentSent.positivos, currentSent.negativos, currentSent.classified);
     const currentRiesgoActivo = calculateRiesgoActivo(currentSent.negativos, currentSent.classified);
-    const currentEr = calculateErGlobal(currentEngagement, currentExposure);
+    const currentEr = calculateErGlobalFromRows(currentRows);
     const currentShs = calculateShs({
       sentimientoNeto: currentSentimientoNeto,
       riesgoActivo: currentRiesgoActivo,
@@ -5531,7 +5558,7 @@ class SocialStore {
 
     const previousSentimientoNeto = calculateSentimientoNeto(previousSent.positivos, previousSent.negativos, previousSent.classified);
     const previousRiesgoActivo = calculateRiesgoActivo(previousSent.negativos, previousSent.classified);
-    const previousEr = calculateErGlobal(previousEngagement, previousExposure);
+    const previousEr = calculateErGlobalFromRows(previousRows);
     const previousShs = calculateShs({
       sentimientoNeto: previousSentimientoNeto,
       riesgoActivo: previousRiesgoActivo,
@@ -5605,7 +5632,7 @@ class SocialStore {
           commentsTotal: roundMetric(stats.commentsTotal),
           sharesTotal: roundMetric(stats.sharesTotal),
           viewsTotal: roundMetric(stats.viewsTotal),
-          erGlobal: roundMetric(calculateErGlobal(stats.engagementTotal, stats.exposureTotal)),
+          erGlobal: roundMetric(calculateErGlobal(stats.engagementTotal, stats.erDenominatorTotal)),
           ctr: roundMetric(derived.ctr),
           erImpressions: roundMetric(derived.erImpressions),
           erReach: roundMetric(derived.erReach),
@@ -5647,7 +5674,7 @@ class SocialStore {
           commentsTotal: roundMetric(stats.commentsTotal),
           sharesTotal: roundMetric(stats.sharesTotal),
           viewsTotal: roundMetric(stats.viewsTotal),
-          erGlobal: roundMetric(calculateErGlobal(stats.engagementTotal, stats.exposureTotal)),
+          erGlobal: roundMetric(calculateErGlobal(stats.engagementTotal, stats.erDenominatorTotal)),
           ctr: roundMetric(derived.ctr),
           erImpressions: roundMetric(derived.erImpressions),
           erReach: roundMetric(derived.erReach),
@@ -5671,6 +5698,7 @@ class SocialStore {
         bucketLabel: string;
         posts: number;
         exposureTotal: number;
+        erDenominatorTotal: number;
         engagementTotal: number;
         impressionsTotal: number;
         reachTotal: number;
@@ -5692,6 +5720,7 @@ class SocialStore {
         bucketLabel: bucket.bucketLabel,
         posts: 0,
         exposureTotal: 0,
+        erDenominatorTotal: 0,
         engagementTotal: 0,
         impressionsTotal: 0,
         reachTotal: 0,
@@ -5706,6 +5735,7 @@ class SocialStore {
       };
       current.posts += 1;
       current.exposureTotal += row.exposure;
+      current.erDenominatorTotal += erDenominatorForRow(row);
       current.engagementTotal += row.engagementTotal;
       current.impressionsTotal += row.impressions;
       current.reachTotal += row.reach;
@@ -5752,7 +5782,7 @@ class SocialStore {
           commentsTotal: roundMetric(stats.commentsTotal),
           sharesTotal: roundMetric(stats.sharesTotal),
           viewsTotal: roundMetric(stats.viewsTotal),
-          erGlobal: roundMetric(calculateErGlobal(stats.engagementTotal, stats.exposureTotal)),
+          erGlobal: roundMetric(calculateErGlobal(stats.engagementTotal, stats.erDenominatorTotal)),
           ctr: roundMetric(derived.ctr),
           erImpressions: roundMetric(derived.erImpressions),
           erReach: roundMetric(derived.erReach),
@@ -6084,6 +6114,7 @@ class SocialStore {
       {
         posts: number;
         exposure: number;
+        erDenominator: number;
         engagement: number;
         impressions: number;
         reach: number;
@@ -6103,6 +6134,7 @@ class SocialStore {
       const current = cell.get(key) ?? {
         posts: 0,
         exposure: 0,
+        erDenominator: 0,
         engagement: 0,
         impressions: 0,
         reach: 0,
@@ -6114,6 +6146,7 @@ class SocialStore {
       };
       current.posts += 1;
       current.exposure += post.exposure;
+      current.erDenominator += erDenominatorForRow(post);
       current.engagement += post.engagementTotal;
       current.impressions += post.impressions;
       current.reach += post.reach;
@@ -6131,6 +6164,7 @@ class SocialStore {
         const current = cell.get(`${month}-${weekday}`) ?? {
           posts: 0,
           exposure: 0,
+          erDenominator: 0,
           engagement: 0,
           impressions: 0,
           reach: 0,
@@ -6152,7 +6186,7 @@ class SocialStore {
           views: current.views
         });
         let value = 0;
-        if (metric === "er") value = calculateErGlobal(current.engagement, current.exposure);
+        if (metric === "er") value = calculateErGlobal(current.engagement, current.erDenominator);
         else if (metric === "impressions") value = current.impressions;
         else if (metric === "reach") value = current.reach;
         else if (metric === "clicks") value = current.clicks;
@@ -6183,6 +6217,7 @@ class SocialStore {
       {
         posts: number;
         exposure: number;
+        erDenominator: number;
         engagement: number;
         impressions: number;
         reach: number;
@@ -6216,6 +6251,7 @@ class SocialStore {
         const current = grouped.get(label) ?? {
           posts: 0,
           exposure: 0,
+          erDenominator: 0,
           engagement: 0,
           impressions: 0,
           reach: 0,
@@ -6227,6 +6263,7 @@ class SocialStore {
         };
         current.posts += 1;
         current.exposure += post.exposure;
+        current.erDenominator += erDenominatorForRow(post);
         current.engagement += post.engagementTotal;
         current.impressions += post.impressions;
         current.reach += post.reach;
@@ -6266,7 +6303,7 @@ class SocialStore {
             commentsTotal: roundMetric(stats.comments),
             sharesTotal: roundMetric(stats.shares),
             viewsTotal: roundMetric(stats.views),
-            erGlobal: roundMetric(calculateErGlobal(stats.engagement, stats.exposure)),
+            erGlobal: roundMetric(calculateErGlobal(stats.engagement, stats.erDenominator)),
             ctr: roundMetric(derived.ctr),
             erImpressions: roundMetric(derived.erImpressions),
             erReach: roundMetric(derived.erReach),
@@ -6544,6 +6581,7 @@ class SocialStore {
       {
         posts: number;
         exposure: number;
+        erDenominator: number;
         engagement: number;
         impressions: number;
         reach: number;
@@ -6638,6 +6676,7 @@ class SocialStore {
         const current = grouped.get(label) ?? {
           posts: 0,
           exposure: 0,
+          erDenominator: 0,
           engagement: 0,
           impressions: 0,
           reach: 0,
@@ -6649,6 +6688,7 @@ class SocialStore {
         };
         current.posts += 1;
         current.exposure += post.exposure;
+        current.erDenominator += erDenominatorForRow(post);
         current.engagement += post.engagementTotal;
         current.impressions += post.impressions;
         current.reach += post.reach;
@@ -6689,7 +6729,7 @@ class SocialStore {
             commentsTotal: roundMetric(stats.comments),
             sharesTotal: roundMetric(stats.shares),
             viewsTotal: roundMetric(stats.views),
-            erGlobal: roundMetric(calculateErGlobal(stats.engagement, stats.exposure)),
+            erGlobal: roundMetric(calculateErGlobal(stats.engagement, stats.erDenominator)),
             ctr: roundMetric(derived.ctr),
             erImpressions: roundMetric(derived.erImpressions),
             erReach: roundMetric(derived.erReach),
@@ -6745,13 +6785,9 @@ class SocialStore {
     const items = Array.from(currentStats.entries())
       .map(([accountName, stats]) => {
         const classified = stats.positivos + stats.negativos + stats.neutrales;
-        const previous = previousStats.get(accountName) ?? {
-          posts: 0,
-          exposureTotal: 0,
-          engagementTotal: 0
-        };
-        const erPonderado = calculateErGlobal(stats.engagementTotal, stats.exposureTotal);
-        const previousEr = calculateErGlobal(previous.engagementTotal ?? 0, previous.exposureTotal ?? 0);
+        const previous = previousStats.get(accountName);
+        const erPonderado = calculateErGlobal(stats.engagementTotal, stats.erDenominatorTotal);
+        const previousEr = calculateErGlobal(previous?.engagementTotal ?? 0, previous?.erDenominatorTotal ?? 0);
         const derived = calculateDerivedMetrics({
           exposure: stats.exposureTotal,
           engagementTotal: stats.engagementTotal,
@@ -6787,8 +6823,8 @@ class SocialStore {
           sentimientoNeto: roundMetric(calculateSentimientoNeto(stats.positivos, stats.negativos, classified)),
           riesgoActivo: roundMetric(calculateRiesgoActivo(stats.negativos, classified)),
           sovInterno: roundMetric(((accountContrib.get(accountName) ?? 0) / Math.max(totalContrib, 1)) * 100),
-          deltaExposure: roundMetric(stats.exposureTotal - (previous.exposureTotal ?? 0)),
-          deltaEngagement: roundMetric(stats.engagementTotal - (previous.engagementTotal ?? 0)),
+          deltaExposure: roundMetric(stats.exposureTotal - (previous?.exposureTotal ?? 0)),
+          deltaEngagement: roundMetric(stats.engagementTotal - (previous?.engagementTotal ?? 0)),
           deltaEr: roundMetric(erPonderado - previousEr),
           meetsThreshold: stats.posts >= minPosts && stats.exposureTotal >= minExposure
         };
