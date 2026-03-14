@@ -1990,6 +1990,24 @@ export const MonitorSocialOverviewPage = () => {
   const riskTopChannels = useMemo(() => [...(riskData?.by_channel ?? [])].sort((a, b) => b.riesgo_activo - a.riesgo_activo || b.negativos - a.negativos).slice(0, 8), [riskData]);
   const riskTopAccounts = useMemo(() => [...(riskData?.by_account ?? [])].sort((a, b) => b.riesgo_activo - a.riesgo_activo || b.negativos - a.negativos).slice(0, 8), [riskData]);
 
+  /**
+   * Compute ER Global from per-channel data using the correct denominator per channel:
+   *  - X / LinkedIn → impressions
+   *  - TikTok       → views
+   *  - Facebook / Instagram → reach
+   */
+  const computeErGlobalFromChannels = (channels: typeof channelData): number => {
+    let totalEngagement = 0;
+    let totalDenominator = 0;
+    for (const ch of channels) {
+      totalEngagement += ch.engagement_total;
+      if (ch.channel === "x" || ch.channel === "linkedin") totalDenominator += ch.impressions_total;
+      else if (ch.channel === "tiktok") totalDenominator += ch.views_total;
+      else totalDenominator += ch.reach_total; // FB / IG
+    }
+    return totalDenominator > 0 ? (totalEngagement / totalDenominator) * 100 : 0;
+  };
+
   const targetErGlobal = useMemo(() => {
     const rows = normalizedOverview.target_progress?.er_by_channel ?? [];
     if (rows.length === 0) return 0;
@@ -2000,7 +2018,10 @@ export const MonitorSocialOverviewPage = () => {
     const kpis = normalizedOverview.kpis ?? {}; const prev = normalizedOverview.previous_period ?? {}; const tp = normalizedOverview.target_progress ?? {};
     const pc = Number(kpis.posts ?? 0); const pp = Number(prev.posts ?? 0);
     const ec = Number(kpis.exposure_total ?? 0); const ep = Number(prev.exposure_total ?? 0);
-    const erc = Number(kpis.er_global ?? 0); const erp = Number(prev.er_global ?? 0);
+    const erc = channelData.length > 0 ? computeErGlobalFromChannels(channelData) : Number(kpis.er_global ?? 0);
+    /* previous_period is a flat aggregate — no per-channel breakdown available,
+       so we use the backend-provided er_global for the previous period */
+    const erp = Number(prev.er_global ?? 0);
     const rc = Number(kpis.riesgo_activo ?? 0); const rp = Number(prev.riesgo_activo ?? 0);
     const sc = Number(kpis.shs ?? 0); const sp = Number(prev.shs ?? 0); const ts = Number(tp.target_shs ?? 0);
     const sovc = Number(kpis.focus_account_sov ?? 0); const sovp = Number(prev.focus_account_sov ?? 0); const tsp = Number(tp.quarterly_sov_target_pp ?? 0);
@@ -2012,7 +2033,7 @@ export const MonitorSocialOverviewPage = () => {
       { id: "shs", title: "SHS (social)", value: formatScore(sc), previous: formatScore(sp), goal: `Meta: ${formatScore(ts)}`, status: `Gap meta: ${formatScore(sc - ts)}`, statusColor: toDeltaColor(sc - ts), info: KPI_INFO.shs, deltaValue: sc - ts },
       { id: "focus_account_sov", title: "SOV interno", value: formatPercent(sovc), previous: formatPercent(sovp), goal: `Meta trimestral: +${formatScore(tsp)} pp`, status: `Cuenta foco: ${String(kpis.focus_account ?? "n/a")}`, statusColor: "#64748b", info: KPI_INFO.focus_account_sov, deltaValue: sovc - sovp }
     ];
-  }, [normalizedOverview, targetErGlobal, overview]);
+  }, [normalizedOverview, targetErGlobal, overview, channelData]);
 
   const secondaryKpis = useMemo(() => SECONDARY_KPI_FLAT.map((metric) => {
     const current = Number(normalizedOverview.kpis?.[metric] ?? 0);
