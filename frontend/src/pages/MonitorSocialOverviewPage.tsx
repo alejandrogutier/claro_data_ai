@@ -1991,21 +1991,20 @@ export const MonitorSocialOverviewPage = () => {
   const riskTopAccounts = useMemo(() => [...(riskData?.by_account ?? [])].sort((a, b) => b.riesgo_activo - a.riesgo_activo || b.negativos - a.negativos).slice(0, 8), [riskData]);
 
   /**
-   * Compute ER Global from per-channel data using the correct denominator per channel:
-   *  - X / LinkedIn → impressions
-   *  - TikTok       → views
-   *  - Facebook / Instagram → reach
+   * Fallback ER computation when backend hasn't been deployed with er_avg_per_post yet.
+   * Computes a post-weighted average of per-channel er_global values.
+   * This avoids the problem of total/total ER where high-reach channels dominate.
    */
-  const computeErGlobalFromChannels = (channels: typeof channelData): number => {
-    let totalEngagement = 0;
-    let totalDenominator = 0;
+  const computeErFallbackFromChannels = (channels: typeof channelData): number => {
+    let totalPosts = 0;
+    let weightedEr = 0;
     for (const ch of channels) {
-      totalEngagement += ch.engagement_total;
-      if (ch.channel === "x" || ch.channel === "linkedin") totalDenominator += ch.impressions_total;
-      else if (ch.channel === "tiktok") totalDenominator += ch.views_total;
-      else totalDenominator += ch.reach_total; // FB / IG
+      if (ch.posts > 0 && ch.er_global > 0) {
+        weightedEr += ch.er_global * ch.posts;
+        totalPosts += ch.posts;
+      }
     }
-    return totalDenominator > 0 ? (totalEngagement / totalDenominator) * 100 : 0;
+    return totalPosts > 0 ? weightedEr / totalPosts : 0;
   };
 
   const targetErGlobal = useMemo(() => {
@@ -2018,10 +2017,11 @@ export const MonitorSocialOverviewPage = () => {
     const kpis = normalizedOverview.kpis ?? {}; const prev = normalizedOverview.previous_period ?? {}; const tp = normalizedOverview.target_progress ?? {};
     const pc = Number(kpis.posts ?? 0); const pp = Number(prev.posts ?? 0);
     const ec = Number(kpis.exposure_total ?? 0); const ep = Number(prev.exposure_total ?? 0);
-    const erc = channelData.length > 0 ? computeErGlobalFromChannels(channelData) : Number(kpis.er_global ?? 0);
-    /* previous_period is a flat aggregate — no per-channel breakdown available,
-       so we use the backend-provided er_global for the previous period */
-    const erp = Number(prev.er_global ?? 0);
+    /* ER Global: prefer per-post average from API (requires backend deploy), else fallback */
+    const erApiAvg = Number(kpis.er_avg_per_post ?? 0);
+    const erc = erApiAvg > 0 ? erApiAvg : channelData.length > 0 ? computeErFallbackFromChannels(channelData) : Number(kpis.er_global ?? 0);
+    const erPrevApiAvg = Number(prev.er_avg_per_post ?? 0);
+    const erp = erPrevApiAvg > 0 ? erPrevApiAvg : Number(prev.er_global ?? 0);
     const rc = Number(kpis.riesgo_activo ?? 0); const rp = Number(prev.riesgo_activo ?? 0);
     const sc = Number(kpis.shs ?? 0); const sp = Number(prev.shs ?? 0); const ts = Number(tp.target_shs ?? 0);
     const sovc = Number(kpis.focus_account_sov ?? 0); const sovp = Number(prev.focus_account_sov ?? 0); const tsp = Number(tp.quarterly_sov_target_pp ?? 0);

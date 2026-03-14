@@ -431,6 +431,7 @@ type SocialOverviewRecord = {
     sharesTotal: number;
     viewsTotal: number;
     erGlobal: number;
+    erAvgPerPost: number;
     ctr: number;
     erImpressions: number;
     erReach: number;
@@ -460,6 +461,7 @@ type SocialOverviewRecord = {
     sharesTotal: number;
     viewsTotal: number;
     erGlobal: number;
+    erAvgPerPost: number;
     ctr: number;
     erImpressions: number;
     erReach: number;
@@ -484,6 +486,7 @@ type SocialOverviewRecord = {
     sharesTotal: number;
     viewsTotal: number;
     erGlobal: number;
+    erAvgPerPost: number;
     ctr: number;
     erImpressions: number;
     erReach: number;
@@ -1363,6 +1366,24 @@ const calculateErGlobalFromRows = (rows: Array<{ channel: string; engagementTota
     totalDenominator += erDenominatorForRow(row);
   }
   return totalDenominator > 0 ? (totalEngagement / totalDenominator) * 100 : 0;
+};
+
+/**
+ * Per-post average ER: computes ER for each post individually, then averages.
+ * This avoids high-reach posts dominating the denominator and gives a more
+ * representative "typical ER per post" metric (standard in social analytics).
+ */
+const calculateErAvgPerPost = (rows: Array<{ channel: string; engagementTotal: number; reach: number; impressions: number; views: number }>): number => {
+  let erSum = 0;
+  let erCount = 0;
+  for (const row of rows) {
+    const denom = erDenominatorForRow(row);
+    if (denom > 0 && row.engagementTotal >= 0) {
+      erSum += (row.engagementTotal / denom) * 100;
+      erCount++;
+    }
+  }
+  return erCount > 0 ? erSum / erCount : 0;
 };
 
 const calculateDerivedMetrics = (input: {
@@ -5549,6 +5570,7 @@ class SocialStore {
     const currentSentimientoNeto = calculateSentimientoNeto(currentSent.positivos, currentSent.negativos, currentSent.classified);
     const currentRiesgoActivo = calculateRiesgoActivo(currentSent.negativos, currentSent.classified);
     const currentEr = calculateErGlobalFromRows(currentRows);
+    const currentErAvgPerPost = calculateErAvgPerPost(currentRows);
     const currentShs = calculateShs({
       sentimientoNeto: currentSentimientoNeto,
       riesgoActivo: currentRiesgoActivo,
@@ -5559,6 +5581,7 @@ class SocialStore {
     const previousSentimientoNeto = calculateSentimientoNeto(previousSent.positivos, previousSent.negativos, previousSent.classified);
     const previousRiesgoActivo = calculateRiesgoActivo(previousSent.negativos, previousSent.classified);
     const previousEr = calculateErGlobalFromRows(previousRows);
+    const previousErAvgPerPost = calculateErAvgPerPost(previousRows);
     const previousShs = calculateShs({
       sentimientoNeto: previousSentimientoNeto,
       riesgoActivo: previousRiesgoActivo,
@@ -5862,6 +5885,7 @@ class SocialStore {
         sharesTotal: roundMetric(currentShares),
         viewsTotal: roundMetric(currentViews),
         erGlobal: roundMetric(currentEr),
+        erAvgPerPost: roundMetric(currentErAvgPerPost),
         ctr: roundMetric(currentDerived.ctr),
         erImpressions: roundMetric(currentDerived.erImpressions),
         erReach: roundMetric(currentDerived.erReach),
@@ -5891,6 +5915,7 @@ class SocialStore {
         sharesTotal: roundMetric(previousShares),
         viewsTotal: roundMetric(previousViews),
         erGlobal: roundMetric(previousEr),
+        erAvgPerPost: roundMetric(previousErAvgPerPost),
         ctr: roundMetric(previousDerived.ctr),
         erImpressions: roundMetric(previousDerived.erImpressions),
         erReach: roundMetric(previousDerived.erReach),
@@ -5915,6 +5940,7 @@ class SocialStore {
         sharesTotal: roundMetric(currentShares - previousShares),
         viewsTotal: roundMetric(currentViews - previousViews),
         erGlobal: roundMetric(currentEr - previousEr),
+        erAvgPerPost: roundMetric(currentErAvgPerPost - previousErAvgPerPost),
         ctr: roundMetric(currentDerived.ctr - previousDerived.ctr),
         erImpressions: roundMetric(currentDerived.erImpressions - previousDerived.erImpressions),
         erReach: roundMetric(currentDerived.erReach - previousDerived.erReach),
