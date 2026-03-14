@@ -1343,18 +1343,21 @@ const calculateRiesgoActivo = (negativos: number, classifiedItems: number): numb
   (negativos / Math.max(classifiedItems, 1)) * 100;
 
 const calculateErGlobal = (engagementTotal: number, exposureTotal: number): number =>
-  (engagementTotal / Math.max(exposureTotal, 1)) * 100;
+  exposureTotal > 0 ? (engagementTotal / exposureTotal) * 100 : 0;
 
 /**
- * Correct ER denominator per channel:
+ * ER denominator per channel (as requested by the client):
  *  - X / LinkedIn → impressions
- *  - TikTok       → views
- *  - Facebook / Instagram → reach  (only if reach > 0)
+ *  - Facebook / Instagram / TikTok → reach
+ *
+ * TikTok posts always have reach = 0, so they contribute 0 to the denominator.
+ * In total/total ER this means TikTok engagement inflates the numerator without
+ * penalising the denominator, which is the intended behaviour per the client.
+ * In per-post average ER, TikTok posts are skipped (denom = 0).
  */
 const erDenominatorForRow = (row: { channel: string; reach: number; impressions: number; views: number }): number => {
   if (row.channel === "x" || row.channel === "linkedin") return row.impressions;
-  if (row.channel === "tiktok") return row.views;
-  return row.reach; // FB / IG
+  return row.reach; // FB / IG / TikTok
 };
 
 /** ER Global calculated from individual rows with channel-aware denominators */

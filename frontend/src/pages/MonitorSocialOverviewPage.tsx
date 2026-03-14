@@ -1990,23 +1990,6 @@ export const MonitorSocialOverviewPage = () => {
   const riskTopChannels = useMemo(() => [...(riskData?.by_channel ?? [])].sort((a, b) => b.riesgo_activo - a.riesgo_activo || b.negativos - a.negativos).slice(0, 8), [riskData]);
   const riskTopAccounts = useMemo(() => [...(riskData?.by_account ?? [])].sort((a, b) => b.riesgo_activo - a.riesgo_activo || b.negativos - a.negativos).slice(0, 8), [riskData]);
 
-  /**
-   * Fallback ER computation when backend hasn't been deployed with er_avg_per_post yet.
-   * Computes a post-weighted average of per-channel er_global values.
-   * This avoids the problem of total/total ER where high-reach channels dominate.
-   */
-  const computeErFallbackFromChannels = (channels: typeof channelData): number => {
-    let totalPosts = 0;
-    let weightedEr = 0;
-    for (const ch of channels) {
-      if (ch.posts > 0 && ch.er_global > 0) {
-        weightedEr += ch.er_global * ch.posts;
-        totalPosts += ch.posts;
-      }
-    }
-    return totalPosts > 0 ? weightedEr / totalPosts : 0;
-  };
-
   const targetErGlobal = useMemo(() => {
     const rows = normalizedOverview.target_progress?.er_by_channel ?? [];
     if (rows.length === 0) return 0;
@@ -2017,11 +2000,9 @@ export const MonitorSocialOverviewPage = () => {
     const kpis = normalizedOverview.kpis ?? {}; const prev = normalizedOverview.previous_period ?? {}; const tp = normalizedOverview.target_progress ?? {};
     const pc = Number(kpis.posts ?? 0); const pp = Number(prev.posts ?? 0);
     const ec = Number(kpis.exposure_total ?? 0); const ep = Number(prev.exposure_total ?? 0);
-    /* ER Global: prefer per-post average from API (requires backend deploy), else fallback */
-    const erApiAvg = Number(kpis.er_avg_per_post ?? 0);
-    const erc = erApiAvg > 0 ? erApiAvg : channelData.length > 0 ? computeErFallbackFromChannels(channelData) : Number(kpis.er_global ?? 0);
-    const erPrevApiAvg = Number(prev.er_avg_per_post ?? 0);
-    const erp = erPrevApiAvg > 0 ? erPrevApiAvg : Number(prev.er_global ?? 0);
+    /* ER Global: X/LI by impressions, rest by reach (TikTok reach=0 → excluded from denom) */
+    const erc = Number(kpis.er_global ?? 0);
+    const erp = Number(prev.er_global ?? 0);
     const rc = Number(kpis.riesgo_activo ?? 0); const rp = Number(prev.riesgo_activo ?? 0);
     const sc = Number(kpis.shs ?? 0); const sp = Number(prev.shs ?? 0); const ts = Number(tp.target_shs ?? 0);
     const sovc = Number(kpis.focus_account_sov ?? 0); const sovp = Number(prev.focus_account_sov ?? 0); const tsp = Number(tp.quarterly_sov_target_pp ?? 0);
@@ -2033,7 +2014,7 @@ export const MonitorSocialOverviewPage = () => {
       { id: "shs", title: "SHS (social)", value: formatScore(sc), previous: formatScore(sp), goal: `Meta: ${formatScore(ts)}`, status: `Gap meta: ${formatScore(sc - ts)}`, statusColor: toDeltaColor(sc - ts), info: KPI_INFO.shs, deltaValue: sc - ts },
       { id: "focus_account_sov", title: "SOV interno", value: formatPercent(sovc), previous: formatPercent(sovp), goal: `Meta trimestral: +${formatScore(tsp)} pp`, status: `Cuenta foco: ${String(kpis.focus_account ?? "n/a")}`, statusColor: "#64748b", info: KPI_INFO.focus_account_sov, deltaValue: sovc - sovp }
     ];
-  }, [normalizedOverview, targetErGlobal, overview, channelData]);
+  }, [normalizedOverview, targetErGlobal, overview]);
 
   const secondaryKpis = useMemo(() => SECONDARY_KPI_FLAT.map((metric) => {
     const current = Number(normalizedOverview.kpis?.[metric] ?? 0);
