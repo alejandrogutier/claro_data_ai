@@ -420,6 +420,11 @@ const processCommentItem = async (message: Required<Pick<ClassificationMessage, 
     return;
   }
 
+  // Skip already-classified comments (avoids re-processing duplicates from ETL re-queuing)
+  if (comment.alreadyClassified) {
+    return;
+  }
+
   const prompt = await buildCommentPrompt(promptVersion, {
     channel: comment.channel,
     postText: comment.postText,

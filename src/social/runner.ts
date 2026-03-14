@@ -1906,10 +1906,12 @@ export const runSocialSync = async (input: SocialSyncInput): Promise<SocialSyncO
       objectsTopicsQueued = topicClassificationContentIds.size;
     }
 
-    // Queue unclassified comments for sentiment + relatedToPostText analysis
+    // Queue unclassified comments for sentiment + relatedToPostText analysis.
+    // Cap at 200 per run to prevent queue accumulation — the worker processes
+    // ~20/min, and with runs every 15 min this keeps the queue near zero.
     let commentsClassificationQueued = 0;
     if (queueClassification && env.classificationQueueUrl) {
-      const unclassifiedCommentIds = await store.listUnclassifiedCommentIds(5000);
+      const unclassifiedCommentIds = await store.listUnclassifiedCommentIds(200);
       if (unclassifiedCommentIds.length > 0) {
         const requestedAt = new Date().toISOString();
         for (const commentId of unclassifiedCommentIds) {

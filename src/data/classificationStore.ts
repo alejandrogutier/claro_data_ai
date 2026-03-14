@@ -156,6 +156,7 @@ class ClassificationStore {
     channel: string;
     commentText: string;
     postText: string | null;
+    alreadyClassified: boolean;
   } | null> {
     const response = await this.rds.execute(
       `
@@ -164,7 +165,8 @@ class ClassificationStore {
           sc."channel",
           sc."text",
           ci."title",
-          ci."content"
+          ci."content",
+          sc."sentiment"
         FROM "public"."SocialPostComment" sc
         JOIN "public"."SocialPostMetric" spm ON spm."id" = sc."socialPostMetricId"
         JOIN "public"."ContentItem" ci ON ci."id" = spm."contentItemId"
@@ -180,12 +182,13 @@ class ClassificationStore {
     const commentText = fieldString(row, 2);
     const postTitle = fieldString(row, 3);
     const postContent = fieldString(row, 4);
+    const sentiment = fieldString(row, 5) ?? "unknown";
 
     if (!id || !channel || !commentText) return null;
 
     const postText = [postTitle, postContent].filter(Boolean).join("\n").trim() || null;
 
-    return { commentId: id, channel, commentText, postText };
+    return { commentId: id, channel, commentText, postText, alreadyClassified: sentiment !== "unknown" };
   }
 
   async updateCommentClassification(input: {
